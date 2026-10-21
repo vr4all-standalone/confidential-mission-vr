@@ -1,0 +1,440 @@
+"""
+Checks for adding a game to hotd2-vr on the PC: finds the game's camera matrices and values
+in a RAM dump (rip\\ram0000.bin), sums up a rip pass, and reads the VR lines of a run's
+flycast.log (vr-test.ps1 writes both under build-win\\vrtest\\<name>).
+
+    python -I vrcheck.py matrices <ram.bin>
+    python -I vrcheck.py find-float <ram.bin> <value> [--tol 0.01]
+    python -I vrcheck.py find-u16 <ram.bin> <v1,v2,...>
+    python -I vrcheck.py whist <ripdir> <n> [--max-w 3]
+    python -I vrcheck.py border <ripdir> <n> <stockFocal> <liveFocal> [--min-ratio 0.5]
+    python -I vrcheck.py shots <flycast.log> [--tex t1,t2] [--max-off N]
+    python -I vrcheck.py focal <flycast.log> [--expect F --tol 0.02] [--from S] [--to S]
+    python -I vrcheck.py selftest
+
+RAM offsets are printed as the profile takes them (address & 0x01FFFFFF: the dump starts at
+main RAM's base). Exit 1 when a check fails. Needs numpy (pip install numpy).
+"""
+import argparse
+import contextlib
+import io
+import os
+import re
+import site
+import struct
+import sys
+import tempfile
+from collections import Counter
+
+# python -I leaves out the user's site-packages, where pip install --user puts numpy: that one
+# back (still nothing from the current or the script's directory), and riplib next door.
+if site.getusersitepackages() not in sys.path:
+    sys.path.append(site.getusersitepackages())
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets'))
+import numpy as np  # noqa: E402
+
+
+#
+# RAM dumps
+#
+
+def _floats(path):
+    data = open(path, 'rb').read()
+    return np.frombuffer(data, '<f4', len(data) // 4)
+
+
+def matrices(args):
+    """4x4 float matrices: viewports (diag 320, -240 or +240) and projections ([1..4] zero,
+    [0] and [5] the same focal over 320 and 240), the matrices readGameFocal multiplies."""
+    a = _floats(args.ram)
+    n = len(a) - 15
+    finite = lambda i: np.isfinite(a[i:i + 16]).all()
+    for i in np.nonzero((a[:n] == 320.0) & (np.abs(a[5:n + 5]) == 240.0))[0]:
+        if finite(i):
+            print(f'viewport 0x{i * 4:06X} {a[i]:.1f} {a[i + 5]:.1f}')
+    with np.errstate(all='ignore'):
+        fx = np.abs(a[:n].astype(np.float64)) * 320
+        fy = np.abs(a[5:n + 5].astype(np.float64)) * 240
+        hit = (a[1:n + 1] == 0) & (a[2:n + 2] == 0) & (a[3:n + 3] == 0) & (a[4:n + 4] == 0)
+        hit &= (fx > 1) & (fx < 1e5) & (fy > 1) & (fy < 1e5) & (np.abs(fx - fy) <= 0.005 * np.maximum(fx, fy))
+    for i in np.nonzero(hit)[0]:
+        if finite(i):
+            print(f'proj 0x{i * 4:06X} focal {fx[i]:.1f} {fy[i]:.1f}')
+    return 0
+
+
+def find_float(args):
+    a = _floats(args.ram)
+    with np.errstate(all='ignore'):
+        hit = np.abs(a - args.value) <= args.tol * abs(args.value)
+    for i in np.nonzero(hit)[0]:
+        print(f'0x{i * 4:06X} {a[i]:.6g}')
+    return 0
+
+
+def find_u16(args):
+    data = open(args.ram, 'rb').read()
+    h = np.frombuffer(data, '<u2', len(data) // 2)
+    seq = [int(v, 0) for v in args.values.split(',')]
+    n = len(h) - len(seq) + 1
+    hit = np.ones(max(n, 0), bool)
+    for k, v in enumerate(seq):
+        hit &= h[k:k + n] == v
+    for i in np.nonzero(hit)[0]:
+        print(f'0x{i * 2:06X}')
+    return 0
+
+
+#
+# rips (riplib.Pass: vertices in framebuffer pixels, z = 1/W)
+#
+
+LISTS = ('op', 'pt', 'tr')
+
+
+def _corners_w(p):
+    """W of each corner, or None for a polygon with a hidden or invalid corner."""
+    z = p.v['z'].astype(np.float64)
+    if not (np.isfinite(p.v['x']).all() and np.isfinite(p.v['y']).all() and np.isfinite(z).all() and (z > 0).all()):
+        return None
+    return 1.0 / z
+
+
+def _flat_w(w):
+    """The polygon's one W (rounded to 0.001), or None when its corners differ."""
+    return round(float(w.mean()), 3) if w.max() - w.min() <= 0.0005 else None
+
+
+def whist(args):
+    from riplib import Pass
+    ps = Pass(args.ripdir, args.n)
+    layers = {}
+    for p in ps.polys:
+        w = _corners_w(p)
+        flat = _flat_w(w) if w is not None else None
+        if flat is None or flat > args.max_w:
+            continue
+        layers.setdefault(flat, []).append(p)
+    for w in sorted(layers):
+        polys = layers[w]
+        lists = ','.join(LISTS[k] for k in sorted({p.lst for p in polys}))
+        tex = sorted({p.tex for p in polys})
+        texs = ','.join('none' if t == 0 else f'{t:06x}' for t in tex[:8]) + (f',+{len(tex) - 8} more' if len(tex) > 8 else '')
+        x = np.concatenate([p.v['x'] for p in polys])
+        y = np.concatenate([p.v['y'] for p in polys])
+        print(f'W {w:.3f} polys {len(polys)} list {lists} tex {texs} '
+              f'box {x.min():.0f},{y.min():.0f}..{x.max():.0f},{y.max():.0f}')
+    return 0
+
+
+BANDS = ((0.0, 0.8), (0.8, 1.0), (1.0, 1.2), (1.2, 1.5))
+
+
+def border(args):
+    """Where the game stops drawing in a widened view: 3D polygon centres by r, the distance
+    from the centre in units of the stock frame's half width (r 1 = its edge)."""
+    from riplib import Pass
+    ps = Pass(args.ripdir, args.n)
+    edge = ps.fbw * 0.5 * args.live_focal / args.stock_focal
+    count = [0] * len(BANDS)
+    for p in ps.polys:
+        w = _corners_w(p)
+        if w is None or _flat_w(w) is not None:
+            continue
+        r = abs((p.v['x'].min() + p.v['x'].max()) * 0.5 - ps.fbw * 0.5) / edge
+        for k, (lo, hi) in enumerate(BANDS):
+            if lo <= r < hi:
+                count[k] += 1
+    density = [c / (hi - lo) for c, (lo, hi) in zip(count, BANDS)]
+    for c, d, (lo, hi) in zip(count, density, BANDS):
+        print(f'band {lo:.1f}-{hi:.1f} polys {c} density {d:.1f}')
+    if density[1] == 0:
+        print('cliff ratio unknown (no polygons at 0.8-1.0)')
+        return 1
+    ratio = density[2] / density[1]
+    print(f'cliff ratio {ratio:.2f}')
+    return 1 if ratio < args.min_ratio else 0
+
+
+#
+# flycast.log
+#
+
+def _log_ms(line):
+    """Time of a log line (mm:ss:ms from process start), or None."""
+    m = re.match(r'(\d+):(\d\d):(\d{3}) ', line)
+    return (int(m[1]) * 60 + int(m[2])) * 1000 + int(m[3]) if m else None
+
+
+SHOT = re.compile(r'VR: shot \+(-?\d+) ms gun (-?\d+),(-?\d+)(?: \(2D\))?: (\w+) (\d+) \(\d+ verts\) \d+x\d+, '
+                  r'(\d+) px off, W (\S+?)\.\.(\S+?)(?: all-2D)?, tex ([0-9a-f]+) ')
+
+
+def shots(args):
+    """The game's shot markers: per shot (trigger pull), the nearest polygon logged for it."""
+    tex = {int(t, 16) for t in args.tex.split(',')} if args.tex else None
+    groups = []  # [start ms, gun, best match]
+    for line in open(args.log, errors='replace'):
+        m = SHOT.search(line)
+        if not m or _log_ms(line) is None:
+            continue
+        start = _log_ms(line) - int(m[1])
+        gun = (int(m[2]), int(m[3]))
+        g = next((g for g in groups if g[1] == gun and abs(g[0] - start) <= 100), None)
+        if g is None:
+            g = [start, gun, None]
+            groups.append(g)
+        poly = (int(m[6]), m[4], m[5], m[7], m[8], m[9])
+        if (tex is None or int(m[9], 16) in tex) and (g[2] is None or poly[0] < g[2][0]):
+            g[2] = poly
+    worst = None
+    for start, gun, best in sorted(groups):
+        head = f'shot {start / 1000:.3f} gun {gun[0]},{gun[1]}: '
+        if best is None:
+            print(head + 'none')
+            continue
+        off, lst, n, w0, w1, t = best
+        print(head + f'{lst} {n} {off} px off, W {w0}..{w1}, tex {t}')
+        worst = off if worst is None else max(worst, off)
+    matched = sum(g[2] is not None for g in groups)
+    print(f'shots {len(groups)} matched {matched}' + (f' worst {worst} px off' if matched else ''))
+    if not matched:
+        return 1
+    return 1 if args.max_off is not None and worst > args.max_off else 0
+
+
+FOCAL = re.compile(r'VR: focal (\S+) x (\S+)  verts (\d+) overlay \d+  W near (\S+) ')
+
+
+def _rank(values, q):
+    """Nearest-rank percentile of sorted values."""
+    return values[max(int(np.ceil(q * len(values))) - 1, 0)]
+
+
+def focal(args):
+    """The scene statistics the PC logs every 120 frames: the live focal, vertex counts, and
+    the nearest W (a near plane shows as one value many frames share)."""
+    fx, verts, wnear = [], [], Counter()
+    for line in open(args.log, errors='replace'):
+        m = FOCAL.search(line)
+        t = _log_ms(line)
+        if not m or t is None or (args.start is not None and t < args.start * 1000) \
+                or (args.end is not None and t > args.end * 1000):
+            continue
+        fx.append(float(m[1]))
+        verts.append(int(m[3]))
+        wnear[f'{float(m[4]):.3f}'] += 1
+    print(f'count {len(fx)}')
+    if not fx:
+        return 1
+    fx.sort()
+    verts.sort()
+    median = _rank(fx, 0.5)
+    print(f'focal min {fx[0]:.1f} median {median:.1f} max {fx[-1]:.1f}')
+    print(f'verts p50 {_rank(verts, 0.5)} p95 {_rank(verts, 0.95)} max {verts[-1]}')
+    print('wnear ' + ', '.join(f'{w} x{c}' for w, c in sorted(wnear.items())))
+    if args.expect is not None and abs(median - args.expect) > args.tol * args.expect:
+        return 1
+    return 0
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog='vrcheck.py', description=__doc__.split('\n\n')[0])
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    s = sub.add_parser('matrices')
+    s.add_argument('ram')
+    s.set_defaults(run=matrices)
+    s = sub.add_parser('find-float')
+    s.add_argument('ram')
+    s.add_argument('value', type=float)
+    s.add_argument('--tol', type=float, default=0.01, help='relative')
+    s.set_defaults(run=find_float)
+    s = sub.add_parser('find-u16')
+    s.add_argument('ram')
+    s.add_argument('values', help='v1,v2,... (decimal or 0x hex)')
+    s.set_defaults(run=find_u16)
+    s = sub.add_parser('whist')
+    s.add_argument('ripdir')
+    s.add_argument('n', type=int)
+    s.add_argument('--max-w', type=float, default=3.0)
+    s.set_defaults(run=whist)
+    s = sub.add_parser('border')
+    s.add_argument('ripdir')
+    s.add_argument('n', type=int)
+    s.add_argument('stock_focal', type=float)
+    s.add_argument('live_focal', type=float)
+    s.add_argument('--min-ratio', type=float, default=0.5)
+    s.set_defaults(run=border)
+    s = sub.add_parser('shots')
+    s.add_argument('log')
+    s.add_argument('--tex', help='t1,t2 (hex): only these textures')
+    s.add_argument('--max-off', type=float)
+    s.set_defaults(run=shots)
+    s = sub.add_parser('focal')
+    s.add_argument('log')
+    s.add_argument('--expect', type=float)
+    s.add_argument('--tol', type=float, default=0.02, help='relative')
+    s.add_argument('--from', dest='start', type=float, help='seconds from process start')
+    s.add_argument('--to', dest='end', type=float)
+    s.set_defaults(run=focal)
+    s = sub.add_parser('selftest')
+    s.set_defaults(run=lambda args: selftest())
+    args = ap.parse_args(argv)
+    return args.run(args)
+
+
+#
+# selftest: synthetic RAM, rip and log, with MOK's values
+#
+
+def _matrix(*diag_and_more):
+    return struct.pack('<16f', *diag_and_more)
+
+
+def _synthetic_ram():
+    ram = bytearray(0x100000)
+    f = 240 / np.tan(np.radians(30))  # 415.692, the maze's stock focal
+    ram[0x0F24D0:0x0F24D0 + 64] = _matrix(320, 0, 0, 0, 0, -240, 0, 0, 0, 0, 1, 0, 320, 240, 0, 1)
+    ram[0x020000:0x020000 + 64] = _matrix(320, 0, 0, 0, 0, 240, 0, 0, 0, 0, 1, 0, 320, 240, 0, 1)
+    ram[0x030000:0x030000 + 64] = _matrix(320, 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)  # not a viewport
+    ram[0x0E7A60:0x0E7A60 + 64] = _matrix(f / 320, 0, 0, 0, 0, f / 240, 0, 0, 0, 0, -1.0002, -1, 0, 0, -0.2, 0)
+    ram[0x010000:0x010000 + 64] = _matrix(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)  # identity: not a projection
+    ram[0x040000:0x040000 + 64] = _matrix(2, 0, 0, 0, 0, 2e36, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)  # [5] * 240 overflows a float
+    struct.pack_into('<ff', ram, 0x0E7248, f, 500.0)
+    for at in (0x0E2058, 0x0E2064):  # the factory gun calibration, twice
+        struct.pack_into('<6H', ram, at, 64, 128, 500, 0, 128, 500)
+    return bytes(ram)
+
+
+def _synthetic_rip(ripdir):
+    """pass0000.bin: HUD and letterbox layers, a layer past --max-w, and 3D triangles placed
+    for border's bands (live focal 277.1, stock 415.7: the stock frame's edge 213.3 px out)."""
+    from riplib import VERTEX
+    lists = [[], [], []]
+
+    def poly(lst, corners, tex=0):
+        v = np.zeros(len(corners), VERTEX)
+        for k, (x, y, w) in enumerate(corners):
+            v[k]['x'], v[k]['y'], v[k]['z'] = x, y, 1.0 / w
+        pcw = 8 if tex else 0
+        lists[lst].append(struct.pack('<5I', 0, 0, tex >> 3, pcw, len(corners)) + v.tobytes())
+
+    def quad(lst, x0, y0, x1, y1, w, tex=0):
+        poly(lst, [(x0, y0, w), (x1, y0, w), (x0, y1, w), (x1, y1, w)], tex)
+
+    quad(2, 12, 20, 100, 60, 1.082, 0x4f6800)
+    quad(2, 500, 400, 630, 470, 1.082, 0x50b800)
+    quad(0, 0, 0, 640, 40, 1.090)
+    quad(0, 200, 200, 300, 300, 3.5)
+    for dx in (0, 20, -40, 60, -80, 100, -120, 150, 180, -190, 200, -210, 230):
+        x = 320 + dx
+        poly(0, [(x - 2, 238, 5.0), (x + 2, 238, 6.0), (x - 2, 242, 7.0)])
+    data = struct.pack('<4sIIffffI', b'RIP1', 640, 480, 277.1, 277.1, 1.0, 415.7, 3)
+    for lst in lists:
+        data += struct.pack('<I', len(lst)) + b''.join(lst)
+    os.makedirs(ripdir, exist_ok=True)
+    with open(os.path.join(ripdir, 'pass0000.bin'), 'wb') as f:
+        f.write(data)
+
+
+def _synthetic_log():
+    pre = 'rend\\vr_reproject.cpp:1613 N[RENDERER]: '
+    shot = 'VR: shot +{} ms gun {}: {} {} (4 verts) 40x40, {} px off, W {}, tex {} tsp 00000000 col ffffffff{}'
+    focal = 'VR: focal {} x {}  verts {} overlay 10  W near {} p10 2.000 median 10.000 p90 50.000 far 100.000'
+    lines = [
+        '00:00:864 hw\\naomi\\naomi_cart.cpp:667 N[NAOMI]: NAOMI GAME ID [THE MAZE OF THE KINGS] region ff players 0',
+        # shot 1 at 31.484 s, centre: the starburst 3 px off, then the red stars 1 px off, a HUD sprite on it
+        '00:31:500 ' + pre + shot.format(16, '320,240', 'TR', 5, 3, '1.500..1.500', '50b800', ''),
+        '00:31:517 ' + pre + shot.format(33, '320,240', 'TR', 6, 1, '1.500..1.500', '4f6800', ''),
+        '00:31:517 ' + pre + shot.format(33, '320,240', 'TR', 7, 0, '1.082..1.082 all-2D', '123400', ''),
+        '00:31:517 rend\\vr_reproject.cpp:1550 N[RENDERER]: VR diag: shot +33 ms gun 320,240, fb 640x480, polygons op 1 pt 2 tr 3, background 00000000',
+        # shot 2 at 34.500 s, centre again: 5 px off
+        '00:34:516 ' + pre + shot.format(16, '320,240', 'TR', 8, 5, '1.500..1.500', '50b800', ''),
+        # shot 3 at 34.480 s elsewhere, into the 2D plane, dropped
+        '00:34:500 ' + pre + shot.format(20, '100,200 (2D)', 'PT', 9, 0, '1.082..1.082 all-2D', '50b800', ' DROPPED'),
+    ]
+    for t, (fx, verts, wnear) in enumerate([('415.7', 1000, '1.000'), ('415.7', 2000, '1.000'), ('277.1', 3000, '1.082'),
+                                            ('277.1', 4000, '1.000'), ('415.7', 5000, '1.000')]):
+        lines.append(f'00:{40 + 2 * t}:000 rend\\vr_reproject.cpp:176 N[RENDERER]: ' + focal.format(fx, fx, verts, wnear))
+    return '\n'.join(lines) + '\n'
+
+
+def selftest():
+    failures = []
+
+    def check(argv, want_code, want_lines):
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                code = main(argv)
+        except SystemExit as e:
+            code = e.code
+        except Exception as e:  # report and go on with the other checks
+            code = f'{type(e).__name__}: {e}'
+        got = buf.getvalue().splitlines()
+        if code != want_code or got != want_lines:
+            failures.append(f'{" ".join(argv[:1] + argv[2:])}: exit {code}, want {want_code}\n'
+                            + ''.join(f'    got  {line}\n' for line in got)
+                            + ''.join(f'    want {line}\n' for line in want_lines))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ram = os.path.join(tmp, 'ram0000.bin')
+        log = os.path.join(tmp, 'flycast.log')
+        ripdir = os.path.join(tmp, 'rip')
+        with open(ram, 'wb') as f:
+            f.write(_synthetic_ram())
+        with open(log, 'w') as f:
+            f.write(_synthetic_log())
+        try:
+            _synthetic_rip(ripdir)
+        except Exception as e:
+            failures.append(f'synthetic rip: {type(e).__name__}: {e}')
+
+        check(['matrices', ram], 0, ['viewport 0x020000 320.0 240.0', 'viewport 0x0F24D0 320.0 -240.0',
+                                     'proj 0x0E7A60 focal 415.7 415.7'])
+        check(['find-float', ram, '415.72'], 0, ['0x0E7248 415.692'])
+        check(['find-float', ram, '415.72', '--tol', '0.00001'], 0, [])
+        check(['find-u16', ram, '64,128,500,0,128,500'], 0, ['0x0E2058', '0x0E2064'])
+        check(['find-u16', ram, '0x40,0x80,0x1f4'], 0, ['0x0E2058', '0x0E2064'])
+        check(['whist', ripdir, '0'], 0, ['W 1.082 polys 2 list tr tex 4f6800,50b800 box 12,20..630,470',
+                                          'W 1.090 polys 1 list op tex none box 0,0..640,40'])
+        check(['whist', ripdir, '0', '--max-w', '4'], 0, ['W 1.082 polys 2 list tr tex 4f6800,50b800 box 12,20..630,470',
+                                                          'W 1.090 polys 1 list op tex none box 0,0..640,40',
+                                                          'W 3.500 polys 1 list op tex none box 200,200..300,300'])
+        border = ['band 0.0-0.8 polys 8 density 10.0', 'band 0.8-1.0 polys 4 density 20.0',
+                  'band 1.0-1.2 polys 1 density 5.0', 'band 1.2-1.5 polys 0 density 0.0', 'cliff ratio 0.25']
+        check(['border', ripdir, '0', '415.7', '277.1'], 1, border)
+        check(['border', ripdir, '0', '415.7', '277.1', '--min-ratio', '0.2'], 0, border)
+        check(['shots', log], 0, ['shot 31.484 gun 320,240: TR 7 0 px off, W 1.082..1.082, tex 123400',
+                                  'shot 34.480 gun 100,200: PT 9 0 px off, W 1.082..1.082, tex 50b800',
+                                  'shot 34.500 gun 320,240: TR 8 5 px off, W 1.500..1.500, tex 50b800',
+                                  'shots 3 matched 3 worst 5 px off'])
+        check(['shots', log, '--tex', '50b800,4f6800', '--max-off', '2'], 1,
+              ['shot 31.484 gun 320,240: TR 6 1 px off, W 1.500..1.500, tex 4f6800',
+               'shot 34.480 gun 100,200: PT 9 0 px off, W 1.082..1.082, tex 50b800',
+               'shot 34.500 gun 320,240: TR 8 5 px off, W 1.500..1.500, tex 50b800',
+               'shots 3 matched 3 worst 5 px off'])
+        check(['shots', log, '--tex', '4f6800', '--max-off', '2'], 0,
+              ['shot 31.484 gun 320,240: TR 6 1 px off, W 1.500..1.500, tex 4f6800',
+               'shot 34.480 gun 100,200: none',
+               'shot 34.500 gun 320,240: none',
+               'shots 3 matched 1 worst 1 px off'])
+        check(['shots', log, '--tex', '777777'], 1, ['shot 31.484 gun 320,240: none', 'shot 34.480 gun 100,200: none',
+                                                    'shot 34.500 gun 320,240: none', 'shots 3 matched 0'])
+        focal = ['count 5', 'focal min 277.1 median 415.7 max 415.7', 'verts p50 3000 p95 5000 max 5000',
+                 'wnear 1.000 x4, 1.082 x1']
+        check(['focal', log], 0, focal)
+        check(['focal', log, '--expect', '415.72'], 0, focal)
+        check(['focal', log, '--expect', '300'], 1, focal)
+        check(['focal', log, '--from', '43', '--to', '47'], 0, ['count 2', 'focal min 277.1 median 277.1 max 277.1',
+                                                                 'verts p50 3000 p95 4000 max 4000', 'wnear 1.000 x1, 1.082 x1'])
+        check(['focal', log, '--from', '100'], 1, ['count 0'])
+
+    for f in failures:
+        print('FAIL ' + f, end='' if f.endswith('\n') else '\n')
+    print('selftest OK' if not failures else f'selftest FAILED ({len(failures)})')
+    return 1 if failures else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

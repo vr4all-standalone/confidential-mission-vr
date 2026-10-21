@@ -1,0 +1,191 @@
+<#
+  Runs a game on the Windows build (build-win.cmd) for a scripted test, for adding a game
+  (notes\adding-a-game.md, section 7): light-gun input over UDP at set times, window
+  screenshots, rips, then checks over flycast.log. accept.ps1 runs the acceptance scenarios.
+
+  .\hotd2-vr\vr-test.ps1 -Game confmiss -Name boot -Seconds 40 -Expect 'NAOMI GAME ID'
+  .\hotd2-vr\vr-test.ps1 -Game mok -Seconds 90 -At '30=start','70=fire 0 5000 5000','72=shot','75=rip 1 1 1'
+  .\hotd2-vr\vr-test.ps1 -Game $env:VRLGH_HOTD2 -Config 'config:vr.FovScale=3'
+
+  -Game     a MAME set name, as <set>.zip in $env:VRLGH_GAMES (with its CHD in <set>\ and
+            naomi.zip), or the path of a disc image (its gun in port A).
+  -At       "<seconds>=<action>", seconds from Flycast's start:
+              start [p]           Start, held 200 ms (p: player 0 or 1, default 0)
+              aim p x y           where the gun rests (0..10000 across and down the screen)
+              fire p x y          aim there and pull the trigger for 100 ms
+              reload [p]          off screen with the reload button, 200 ms
+              button p bits ms    hold buttons (1 trigger, 2 reload, 4 start, 8-64 d-pad, 128 B)
+              shot [label]        window screenshot t<seconds>[-label].png
+              rip <request>       write rip.request: count interval ram [texhex polys]
+              mark <text>         just the line in actions.log (every action gets one)
+            From the first gun action on, every player used gets "LG p x y buttons" every 50 ms.
+  -Config   more "config:x=y,..." settings, applied last.
+  -DebugShots N   the game's own frames every N seconds of game time (shot_*.png).
+  -Expect / -Reject   regexes (case-sensitive) that must / must not match a flycast.log line.
+  -Xr       PC VR (OpenXR) instead of the flat window.
+
+  Everything goes to build-win\vrtest\<Name>\ (emptied first), Flycast's working directory:
+  flycast.log, actions.log, screenshots, rip\. Exit 0 all checks pass, 1 a check failed,
+  2 Flycast exited early.
+#>
+param(
+	[Parameter(Mandatory = $true)][string]$Game,
+	[string]$Name = 'test',
+	[string]$Config = '',
+	[string[]]$At = @(),
+	[double]$Seconds = 60,
+	[int]$DebugShots = 0,
+	[string[]]$Expect = @(),
+	[string[]]$Reject = @(),
+	[switch]$Xr
+)
+$ErrorActionPreference = 'Stop'
+$repo = Split-Path -Parent $PSScriptRoot
+$exe = Join-Path $repo 'build-win\flycast.exe'
+if (-not (Test-Path $exe)) { throw "Build the Windows version first: hotd2-vr\build-win.cmd" }
+$out = Join-Path $repo "build-win\vrtest\$Name"
+$dataDir = Join-Path $repo 'build-win\data'	# Flycast's writable data dir (winmain.cpp), where DebugShots go
+$port = 27016
+
+# OpenGL with native depth and the reprojection on: what the VR hooks need. Never the
+# vr.ProjAddr/ViewportAddr overrides: they would beat the game's profile.
+$cfg = "config:pvr.rend=0,config:rend.NativeDepthInterpolation=yes,config:vr.Reproject=yes,config:vr.Xr=$(if ($Xr) { 'yes' } else { 'no' })"
+$cfg += ",config:aica.Volume=0,config:vr.UdpPort=$port,log:LogToFile=yes,log:Verbosity=4"
+if ($Game -match '[\\/.]') {
+	if (-not (Test-Path -LiteralPath $Game -PathType Leaf)) { throw "No disc image at $Game" }
+	$content = (Resolve-Path -LiteralPath $Game).Path
+	$cfg += ',input:device1=7'	# the light gun in port A
+} else {
+	if (-not $env:VRLGH_GAMES) { throw 'Set $env:VRLGH_GAMES to the folder with the MAME sets (<set>.zip, <set>\*.chd, naomi.zip).' }
+	$content = Join-Path $env:VRLGH_GAMES "$Game.zip"
+	if (-not (Test-Path -LiteralPath $content)) { throw "No $content" }
+	$cfg += ",config:Dreamcast.BiosPath=$env:VRLGH_GAMES,config:Dreamcast.ContentPath=$env:VRLGH_GAMES"
+}
+if ($DebugShots -gt 0) { $cfg += ",config:vr.DebugShots=$DebugShots" }
+if ($Config) { $cfg += ",$Config" }
+
+# the timed actions, checked before anything starts
+$arity = @{ start = 1, 2; aim = 4, 4; fire = 4, 4; reload = 1, 2; button = 4, 4; shot = 1, 2; rip = 2, 99; mark = 2, 99 }
+$events = @()
+foreach ($a in $At) {
+	$time, $action = $a -split '=', 2
+	$words = @(-split $action)
+	if ($null -eq $action -or $words.Count -eq 0 -or -not $arity.ContainsKey($words[0]) -or
+			$words.Count -lt $arity[$words[0]][0] -or $words.Count -gt $arity[$words[0]][1]) {
+		throw "-At '$a': want <seconds>=<action>, action one of start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip <request>, mark <text>"
+	}
+	$events += [pscustomobject]@{ At = [double]$time; Index = $events.Count; Text = $action.Trim(); Words = $words }
+}
+$events = @($events | Sort-Object At, Index)
+
+Add-Type -AssemblyName System.Drawing
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class Win {
+	[StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+	[DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+	[DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
+	[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+	[DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+	[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+}
+'@
+# Without this, a scaled display reports a shrunken client rect and shots get cropped.
+[void][Win]::SetProcessDPIAware()
+
+# The window comes from the process, never its title (which changes with the build).
+function Save-WindowShot($proc, $file) {
+	$proc.Refresh()
+	$h = $proc.MainWindowHandle
+	if ($h -eq [IntPtr]::Zero) { return $false }
+	# a minimized window has no client area to print: show it again, without taking focus
+	if ([Win]::IsIconic($h)) { [void][Win]::ShowWindow($h, 4); Start-Sleep -Milliseconds 300 }
+	$r = New-Object Win+RECT
+	[void][Win]::GetClientRect($h, [ref]$r)
+	$bmp = New-Object System.Drawing.Bitmap ([Math]::Max(1, $r.R)), ([Math]::Max(1, $r.B))
+	$g = [System.Drawing.Graphics]::FromImage($bmp)
+	$hdc = $g.GetHdc()
+	[void][Win]::PrintWindow($h, $hdc, 3)   # client area, render full content
+	$g.ReleaseHdc($hdc); $g.Dispose()
+	$bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+	return $true
+}
+
+$old = @(Get-Process flycast -ErrorAction SilentlyContinue)
+if ($old) { $old | Stop-Process -Force; Start-Sleep -Milliseconds 500 }
+if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+New-Item -ItemType Directory -Force $out | Out-Null
+if ($DebugShots -gt 0) { Get-ChildItem $dataDir -Filter 'shot_*.png' -ErrorAction SilentlyContinue | Remove-Item }
+$actions = Join-Path $out 'actions.log'
+Set-Content $actions "game $content`r`nconfig $cfg"
+
+# the light gun of each player: where it rests, and the buttons held until a time
+$guns = @{}
+function Get-Gun($player) {
+	$pl = [int]$player
+	if (-not $guns.ContainsKey($pl)) { $guns[$pl] = @{ X = 5000; Y = 5000; Bits = 0; Until = 0.0; HoldX = $null; HoldY = $null } }
+	return $guns[$pl]
+}
+function Set-Hold($gun, $bits, $ms, $now) { $gun.Bits = [int]$bits; $gun.Until = $now + $ms / 1000.0; $gun.HoldX = $null; $gun.HoldY = $null }
+
+$p = Start-Process -FilePath $exe -ArgumentList @('-config', "`"$cfg`"", "`"$content`"") -WorkingDirectory $out -PassThru
+$clock = [Diagnostics.Stopwatch]::StartNew()
+$udp = New-Object System.Net.Sockets.UdpClient
+$next = 0
+$early = $null
+$shots = 0
+try {
+	while ($true) {
+		$now = $clock.Elapsed.TotalSeconds
+		if ($now -ge $Seconds) { break }
+		if ($p.HasExited) { $early = $now; break }
+		while ($next -lt $events.Count -and $events[$next].At -le $now) {
+			$ev = $events[$next++]
+			$w = $ev.Words
+			Add-Content $actions ('{0,7:0.00} {1}' -f $now, $ev.Text)
+			switch ($w[0]) {
+				'start' { Set-Hold (Get-Gun $(if ($w.Count -gt 1) { $w[1] } else { 0 })) 4 200 $now }
+				'aim' { $g = Get-Gun $w[1]; $g.X = [int]$w[2]; $g.Y = [int]$w[3] }
+				'fire' { $g = Get-Gun $w[1]; $g.X = [int]$w[2]; $g.Y = [int]$w[3]; Set-Hold $g 1 100 $now }
+				'reload' { $g = Get-Gun $(if ($w.Count -gt 1) { $w[1] } else { 0 }); Set-Hold $g 2 200 $now; $g.HoldX = -10000; $g.HoldY = -10000 }
+				'button' { Set-Hold (Get-Gun $w[1]) $w[2] ([double]$w[3]) $now }
+				'shot' {
+					$file = Join-Path $out ('t{0:000.#}{1}.png' -f $ev.At, $(if ($w.Count -gt 1) { "-$($w[1])" }))
+					if (Save-WindowShot $p $file) { $shots++ } else { Add-Content $actions '        (no window yet: no shot)' }
+				}
+				'rip' { Set-Content -Path (Join-Path $out 'rip.request') -Value $ev.Text.Substring(4).Trim() -NoNewline }
+			}
+		}
+		foreach ($pl in $guns.Keys) {
+			$g = $guns[$pl]
+			$held = $now -lt $g.Until
+			$x, $y = if ($held -and $null -ne $g.HoldX) { $g.HoldX, $g.HoldY } else { $g.X, $g.Y }
+			$msg = [Text.Encoding]::ASCII.GetBytes("LG $pl $x $y $(if ($held) { $g.Bits } else { 0 })")
+			[void]$udp.Send($msg, $msg.Length, '127.0.0.1', $port)
+		}
+		Start-Sleep -Milliseconds 50
+	}
+} finally {
+	$ran = $clock.Elapsed.TotalSeconds
+	$udp.Close()
+	if (-not $p.HasExited) { $p.CloseMainWindow() | Out-Null; Start-Sleep 2; if (-not $p.HasExited) { $p.Kill() } }
+}
+if ($DebugShots -gt 0) { Get-ChildItem $dataDir -Filter 'shot_*.png' -ErrorAction SilentlyContinue | Move-Item -Destination $out }
+Write-Output ('{0}: {1:0} s, {2} actions, {3} screenshots -> {4}' -f $Name, $ran, $next, $shots, $out)
+
+$log = Join-Path $out 'flycast.log'
+$failed = $false
+foreach ($re in $Expect) {
+	if ((Test-Path $log) -and (Select-String -LiteralPath $log -Pattern $re -CaseSensitive -Quiet)) { Write-Output "PASS expect $re" }
+	else { Write-Output "FAIL expect $re"; $failed = $true }
+}
+foreach ($re in $Reject) {
+	$hit = if (Test-Path $log) { Select-String -LiteralPath $log -Pattern $re -CaseSensitive | Select-Object -First 1 }
+	if ($hit) { Write-Output "FAIL reject $re (line $($hit.LineNumber))"; $failed = $true }
+}
+if ($null -ne $early) {
+	Write-Output ('Flycast exited early, at {0:0.0} s (code {1})' -f $early, $p.ExitCode)
+	exit 2
+}
+exit $(if ($failed) { 1 } else { 0 })
