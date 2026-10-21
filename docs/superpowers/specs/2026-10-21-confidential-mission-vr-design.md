@@ -1,15 +1,16 @@
-# Confidential Mission VR: design
+# VR Light Gun Hub: Confidential Mission (the first NAOMI game), design
 
-Date: 2026-10-21. Status: draft, waiting for the user's approval.
+Date: 2026-10-21. Status: reviewed by the user (app name corrected to VR Light Gun Hub).
 
 ## Intent
 
-The user wants Sega's arcade light-gun games playable in VR on a Meta Quest, starting with
+The user wants arcade light-gun games playable in VR on a Meta Quest, starting with
 **Confidential Mission** (NAOMI, 2000), the way *The House of the Dead 2 VR* and *The Maze of
 the Kings VR* already play: the original game runs in an emulator, its 3D scenes are rebuilt
-around the player in stereo, and the controller is the light gun. This is the first game of the
-user's own app, which will become a launcher for all NAOMI light-gun games (a later project), and
-after that maybe Model 3 (a separate, bigger project). The user will publish it.
+around the player in stereo, and the controller is the light gun. This is the first NAOMI game of
+the user's own app, **VR Light Gun Hub**, which will grow into a hub for light-gun games from
+several systems: more NAOMI games next, later Model 3 and Model 2, maybe MAME and TeknoParrot
+(each a later project). The user will publish it.
 
 The base is mikermak's [hotd2-vr](https://github.com/mikermak/hotd2-vr), a Flycast fork that
 already does all of this for HOTD2 (Dreamcast) and The Maze of the Kings (NAOMI GD-ROM, like
@@ -43,10 +44,11 @@ numbers; the Maze of the Kings commit (`eb2e300cd`) is the template.
 
 - v1: everything in "What the player experiences", on Quest 3 (primary) and PC VR (same code; built
   and checked on the PC).
-- The app is the user's own: its own name and application ID, so it installs next to HOTD2 VR and
-  normal Flycast. Working title **NAOMI Gun VR** (the user may rename it before the first release;
-  the application ID must be settled before the first public release, since changing it later
-  breaks updates).
+- The app is the user's own: named **VR Light Gun Hub** (the user's decision), with its own
+  application ID so it installs next to HOTD2 VR and normal Flycast. The application ID must be
+  settled before the first public release (changing it later breaks updates) and must not name one
+  emulator or system, since the hub will hold several: `com.vrlightgunhub.app` (Claude's call).
+  The name shows in the Quest library, the setup panel and the PC VR window/zip.
 - The inherited games keep working (HOTD2 Dreamcast, The Maze of the Kings).
 - v1.1 (the next update, not v1): the agents' own pistol taken from the user's copy of the game, the
   way HOTD2 VR takes the agent's hands, if a usable scene shows it whole; with it, racking the slide
@@ -56,7 +58,9 @@ numbers; the Maze of the Kings commit (`eb2e300cd`) is the template.
 
 - A full 360° scene.
 - The Dreamcast release of Confidential Mission (NAOMI set only).
-- Other NAOMI games, the launcher for them, Model 2/3: later projects.
+- Other NAOMI games, a game-picker for many games, Model 3, Model 2, MAME, TeknoParrot: later
+  projects. v1 needs no multi-emulator structure; it just shouldn't bake "NAOMI" or "Flycast" into
+  the app's name or ID.
 - Two players on two headsets (netplay).
 - Coin insertion.
 
