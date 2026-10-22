@@ -89,6 +89,10 @@ Option<bool> VrHideLetterbox("vr.HideLetterbox", true);	// drop opaque black ove
 Option<float> VrHudDepth("vr.HudDepth", 40.f);	// game units in front of the game camera
 Option<float> VrYaw("vr.Yaw", 0.f);			// degrees
 Option<float> VrPitch("vr.Pitch", 0.f);		// degrees
+// PC test aid: the flat window's view, the tan of its half angles (0: the game's stock frame;
+// a Quest 3 eye: 1.2799 x 1.1106)
+Option<float> VrWindowTanX("vr.WindowTanX", 0.f);
+Option<float> VrWindowTanY("vr.WindowTanY", 0.f);
 Option<float> VrOffsetX("vr.OffsetX", 0.f);	// game units
 Option<float> VrOffsetY("vr.OffsetY", 0.f);
 Option<float> VrOffsetZ("vr.OffsetZ", 0.f);

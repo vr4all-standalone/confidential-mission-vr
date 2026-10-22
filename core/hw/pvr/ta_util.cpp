@@ -389,6 +389,9 @@ void makePrimRestartIndex(std::vector<PolyParam>& polys, int first, int end, boo
 			last_poly = poly;
 			first_index = ctx.idx.size();
 		}
+		// hotd2-vr: merged with the other cull direction, its winding is flipped (the repeated
+		// first vertex above); remembered for the restarts below, which start the strip over
+		const bool flip = dupe_next_vtx;
 		int last_good_vtx = -1;
 		for (u32 i = 0; i < poly->count; i++)
 		{
@@ -410,9 +413,10 @@ void makePrimRestartIndex(std::vector<PolyParam>& polys, int first, int end, boo
 							if (last_good_vtx >= 0)
 								// reset the strip
 								ctx.idx.push_back(~0);
-							if (odd && poly->isp.CullMode >= 2)
-								// repeat next vertex to get culling right
-								dupe_next_vtx = true;
+							// repeat next vertex to get culling right: its parity, flipped for a
+							// strip merged with the other cull direction (hotd2-vr: the restart
+							// lost the flip; every piece after the first was culled)
+							dupe_next_vtx = odd != flip && poly->isp.CullMode >= 2;
 						}
 						break;
 					}

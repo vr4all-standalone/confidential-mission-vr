@@ -244,6 +244,10 @@ struct GameProfile
 	// those wholly off it are hidden, and axis-aligned quads cut to it (see cropPlaneToScreen).
 	// Only below the game's near plane: none of its 3D comes that near.
 	float offScreen2DMaxW = 0.f;
+	// clipFarOut cuts a 3D polygon only when a corner beyond its reach is nearer than this W (a
+	// pinned corner); 0: whatever the corner's W. A game that clips at its own near plane sets
+	// this just under it: its far-out corners are real 3D beside the view. See clipFarOut.
+	float farOutBelowW = 0.f;
 	// The game's sights over its enemies, and the W they are drawn at: see placeSights.
 	u32 sightTextures[8] {};
 	float sightMinW = 0.f, sightMaxW = 0.f;
@@ -420,6 +424,9 @@ static std::vector<GameProfile> makeProfiles()
 	// The caption ticker's letters (tex 78b800, W 0.1) run from x -492 to 1256 across the
 	// attract demo: below the near plane, snapped wherever they are and cut to the screen.
 	p.offScreen2DMaxW = 0.3f;
+	// It clips its 3D at its own near plane, W 0.300, so its corners far outside the screen are
+	// real 3D (its floor down to 88.6 degrees below the camera's axis): clipFarOut leaves them.
+	p.farOutBelowW = 0.299f;
 	// The cutscenes' bars at W 0.2: white, with a texture (400680) that draws them black.
 	p.letterboxW = 0.2f;
 	p.letterboxTextures[0] = 0x400680;
@@ -1642,12 +1649,15 @@ static void clipFarOut(rend_context& ctx, std::vector<PolyParam>& list, u32 from
 		const double x0 = onPlane ? 0.0 : -fbWidth * 0.5, x1 = onPlane ? fbWidth : fbWidth * 1.5;
 		const double y0 = onPlane ? 0.0 : -fbHeight * 0.5, y1 = onPlane ? fbHeight : fbHeight * 1.5;
 		// (3D reaching up to two screens out is real geometry beside the view, lifted fine as
-		// it is: only what reaches further is cut, the pinned corners are at thousands)
+		// it is: only what reaches further is cut, the pinned corners are at thousands; for a
+		// game that clips at its own near plane, only a corner nearer than it: farOutBelowW)
 		const double reach = onPlane ? 0.0 : fbWidth * 1.5;
+		const float keepW = !onPlane && activeProfile != nullptr ? activeProfile->farOutBelowW : 0.f;
 		for (u32 i = pp.first; i < pp.first + pp.count && !farOut; i++)
 		{
 			const Vertex& v = ctx.verts[i];
-			farOut = v.x < x0 - reach || v.x > x1 + reach || v.y < y0 - reach || v.y > y1 + reach;
+			farOut = (v.x < x0 - reach || v.x > x1 + reach || v.y < y0 - reach || v.y > y1 + reach)
+					&& (keepW <= 0.f || 1.f / v.z < keepW);
 		}
 		if (!farOut)
 			continue;
@@ -1950,7 +1960,10 @@ const ReprojectParams& update(const rend_context& ctx)
 			* glm::rotate(glm::mat4(1.f), glm::radians(pitch), glm::vec3(1, 0, 0));
 	// The renderer's ndc y points down the image; flip into y-up space for the pose.
 	const glm::mat4 flipY = glm::scale(glm::mat4(1.f), glm::vec3(1, -1, 1));
-	params.viewProj = projection(stockTan, zNear) * flipY * glm::inverse(pose) * flipY;
+	// (a test aid: the window as wide as a headset's eye, vr.WindowTanX/Y)
+	const glm::vec2 windowTan = config::VrWindowTanX > 0.f && config::VrWindowTanY > 0.f
+			? glm::vec2(config::VrWindowTanX, config::VrWindowTanY) : stockTan;
+	params.viewProj = projection(windowTan, zNear) * flipY * glm::inverse(pose) * flipY;
 
 	return params;
 }

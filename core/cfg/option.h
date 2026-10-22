@@ -461,6 +461,8 @@ extern Option<bool> VrHideLetterbox;
 extern Option<float> VrHudDepth;
 extern Option<float> VrYaw;
 extern Option<float> VrPitch;
+extern Option<float> VrWindowTanX;
+extern Option<float> VrWindowTanY;
 extern Option<float> VrOffsetX;
 extern Option<float> VrOffsetY;
 extern Option<float> VrOffsetZ;
