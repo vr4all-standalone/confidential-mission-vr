@@ -171,8 +171,8 @@ function Get-CmHallRoute {
 # y 4000, 5500, 7000, 2500, 8500, a row running right to left when its index mod 4 is 1 or 2.
 # It clears the first rooms, the corridor and the gallery and reaches a timed target sequence
 # (312-356 s, 2 of 2 runs: t4-h3, t4-r1), then a green-lit corridor. Key it with -On
-# (Get-CmRifleKeys) and $cmRifleWatch.
-$cmRifleWatch = 'config:vr.WatchRam=0c155800:4,0c155804,0c155808,0c155818:2,0c15581c'
+# (Get-CmRifleKeys) and $cmRifleWatch, the hunt's: player 1's block +0x48..+0x6F.
+$cmRifleWatch = 'config:vr.WatchRam=0c155800:4,0c155804,0c155805,0c155806:2,0c155808,0c155809,0c15580a:2,0c15580c:4,0c155810:4,0c155814:4,0c155818:2,0c15581a:2,0c15581c,0c155820:4,0c155824:4'
 $cmRiflePickup = 'VR: ram 0c15580[4-9] .* -> 2d'
 function Get-CmRifleRoute([double]$seconds = 400) {
 	Get-CmStarts
@@ -192,8 +192,12 @@ function Get-CmRifleRoute([double]$seconds = 400) {
 	}
 	for ($t = 60.7; $t -lt $seconds - 1; $t += 4) { (T $t) + '=start 0' }
 }
-# the pickup (ammo or magazine to 45): a window shot, then the trigger held 3 s (fire rate)
-function Get-CmRifleKeys { "$cmRiflePickup|0|shot pickup|3", "$cmRiflePickup|0.2|mute 5", "$cmRiflePickup|0.3|aim 0 5000 5000", "$cmRiflePickup|0.4|button 0 1 3000" }
+# the hunt's keys: on the pickup (ammo or magazine to 45) a window shot and a rip, then the
+# trigger held 3 s (the fire rate); a window shot when the magazine leaves 06 (any weapon change)
+function Get-CmRifleKeys {
+	"$cmRiflePickup|0|shot pickup|3", "$cmRiflePickup|0|rip 3 30 1", 'VR: ram 0c155808 06 -> |0|shot mag|3',
+	"$cmRiflePickup|0.2|mute 5", "$cmRiflePickup|0.3|aim 0 5000 5000", "$cmRiflePickup|0.4|button 0 1 3000"
+}
 
 # The shared runs (vr-test.ps1 parameters, no checks: each scenario checks its own lines).
 $cmRunDefs = [ordered]@{
@@ -536,7 +540,7 @@ function Test-CmPause {
 # Task 4's scene keys (vr-test.ps1 -On, the poke action, vr.WatchRam): player 1's ammo
 # (+0x4C) and +0x64 watched (the game research's "state", which only changes at boot: 01 -> ff
 # -> 00 at ~11 s), the ammo poked to 3 at 56 s (stage 1's first room), a window shot keyed to the
-# magazine filling (00 -> 06: first at ~30 s, the reload tutorial; the key acts once).
+# ammo filling (00 -> 06: first at ~30 s, the reload tutorial; the key acts once).
 function Test-SpikeKeys {
 	$name = 'accept-spike-keys'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 60

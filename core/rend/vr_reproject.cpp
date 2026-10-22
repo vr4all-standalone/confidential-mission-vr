@@ -673,6 +673,12 @@ static u32 ramAddress(u32 addr) {
 	return 0x8C000000u | (addr & 0x01FFFFFFu);
 }
 
+// area 3 (main RAM) in any of its mirrors: 0c000000, 8c000000, ac000000 ... (a typo such as
+// 05000000 would otherwise land in RAM through ramAddress's mask)
+static bool inMainRam(u32 addr) {
+	return (addr & 0x1C000000u) == 0x0C000000u;
+}
+
 // "a,b c;d" -> a, b, c, d (vr-test.ps1 quotes a list with commas in -config)
 static std::vector<std::string> splitWatchList(const std::string& spec)
 {
@@ -711,8 +717,8 @@ static std::vector<RamWatch> parseRamWatches(const std::string& spec)
 		const std::string size = colon == std::string::npos ? "1" : item.substr(colon + 1);
 		const u32 bytes = size == "1" ? 1 : size == "2" ? 2 : size == "4" ? 4 : 0;
 		u32 addr;
-		if (!parseHex(item.substr(0, colon), addr) || bytes == 0 || addr % bytes != 0 || watches.size() == 16)
-			WARN_LOG(RENDERER, "VR: vr.WatchRam: '%s' left out (want addr[:1|2|4], hex, aligned, at most 16)", item.c_str());
+		if (!parseHex(item.substr(0, colon), addr) || !inMainRam(addr) || bytes == 0 || addr % bytes != 0 || watches.size() == 16)
+			WARN_LOG(RENDERER, "VR: vr.WatchRam: '%s' left out (want addr[:1|2|4], hex, in main RAM 0c000000-0fffffff, aligned, at most 16)", item.c_str());
 		else
 			watches.push_back({ addr, bytes, 0, false });
 	}
@@ -756,9 +762,9 @@ static void watchRamAndPoke(Event, void *)
 
 void queuePoke(unsigned addr, unsigned size, unsigned value)
 {
-	if ((size != 1 && size != 2 && size != 4) || addr % size != 0)
+	if ((size != 1 && size != 2 && size != 4) || addr % size != 0 || !inMainRam(addr))
 	{
-		WARN_LOG(RENDERER, "VR: POKE %08x size %u left out (want size 1, 2 or 4, aligned)", addr, size);
+		WARN_LOG(RENDERER, "VR: POKE %08x size %u left out (want size 1, 2 or 4, aligned, in main RAM 0c000000-0fffffff)", addr, size);
 		return;
 	}
 	if (size < 4)

@@ -41,7 +41,9 @@
             character class) schedules the action (as for -At) that many seconds later, for the
             first <times> such lines (default 1); actions.log gets "on <regex> -> <action>". A
             keyed shot is named after the time it runs. With the RAM and texture watches below:
-              -On 'VR: ram 0c1558[01][0-9a-f] .* -> 2d|0|rip 3 30 1'
+              -On 'VR: ram 0c15580[4-9] .* -> 2d|0|rip 3 30 1'
+            A "-> 2d" key matches byte watches only: 2- and 4-byte watches print 4 and 8 digits
+            ("-> 002d", "-> 0000002d").
   -Config   more "config:x=y,..." settings, applied last. PC test aids (vr_reproject.cpp):
             vr.WatchRam=addr[:1|2|4],...  (hex SH4 addresses, at most 16) logs each change, read
             every VBlank, as "VR: ram 0c155808 06 -> 2d" (2 and 4 bytes: 4 and 8 hex digits);
@@ -279,6 +281,8 @@ $pending = [Collections.Generic.List[object]]::new()
 $logPath = Join-Path $out 'flycast.log'
 $tail = $null	# flycast.log as it grows (Flycast flushes each line), for the scene keys
 $tailBuf = New-Object byte[] 65536
+$tailChars = New-Object char[] 65536
+$tailDecoder = [Text.Encoding]::UTF8.GetDecoder()	# one across reads: a character split between two keeps its bytes
 $partial = ''
 try {
 	$p = Start-Process -FilePath $exe -ArgumentList @('-config', "`"$cfg`"", "`"$content`"") -WorkingDirectory $out -PassThru
@@ -298,7 +302,10 @@ try {
 				$tail = [IO.FileStream]::new($logPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
 			}
 			if ($null -ne $tail) {
-				while (($n = $tail.Read($tailBuf, 0, $tailBuf.Length)) -gt 0) { $partial += [Text.Encoding]::UTF8.GetString($tailBuf, 0, $n) }
+				while (($n = $tail.Read($tailBuf, 0, $tailBuf.Length)) -gt 0) {
+					$c = $tailDecoder.GetChars($tailBuf, 0, $n, $tailChars, 0)
+					$partial += [string]::new($tailChars, 0, $c)
+				}
 				$lines = $partial -split "`n"
 				$partial = $lines[-1]
 				for ($i = 0; $i -lt $lines.Count - 1; $i++) {
