@@ -207,11 +207,12 @@ struct GameProfile
 	u32 fovLiterals[4] {};
 	u16 fovStock = 0;
 	// ...or code changed (every word stock, else none of them).
-	CodePatch fovPatch[4] {};
+	CodePatch fovPatch[8] {};
 	// The focal length the game's light-gun hit test uses (its stock view): a float in RAM
-	// (it may change from scene to scene), else vr.Focal. And the stock framing of the 2D
-	// plane (0: vr.Focal).
+	// (it may change from scene to scene; or its reciprocal, 1/focal, if stockFocalInverse),
+	// else vr.Focal. And the stock framing of the 2D plane (0: vr.Focal).
 	u32 stockFocalAddr = 0;
+	bool stockFocalInverse = false;
 	float focal = 0.f;
 	// Written every frame once the game's code is there (its fovPatch words stock or patched).
 	Poke pokes[12] {};
@@ -355,6 +356,31 @@ static std::vector<GameProfile> makeProfiles()
 	p.gameId = " CONFIDENTIAL MISSION ---------";
 	p.projAddr = 0x24F660;
 	p.viewportAddr = 0x24F798;
+	// Its camera keeps the field of view as a float, horizontal degrees, at 0x0C154EC8. Each
+	// frame play's camera (0x8C02734E) turns it into a 16-bit angle, degrees times 65536.0
+	// over 360 (the 65536.0 a literal, 0x8C0274B4), for the projection builder 0x8C09C2F0, and
+	// keeps 1/focal = tan(A/2)/320 at 0x0C154ED0 (the stock view: the game's own screen checks
+	// project with it, as at 0x8C02AE0A). Two more copies of that code (0x8C05ACC0, literal
+	// 0x8C05AEC0; 0x8C05D068, literal 0x8C05D260, half the angle, for the builder 0x8C098A40)
+	// were not seen running. Those literals are made 116736.0 (high half 4780 -> 47E8): the
+	// angle 1.8125 times as wide, stage 1's 61 degrees across (48 high) 111 (95 high). The
+	// cutscene cameras (0x8C041D4E, 0x8C049B24's) build theirs from a lens angle instead, as
+	// 2 atan(32 tan(L/2) / 18): both 32.0 literals (0x8C041EB8, 0x8C049BDC) are made 64.0 (high
+	// half 4200 -> 4280), the tangent twice as wide, the intro's 70 degrees across (55 high)
+	// 109 (92 high); there they also widen 0x0C154EC8 and 0x0C154ED0. The builder makes the projection, frustum planes and screen matrices from
+	// the angle, so the game draws and culls the wider view, while 0x0C154ED0 stays stock. The
+	// code reading three of the literals (unchanged) makes sure the patch lands only on it.
+	p.fovScale = 2.f;	// (only says "widen": the patch's own factors are fixed)
+	p.fovPatch[0] = { 0x0274B6, 0x4780, 0x47E8 };	// high half of the float 65536.0 -> 116736.0
+	p.fovPatch[1] = { 0x05AEC2, 0x4780, 0x47E8 };	// the same, the second copy's
+	p.fovPatch[2] = { 0x05D262, 0x4780, 0x47E8 };	// the same, the third copy's
+	p.fovPatch[3] = { 0x041EBA, 0x4200, 0x4280 };	// high half of the float 32.0 -> 64.0
+	p.fovPatch[4] = { 0x049BDE, 0x4200, 0x4280 };	// the same, the other cutscene camera's
+	p.fovPatch[5] = { 0x02738E, 0xC749, 0xC749 };	// mova 0x8C0274B4,r0 (unchanged)
+	p.fovPatch[6] = { 0x05D06E, 0xC77C, 0xC77C };	// mova 0x8C05D260,r0 (unchanged)
+	p.fovPatch[7] = { 0x041D68, 0xC753, 0xC753 };	// mova 0x8C041EB8,r0 (unchanged)
+	p.stockFocalAddr = 0x154ED0;
+	p.stockFocalInverse = true;
 	p.focal = 540.8f;	// stage 1's (537.4-542.6: its camera sways)
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
 	// 15.1 units over the floor in the attract demo's corridor, HOTD2's 15 over the street;
@@ -536,7 +562,9 @@ static float stockFocal()
 	const GameProfile *prof = activeProfile;
 	if (prof != nullptr && prof->stockFocalAddr != 0)
 	{
-		const float f = readFloat(prof->stockFocalAddr);
+		float f = readFloat(prof->stockFocalAddr);
+		if (prof->stockFocalInverse)
+			f = f != 0.f ? 1.f / f : 0.f;
 		if (plausible(f, 10.f, 20000.f))
 			return f;
 	}
