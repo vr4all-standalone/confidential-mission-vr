@@ -207,13 +207,16 @@ def shots(args):
     (needs --tex), the first pass's polygons of --tex (VR: shot and VR new after shot lines, 3D
     ones too) within 120 px of where the game draws the shot, as one box: its centre's distance
     from that point (the gun, or with a widened view and the profile's markerWidened the point
-    the widened view puts the stock-view shot at)."""
+    the widened view puts the stock-view shot at). With --max-ratio, every shot that drew a
+    marker needs live/stock below it on each of its `VR diag: shot` lines up to the marker's first
+    frame (later ones can fall in the next scene: a cut 0.3 s after a shot): a shootable scene
+    drawn with a cutscene camera (live near stock) would aim wide, since the hit test uses stock."""
     tex = {int(t, 16) for t in args.tex.split(',')} if args.tex else None
     if args.union and tex is None:
         print('shots: --union needs --tex (without it every polygon within 120 px joins the box: '
               'the sights, the HUD)', file=sys.stderr)
         return 2
-    groups = []  # [start ms, gun, marker (+ms, px off, list, n, W from, W to, tex), union frames]
+    groups = []  # [start ms, gun, marker (+ms, px off, list, n, W from, W to, tex), union frames, live/stock]
     # The pass each line belongs to. Flycast logs a pass as its `VR new after shot` lines (one +ms),
     # its `VR diag: shot` line, then its `VR: shot` lines: a pass opens with its first NEW line,
     # or with its diag line when it has none.
@@ -236,9 +239,12 @@ def shots(args):
         gun = (int(m[2]), int(m[3]))
         g = next((g for g in groups if g[1] == gun and abs(g[0] - start) <= 100), None)
         if g is None:
-            g = [start, gun, None, []]
+            g = [start, gun, None, [], []]
             groups.append(g)
         if m.re is SHOT_FRAME:
+            s = STOCK.search(line)
+            if s and float(s[2]):
+                g[4].append((int(m[1]), float(s[1]) / float(s[2])))
             continue
         if args.union:
             a = SHOT_AT.search(line) if m.re is SHOT else None
@@ -263,7 +269,7 @@ def shots(args):
             g[2] = _union_marker(g[3]) if g[3] else None
     groups.sort(key=lambda g: (g[0], g[1]))
     worst = None
-    for start, gun, marker, _ in groups:
+    for start, gun, marker, _, _ in groups:
         head = f'shot {start / 1000:.3f} gun {gun[0]},{gun[1]}: '
         if marker is None:
             print(head + f'none (nothing within {MARKER_MAX_OFFSET} px)')
@@ -286,6 +292,17 @@ def shots(args):
             n = sum(g[1] == gun for g in groups)
             print(f'gun {gun[0]},{gun[1]} shots {n} best ' + (f'{min(offs)} px off' if offs else 'none'))
             failed = failed or not offs or min(offs) > args.each_gun
+    if args.max_ratio is not None:
+        # each shot with a marker: its diag lines' live/stock up to the marker's first frame (+ms)
+        hit = [(g[0], g[1], max(r for ms, r in g[4] if ms <= g[2][0])) for g in groups
+               if g[2] is not None and any(ms <= g[2][0] for ms, _ in g[4])]
+        for start, gun, ratio in hit:
+            if ratio >= args.max_ratio:
+                print(f'shot {start / 1000:.3f} gun {gun[0]},{gun[1]}: live/stock {ratio:.3f} (not below {args.max_ratio:g})')
+        top = max((h[2] for h in hit), default=None)
+        print(f'live/stock max {top:.3f} over {len(hit)} shots with a marker' if hit else
+              'live/stock: no shot with a marker and a `VR diag: shot` focal/stock line')
+        failed = failed or not hit or top >= args.max_ratio
     return 1 if failed else 0
 
 
@@ -402,6 +419,8 @@ def main(argv):
     s.add_argument('--to', dest='end', type=float)
     s.add_argument('--union', action='store_true',
                    help="a pass's polygons of --tex (required) as one box, against where the game draws the shot")
+    s.add_argument('--max-ratio', type=float,
+                   help='every shot with a marker: live/stock below this on its VR diag: shot lines to the marker')
     s.set_defaults(run=shots)
     s = sub.add_parser('stock')
     s.add_argument('log')
@@ -545,6 +564,8 @@ def _synthetic_log_union():
         '00:56:052 ' + pre + shot.format(52, '576,48', 20, 0, '441,141..453,149', '447,145'),
         '00:56:055 ' + frame.format(55, '576,48', '436.4', '879.2'),
         '00:56:055 ' + pre + shot.format(55, '576,48', 30, 10, '451,141..463,149', '447,145'),
+        # a cut to a cutscene after that marker (live near stock): the shot's later diag line
+        '00:56:100 ' + frame.format(100, '576,48', '280.0', '288.9'),
     ]) + '\n'
 
 
@@ -649,6 +670,17 @@ def selftest():
               ['shot 50.000 gun 320,240: +16 ms union of 1 polys at 320,240, drawn at 320,240: 0 px off, tex 614000',
                'shot 52.000 gun 64,48' + none, 'shot 54.000 gun 576,240' + none, 'shot 56.000 gun 576,48' + none,
                'shots 4 matched 1 worst 0 px off'])
+        # --max-ratio: the stock-view shot (live/stock 1.000) fails it, the widened ones pass (0.406, 0.496);
+        # the 56 s shot's cutscene line (0.969) comes after its marker
+        check(['shots', log2, '--tex', '5e8000', '--union', '--max-ratio', '0.9'], 1,
+              union + ['shots 4 matched 4 worst 4 px off', 'shot 50.000 gun 320,240: live/stock 1.000 (not below 0.9)',
+                       'live/stock max 1.000 over 4 shots with a marker'])
+        check(['shots', log2, '--tex', '5e8000', '--union', '--max-ratio', '0.9', '--from', '51'], 0,
+              union[1:] + ['shots 3 matched 3 worst 4 px off', 'live/stock max 0.496 over 3 shots with a marker'])
+        # a shot without a marker is not checked; none with one fails
+        check(['shots', log2, '--tex', '614000', '--union', '--max-ratio', '0.9', '--from', '51'], 1,
+              ['shot 52.000 gun 64,48' + none, 'shot 54.000 gun 576,240' + none, 'shot 56.000 gun 576,48' + none,
+               'shots 3 matched 0', 'live/stock: no shot with a marker and a `VR diag: shot` focal/stock line'])
         # --union needs --tex: without it the box would take in the sights and the HUD
         check(['shots', log2, '--union'], 2, [])
         # without --union: each polygon on its own, its px off as logged (from where the shot is drawn)
@@ -662,9 +694,10 @@ def selftest():
         # 3 ms (shown with --min-s 0)
         scene1 = '50.016-54.016 s (4.0 s) lines 4 stock 540.0 live/stock 0.406..1.000'
         scene2 = '56.052-56.055 s (0.0 s) lines 2 stock 879.2 live/stock 0.496..0.496'
-        check(['stock', log2], 0, [scene1, 'lines 6 runs 2'])
-        check(['stock', log2, '--min-s', '0'], 0, [scene1, scene2, 'lines 6 runs 2'])
-        check(['stock', log2, '--min-s', '0', '--from', '55'], 0, [scene2, 'lines 2 runs 1'])
+        scene3 = '56.100-56.100 s (0.0 s) lines 1 stock 288.9 live/stock 0.969..0.969'
+        check(['stock', log2], 0, [scene1, 'lines 7 runs 3'])
+        check(['stock', log2, '--min-s', '0'], 0, [scene1, scene2, scene3, 'lines 7 runs 3'])
+        check(['stock', log2, '--min-s', '0', '--from', '55'], 0, [scene2, scene3, 'lines 3 runs 2'])
         check(['stock', log2, '--from', '60'], 1, ['lines 0 runs 0'])
 
     for f in failures:
