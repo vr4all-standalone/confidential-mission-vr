@@ -1811,7 +1811,9 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 			for (u32 k = 1; k < count; k++)
 				if (glm::distance(centre, recent[k].hit) < glm::distance(centre, near->hit))
 					near = &recent[k];
-			const float offset = glm::distance(centre, near->gun);
+			// measured from the point the line was picked by: where the game draws the shot
+			// (the gun itself unless the profile's markerWidened moves it)
+			const float offset = glm::distance(centre, near->hit);
 			bool hide = false;
 			for (u32 k = 0; k < count; k++)
 			{

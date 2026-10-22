@@ -182,40 +182,54 @@ MARKER_MAX_OFFSET = 120  # px: Flycast logs a shot's small polygons only this cl
 
 
 def _union_marker(frames):
-    """--union: the first frame's matched polygons as one box, its centre against where the game
-    draws the shot. frames: [(+ms, (list, n), box, drawn, tex)]; lines of one frame may differ by
-    a millisecond."""
-    frames.sort(key=lambda f: f[0])
-    first = [f for f in frames if f[0] - frames[0][0] <= 3]
-    polys = {f[1]: f for f in first}.values()
-    x0 = min(f[2][0] for f in polys)
-    y0 = min(f[2][1] for f in polys)
-    x1 = max(f[2][2] for f in polys)
-    y1 = max(f[2][3] for f in polys)
+    """--union: the first pass's matched polygons as one box, its centre against where the game
+    draws the shot. frames: [(pass, +ms, (list, n), box, drawn, tex)]; a pass is the lines that
+    go with one `VR diag: shot` line (two passes can come 3 ms apart)."""
+    frames.sort(key=lambda f: (f[0], f[1]))
+    first = [f for f in frames if f[0] == frames[0][0]]
+    polys = {f[2]: f for f in first}.values()
+    x0 = min(f[3][0] for f in polys)
+    y0 = min(f[3][1] for f in polys)
+    x1 = max(f[3][2] for f in polys)
+    y1 = max(f[3][3] for f in polys)
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    drawn = first[0][3]
+    drawn = first[0][4]
     off = int(((cx - drawn[0]) ** 2 + (cy - drawn[1]) ** 2) ** 0.5 + 0.5)
-    texes = ','.join(sorted({f[4] for f in polys}))
-    return first[0][0], off, f'union of {len(polys)} polys at {cx:.0f},{cy:.0f}, drawn at {drawn[0]},{drawn[1]}: ' \
+    texes = ','.join(sorted({f[5] for f in polys}))
+    return first[0][1], off, f'union of {len(polys)} polys at {cx:.0f},{cy:.0f}, drawn at {drawn[0]},{drawn[1]}: ' \
                              f'{off} px off, tex {texes}'
 
 
 def shots(args):
     """The game's shot markers: per shot (trigger pull), the first frame after it with a marker
     (a polygon within 120 px of the gun, of --tex if given), its nearest one. Shots come from
-    the `VR diag: shot` frame lines, so a shot that drew no marker shows as none. With --union,
-    the first frame's polygons of --tex (VR: shot and VR new after shot lines, 3D ones too)
-    within 120 px of where the game draws the shot, as one box: its centre's distance from that
-    point (the gun, or with a widened view and the profile's markerWidened the point the
-    widened view puts the stock-view shot at)."""
+    the `VR diag: shot` frame lines, so a shot that drew no marker shows as none. With --union
+    (needs --tex), the first pass's polygons of --tex (VR: shot and VR new after shot lines, 3D
+    ones too) within 120 px of where the game draws the shot, as one box: its centre's distance
+    from that point (the gun, or with a widened view and the profile's markerWidened the point
+    the widened view puts the stock-view shot at)."""
     tex = {int(t, 16) for t in args.tex.split(',')} if args.tex else None
+    if args.union and tex is None:
+        print('shots: --union needs --tex (without it every polygon within 120 px joins the box: '
+              'the sights, the HUD)', file=sys.stderr)
+        return 2
     groups = []  # [start ms, gun, marker (+ms, px off, list, n, W from, W to, tex), union frames]
+    # The pass each line belongs to. Flycast logs a pass as its `VR new after shot` lines (one +ms),
+    # its `VR diag: shot` line, then its `VR: shot` lines: a pass opens with its first NEW line,
+    # or with its diag line when it has none.
+    npass, new_since = 0, None
     for line in open(args.log, errors='replace'):
         line = line.rstrip('\r\n')
         m = SHOT.search(line) or SHOT_FRAME.search(line) or (NEW.search(line) if args.union else None)
         t = _log_ms(line)
         if not m or t is None:
             continue
+        if m.re is NEW:
+            npass += new_since != m[1]
+            new_since = m[1]
+        else:
+            npass += m.re is SHOT_FRAME and new_since is None
+            new_since = None
         start = t - int(m[1])
         if (args.start is not None and start < args.start * 1000) or (args.end is not None and start > args.end * 1000):
             continue
@@ -237,7 +251,7 @@ def shots(args):
             if (tex is not None and int(texhex, 16) not in tex) \
                     or ((cx - drawn[0]) ** 2 + (cy - drawn[1]) ** 2) ** 0.5 > MARKER_MAX_OFFSET:
                 continue
-            g[3].append((int(m[1]), (m[4], m[5]), box, drawn, texhex))
+            g[3].append((npass, int(m[1]), (m[4], m[5]), box, drawn, texhex))
             continue
         if int(m[6]) > MARKER_MAX_OFFSET or (tex is not None and int(m[9], 16) not in tex):
             continue
@@ -273,6 +287,38 @@ def shots(args):
             print(f'gun {gun[0]},{gun[1]} shots {n} best ' + (f'{min(offs)} px off' if offs else 'none'))
             failed = failed or not offs or min(offs) > args.each_gun
     return 1 if failed else 0
+
+
+STOCK = re.compile(r'VR diag: shot \+-?\d+ ms gun .*, focal (\S+) stock (\S+)$')
+
+
+def stock(args):
+    """The `VR diag: shot` lines (each pass while a shot is recent) binned by the game's stock
+    focal: runs of lines whose stock focal stays within --tol of the run's first, with their
+    span, line count and live/stock range (the widening the shot's mapped point uses). A still
+    scene is one long run; a zoom is many short ones. Runs shorter than --min-s are counted, not
+    shown."""
+    runs, n = [], 0  # [from ms, to ms, lines, stock, live/stock min, max]
+    for line in open(args.log, errors='replace'):
+        m = STOCK.search(line)
+        t = _log_ms(line)
+        if not m or t is None or (args.start is not None and t < args.start * 1000) \
+                or (args.end is not None and t > args.end * 1000):
+            continue
+        live, st = float(m[1]), float(m[2])
+        ratio = live / st if st else 0.0
+        n += 1
+        if runs and abs(st - runs[-1][3]) <= args.tol * runs[-1][3]:
+            r = runs[-1]
+            r[1], r[2], r[4], r[5] = t, r[2] + 1, min(r[4], ratio), max(r[5], ratio)
+        else:
+            runs.append([t, t, 1, st, ratio, ratio])
+    for t0, t1, lines, st, lo, hi in runs:
+        if (t1 - t0) / 1000 >= args.min_s:
+            print(f'{t0 / 1000:.3f}-{t1 / 1000:.3f} s ({(t1 - t0) / 1000:.1f} s) lines {lines} stock {st:.1f} '
+                  f'live/stock {lo:.3f}..{hi:.3f}')
+    print(f'lines {n} runs {len(runs)}')
+    return 0 if n else 1
 
 
 FOCAL = re.compile(r'VR: focal (\S+) x (\S+)  verts (\d+) overlay \d+  W near (\S+) ')
@@ -355,8 +401,15 @@ def main(argv):
     s.add_argument('--from', dest='start', type=float, help='shots from this second of the run on')
     s.add_argument('--to', dest='end', type=float)
     s.add_argument('--union', action='store_true',
-                   help="a frame's polygons of --tex as one box, against where the game draws the shot")
+                   help="a pass's polygons of --tex (required) as one box, against where the game draws the shot")
     s.set_defaults(run=shots)
+    s = sub.add_parser('stock')
+    s.add_argument('log')
+    s.add_argument('--tol', type=float, default=0.01, help='relative: a run\'s stock focal stays this close')
+    s.add_argument('--min-s', type=float, default=1.0, help='show runs this long (s)')
+    s.add_argument('--from', dest='start', type=float, help='seconds from process start')
+    s.add_argument('--to', dest='end', type=float)
+    s.set_defaults(run=stock)
     s = sub.add_parser('focal')
     s.add_argument('log')
     s.add_argument('--expect', type=float)
@@ -459,30 +512,39 @@ def _synthetic_log():
 
 
 def _synthetic_log_union():
-    """Newer shot lines (box, where the shot is drawn) for --union: a burst of two triangles
-    around the hit, a 3D impact, a widened view drawing the shots nearer the centre."""
+    """Newer shot lines (box, where the shot is drawn) for --union, in the order Flycast logs a
+    pass: its `VR new after shot` lines, its `VR diag: shot` line, then its `VR: shot` lines (px
+    off from where the shot is drawn). A burst of two triangles around the hit, a 3D impact, a
+    widened view drawing the shots nearer the centre, two passes 3 ms apart."""
     pre = 'rend\\vr_reproject.cpp:1800 N[RENDERER]: '
     shot = ('VR: shot +{} ms gun {}: OP {} (3 verts) 12x8, {} px off, W 1.000..1.000 all-2D, tex 5e8000 tsp 2009a452 '
             'col ffffffff, at {}, shot drawn at {}')
     new = ('VR new after shot +{} ms gun {}: {} tex {} tsp 8491a4d2 isp 8b000000 tcw 100c2800, 4 verts at {} '
            '(centre {} px from the gun) W 27.00..27.00 col ffffffff, shot drawn at {}')
     frame = ('rend\\vr_reproject.cpp:1750 N[RENDERER]: VR diag: shot +{} ms gun {}, fb 640x480, '
-             'polygons op 1 pt 2 tr 3, background 00000000, focal {} stock 540.0')
+             'polygons op 1 pt 2 tr 3, background 00000000, focal {} stock {}')
     return '\n'.join([
-        # stock view: the burst's halves 6 px either side of the gun, the impact on it
-        '00:50:016 ' + frame.format(16, '320,240', '540.0'),
+        # stock view: the impact new in the first pass, the burst's halves 6 px either side of the gun
+        '00:50:016 ' + pre + new.format(16, '320,240', 'TR 40', '614000', '302,222..338,258', 0, '320,240'),
+        '00:50:016 ' + frame.format(16, '320,240', '540.0', '540.0'),
         '00:50:016 ' + pre + shot.format(16, '320,240', 10, 6, '320,236..332,244', '320,240'),
         '00:50:016 ' + pre + shot.format(16, '320,240', 11, 6, '308,236..320,244', '320,240'),
-        '00:50:017 ' + pre + new.format(17, '320,240', 'TR 40', '614000', '302,222..338,258', 0, '320,240'),
+        '00:50:032 ' + frame.format(32, '320,240', '540.0', '540.0'),
         '00:50:032 ' + pre + shot.format(32, '320,240', 10, 9, '320,234..338,246', '320,240'),
         # widened (219.4 / 540.0): drawn at 216,162 for the gun at 64,48, 179 px from it
-        '00:52:016 ' + frame.format(16, '64,48', '219.4'),
-        '00:52:016 ' + pre + shot.format(16, '64,48', 10, 177, '212,158..218,166', '216,162'),
-        '00:52:017 ' + pre + new.format(17, '64,48', 'OP 10', '5e8000', '212,158..218,166', 177, '216,162'),
-        '00:52:017 ' + pre + shot.format(17, '64,48', 11, 180, '214,158..220,166', '216,162'),
+        '00:52:016 ' + pre + new.format(16, '64,48', 'OP 10', '5e8000', '212,158..218,166', 177, '216,162'),
+        '00:52:016 ' + frame.format(16, '64,48', '219.4', '540.0'),
+        '00:52:016 ' + pre + shot.format(16, '64,48', 10, 1, '212,158..218,166', '216,162'),
+        '00:52:016 ' + pre + shot.format(16, '64,48', 11, 1, '214,158..220,166', '216,162'),
         # widened, 4 px off where it is drawn
-        '00:54:016 ' + frame.format(16, '576,240', '219.4'),
-        '00:54:016 ' + pre + shot.format(16, '576,240', 10, 148, '425,237..431,245', '424,240'),
+        '00:54:016 ' + frame.format(16, '576,240', '219.4', '540.0'),
+        '00:54:016 ' + pre + shot.format(16, '576,240', 10, 4, '425,237..431,245', '424,240'),
+        # another scene (436.4 / 879.2: drawn at 447,145), one frame drawn in two passes 3 ms apart:
+        # the first pass's burst on the drawn point, the second's 10 px right of it
+        '00:56:052 ' + frame.format(52, '576,48', '436.4', '879.2'),
+        '00:56:052 ' + pre + shot.format(52, '576,48', 20, 0, '441,141..453,149', '447,145'),
+        '00:56:055 ' + frame.format(55, '576,48', '436.4', '879.2'),
+        '00:56:055 ' + pre + shot.format(55, '576,48', 30, 10, '451,141..463,149', '447,145'),
     ]) + '\n'
 
 
@@ -574,18 +636,36 @@ def selftest():
             f.write(_synthetic_log_union())
         union = ['shot 50.000 gun 320,240: +16 ms union of 2 polys at 320,240, drawn at 320,240: 0 px off, tex 5e8000',
                  'shot 52.000 gun 64,48: +16 ms union of 2 polys at 216,162, drawn at 216,162: 0 px off, tex 5e8000',
-                 'shot 54.000 gun 576,240: +16 ms union of 1 polys at 428,241, drawn at 424,240: 4 px off, tex 5e8000']
-        check(['shots', log2, '--tex', '5e8000', '--union'], 0, union + ['shots 3 matched 3 worst 4 px off'])
-        check(['shots', log2, '--tex', '5e8000', '--union', '--max-off', '3'], 1, union + ['shots 3 matched 3 worst 4 px off'])
+                 'shot 54.000 gun 576,240: +16 ms union of 1 polys at 428,241, drawn at 424,240: 4 px off, tex 5e8000',
+                 'shot 56.000 gun 576,48: +52 ms union of 1 polys at 447,145, drawn at 447,145: 0 px off, tex 5e8000']
+        check(['shots', log2, '--tex', '5e8000', '--union'], 0, union + ['shots 4 matched 4 worst 4 px off'])
+        check(['shots', log2, '--tex', '5e8000', '--union', '--max-off', '3'], 1, union + ['shots 4 matched 4 worst 4 px off'])
         check(['shots', log2, '--tex', '5e8000', '--union', '--max-off', '3', '--to', '53'], 0,
               union[:2] + ['shots 2 matched 2 worst 0 px off'])
+        # two passes 3 ms apart are two frames: only the first one's polygons (merged: 452,145, 5 px off)
+        check(['shots', log2, '--tex', '5e8000', '--union', '--max-off', '0', '--from', '55'], 0,
+              union[3:] + ['shots 1 matched 1 worst 0 px off'])
         check(['shots', log2, '--tex', '614000', '--union', '--max-off', '3'], 1,
-              ['shot 50.000 gun 320,240: +17 ms union of 1 polys at 320,240, drawn at 320,240: 0 px off, tex 614000',
-               'shot 52.000 gun 64,48' + none, 'shot 54.000 gun 576,240' + none, 'shots 3 matched 1 worst 0 px off'])
-        # without --union the same lines read as before: each polygon on its own, against the gun
+              ['shot 50.000 gun 320,240: +16 ms union of 1 polys at 320,240, drawn at 320,240: 0 px off, tex 614000',
+               'shot 52.000 gun 64,48' + none, 'shot 54.000 gun 576,240' + none, 'shot 56.000 gun 576,48' + none,
+               'shots 4 matched 1 worst 0 px off'])
+        # --union needs --tex: without it the box would take in the sights and the HUD
+        check(['shots', log2, '--union'], 2, [])
+        # without --union: each polygon on its own, its px off as logged (from where the shot is drawn)
         check(['shots', log2, '--tex', '5e8000'], 0,
               ['shot 50.000 gun 320,240: +16 ms OP 10 6 px off, W 1.000..1.000, tex 5e8000',
-               'shot 52.000 gun 64,48' + none, 'shot 54.000 gun 576,240' + none, 'shots 3 matched 1 worst 6 px off'])
+               'shot 52.000 gun 64,48: +16 ms OP 10 1 px off, W 1.000..1.000, tex 5e8000',
+               'shot 54.000 gun 576,240: +16 ms OP 10 4 px off, W 1.000..1.000, tex 5e8000',
+               'shot 56.000 gun 576,48: +52 ms OP 20 0 px off, W 1.000..1.000, tex 5e8000',
+               'shots 4 matched 4 worst 6 px off'])
+        # the stock focal's runs: the first scene 4 s (the live focal widened from its second shot), the other one
+        # 3 ms (shown with --min-s 0)
+        scene1 = '50.016-54.016 s (4.0 s) lines 4 stock 540.0 live/stock 0.406..1.000'
+        scene2 = '56.052-56.055 s (0.0 s) lines 2 stock 879.2 live/stock 0.496..0.496'
+        check(['stock', log2], 0, [scene1, 'lines 6 runs 2'])
+        check(['stock', log2, '--min-s', '0'], 0, [scene1, scene2, 'lines 6 runs 2'])
+        check(['stock', log2, '--min-s', '0', '--from', '55'], 0, [scene2, 'lines 2 runs 1'])
+        check(['stock', log2, '--from', '60'], 1, ['lines 0 runs 0'])
 
     for f in failures:
         print('FAIL ' + f, end='' if f.endswith('\n') else '\n')
