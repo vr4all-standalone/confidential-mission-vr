@@ -28,9 +28,12 @@
         </intent>
     </queries>
 
+    <!-- no TV banner or logo: the main manifest's are Flycast's art (res/drawable-xhdpi/ic_banner.xml
+         takes its place in the resources too) -->
     <application
         android:label="VR Light Gun Hub"
-        tools:replace="android:label">
+        tools:replace="android:label"
+        tools:remove="android:banner,android:logo">
         <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
         <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
 

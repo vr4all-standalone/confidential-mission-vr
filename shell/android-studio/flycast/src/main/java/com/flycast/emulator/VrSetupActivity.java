@@ -77,9 +77,10 @@ public class VrSetupActivity extends Activity
         page.addView(games, spaced(20));
 
         page.addView(text("Your own copies of the games: The House of the Dead 2 (European or US version), The "
-                + "Maze of the Kings (arcade, as a MAME set: mok.zip with the folder mok next to it) and "
-                + "Confidential Mission (arcade, as a MAME set: confmiss.zip with its key inside, naomi.zip next to "
-                + "it or the BIOS inside, and the folder confmiss with gds-0001.chd). Nothing of the games comes "
+                + "Maze of the Kings (arcade, as a MAME set: mok.zip with its key inside, naomi.zip next to it or "
+                + "the BIOS inside, and the folder mok with gds-0022.chd next to it) and Confidential Mission "
+                + "(arcade, as a MAME set: confmiss.zip with its key inside, naomi.zip next to it or the BIOS "
+                + "inside, and the folder confmiss with gds-0001.chd next to it). Nothing of the games comes "
                 + "with this app. Unofficial fan project, not affiliated with Sega.", 13, SOFT), spaced(22));
 
         ScrollView scroll = new ScrollView(this);

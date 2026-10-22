@@ -1,4 +1,4 @@
-name: Bug report (HOTD2 VR)
+name: Bug report (VR Light Gun Hub)
 description: Something doesn't work in the Quest app or the PCVR build
 labels: [bug]
 body:
@@ -20,7 +20,7 @@ body:
     id: version
     attributes:
       label: Release
-      description: The release you downloaded, e.g. v0.3-test1
+      description: The release you downloaded, e.g. 0.1.0
     validations:
       required: true
   - type: input
@@ -39,6 +39,7 @@ body:
         - The House of the Dead 2, USA
         - The House of the Dead 2, Japan
         - The Maze of the Kings (NAOMI)
+        - Confidential Mission (NAOMI)
         - Other
     validations:
       required: true

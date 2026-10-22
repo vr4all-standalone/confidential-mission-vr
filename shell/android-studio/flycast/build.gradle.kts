@@ -1,4 +1,6 @@
 // hotd2-vr: modified in 2026 by mikermak for the Quest VR mode (see "git log master..hotd2-vr").
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -8,6 +10,31 @@ fun gitVersionName(): String {
         commandLine("git", "describe", "--tags", "--always")
     }.standardOutput.asText.get().trim()
 }
+
+// hotd2-vr: VR Light Gun Hub's own version. The vr build's versionName is "<hubVersion>-g<commit>"
+// (set in androidComponents below); versionCode stays defaultConfig's.
+val hubVersion = "0.1.0"
+
+fun gitShortHash(): String {
+    return providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+    }.standardOutput.asText.get().trim()
+}
+
+// hotd2-vr: VR Light Gun Hub's release key, kept outside the repository (the committed
+// debug.keystore is public, so anyone could sign an "update" with it). A properties file with
+// storeFile (relative to the properties file), storePassword, keyAlias and keyPassword: the path
+// in the environment variable VRLGH_SIGNING, else ~/.vrlightgunhub/release-signing.properties.
+// hotd2-vr/make-release-key.ps1 makes the key and the file. Without it: the debug key, and a warning.
+val hubSigningFile: File = providers.environmentVariable("VRLGH_SIGNING").orNull
+    ?.takeIf { it.isNotBlank() }?.let { File(it) }
+    ?: File(System.getProperty("user.home"), ".vrlightgunhub/release-signing.properties")
+val hubSigning: Properties? = if (hubSigningFile.isFile)
+    Properties().apply { hubSigningFile.inputStream().use { load(it) } } else null
+
+fun hubSigningValue(key: String): String =
+    hubSigning?.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw GradleException("hotd2-vr: $hubSigningFile has no $key")
 
 android {
     namespace = "com.flycast.emulator"
@@ -48,6 +75,15 @@ android {
             keyAlias = "uploadkey"
             keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
         }
+        // hotd2-vr: VR Light Gun Hub's release key, when its properties file is there (above)
+        if (hubSigning != null) {
+            create("hub") {
+                storeFile = hubSigningFile.absoluteFile.parentFile.resolve(hubSigningValue("storeFile"))
+                storePassword = hubSigningValue("storePassword")
+                keyAlias = hubSigningValue("keyAlias")
+                keyPassword = hubSigningValue("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -59,12 +95,18 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
         }
-        // hotd2-vr: optimised build for sideloading on the Quest, signed with the debug
-        // key. The app VR Light Gun Hub: its applicationId is set below (androidComponents),
-        // so it installs next to (never over) a regular Flycast.
+        // hotd2-vr: optimised build for sideloading on the Quest, signed with the app's release
+        // key ("hub" above), or the public debug key when there is none (a test build only).
+        // The app VR Light Gun Hub: its applicationId and versionName are set below
+        // (androidComponents), so it installs next to (never over) a regular Flycast.
         create("vr") {
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
+            val hub = signingConfigs.findByName("hub")
+            if (hub == null) {
+                logger.warn("hotd2-vr: no release key, $hubSigningFile not found (set VRLGH_SIGNING, or run " +
+                    "hotd2-vr\\make-release-key.ps1): the vr build is signed with the public debug key, not for release")
+            }
+            signingConfig = hub ?: signingConfigs.getByName("debug")
             // run-as for copying games into app storage and reading logs
             isDebuggable = true
             // ...but a debuggable variant builds native code as Debug (-O0: ~20 fps).
@@ -112,9 +154,11 @@ android {
 
 // hotd2-vr: the vr build type is the app VR Light Gun Hub, with an application ID of its own
 // (BaseGLActivity.VR_APPLICATION_ID matches it). ${applicationId} in the manifest follows.
+// Its versionName is the app's own (hubVersion and the commit), not Flycast's tags.
 androidComponents {
-    onVariants(selector().withBuildType("vr")) {
-        it.applicationId.set("com.vrlightgunhub.app")
+    onVariants(selector().withBuildType("vr")) { variant ->
+        variant.applicationId.set("com.vrlightgunhub.app")
+        variant.outputs.forEach { it.versionName.set("$hubVersion-g${gitShortHash()}") }
     }
 }
 

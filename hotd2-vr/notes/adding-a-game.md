@@ -60,7 +60,7 @@ How games are told apart: `settings.content.gameId` [V]
 | `core/rend/vr/hands_rip.h:31-37` | `Kind {None, AgentsPistol, HerosStaff}` | name strings |
 | `core/rend/vr/xr_hands.cpp:174-175, 340-343` | `HerosStaff` | gloves mirrored, fist hidden unless `vr.StaffHand` |
 | `core/rend/vr/xr_host.cpp:1937-1958` | `HerosStaff` else HOTD2 | prep panel title/text (binary choice) |
-| `core/rend/vr/xr_host.cpp:509` | - | OpenXR app name "HOTD2 VR" (cosmetic) |
+| `core/rend/vr/xr_host.cpp:509` | - | OpenXR app name "VR Light Gun Hub" (cosmetic) |
 | `core/cfg/option.cpp:105,115` | - | `vr.WorldScale 0.11` (HOTD2 camera 15 units = eye height), `vr.StaffHand` |
 | `core/cfg/option.cpp:81` | - | `vr.Focal` default **640** = HOTD2's stock focal; `vr.HudW` default 1.0 = HOTD2's HUD W |
 | `VrGames.java:55-57` `ARCADE` | MAME zip name | `{ "mok", "The Maze of the Kings", "gds-0022" }` |

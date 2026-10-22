@@ -38,3 +38,9 @@ __pycache__/
 hands*.bin
 staff*.bin
 HND1*.bin
+
+# hotd2-vr: VR Light Gun Hub's release key lives outside the repository (make-release-key.ps1);
+# never commit a key or its password. Flycast's own playstore.jks stays tracked.
+release-signing.properties
+*.jks
+!shell/android-studio/playstore.jks

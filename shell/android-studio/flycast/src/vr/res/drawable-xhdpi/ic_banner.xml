@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    hotd2-vr: takes the place of Flycast's TV banner art (main's drawable-xhdpi/ic_banner.png) in
+    the vr build, so the app ships none of it. VR Light Gun Hub has no TV banner: the vr manifest
+    removes android:banner and android:logo. Its own icon, should anything still ask for it.
+-->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/ic_launcher" />
