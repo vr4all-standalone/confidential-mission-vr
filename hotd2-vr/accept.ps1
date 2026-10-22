@@ -361,18 +361,22 @@ function Test-CmFloor {
 
 # The OpenXR simulator (vr.XrSim, vr-test.ps1 -XrSim): the headset path on the PC, widened. A
 # game started with the right controller's A; the left eye in the window: no shot mostly black,
-# the game moving (55 -> 58 s, stage 1's first room), the view turning with the head (yaw 30
-# degrees at 58.5 s, back at 61 s): b -> c (the turn, measured ~21) well beyond b -> d (the
-# same pose 4 s on: the scene by itself, measured ~5).
+# the game moving (a -> b: stage 1's opening view at 49 s, on screen from 48.5 s or before to
+# ~49.7 s, against the camera turned to the first guard by 58 s; measured 23-26), the view
+# turning with the head (yaw 30 degrees at 58.5 s, back at 61 s): b -> c (the turn, measured
+# ~21) well beyond b -> d (the same pose 4 s on: the scene by itself, measured ~5). From ~50.3 s
+# the camera stands in the first room while the guard shoots the player, so a pair there only
+# differs when a shot lands on a hit's red flash: a at 55 s did that by chance (15 when it did,
+# 2-4 when it didn't).
 function Test-CmSim {
 	$name = 'accept-cm-sim'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWiden
-		At = @(Get-CmStartsXr) + '55=shot a', '58=shot b', '58.5=pose head 0 1.6 0 30 0', '60=shot c', '61=pose head 0 1.6 0 0 0', '62=shot d'
+		At = @(Get-CmStartsXr) + '49=shot a', '58=shot b', '58.5=pose head 0 1.6 0 30 0', '60=shot c', '61=pose head 0 1.6 0 0 0', '62=shot d'
 		Expect = 'XRSIM: runtime up for ".*" \(832x720 per eye, 72 Hz, /interaction_profiles/oculus/touch_controller\)',
 			'XR: session created', 'XR: eye buffers 832x720', 'VR: camera profile for  CONFIDENTIAL MISSION ---------$'
 		Reject = 'XR: initialisation failed' }
 	if ($why) { return $why }
-	$shots = 't055-a.png', 't058-b.png', 't060-c.png', 't062-d.png'
+	$shots = 't049-a.png', 't058-b.png', 't060-c.png', 't062-d.png'
 	$why = Test-RunShots $name $shots
 	if ($why) { return $why }
 	$a, $b, $c, $d = @($shots | ForEach-Object { Join-Path $repo "build-win\vrtest\$name\$_" })
