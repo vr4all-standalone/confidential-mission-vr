@@ -14,6 +14,8 @@
 	D-pad (up, down, left, right), bit 7 its B button, bit 8: the shot hit the headset's 2D
 	plane (menus, text), where the game's own shot marker is in the right place.
 
+	PC builds: lines starting "XR" go to the OpenXR simulator (vr.XrSim, rend/vr/xr_sim.h).
+
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
 #include "udp_lightgun.h"
@@ -25,10 +27,12 @@
 #include "input/mouse.h"
 #include "log/Log.h"
 #include "rend/vr_reproject.h"
+#include "rend/vr/xr_sim.h"
 
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <thread>
 
 #ifdef _WIN32
@@ -68,6 +72,13 @@ void setButton(int player, u32 key, bool pressed)
 
 void handle(const char *msg)
 {
+#ifndef __ANDROID__
+	if (strncmp(msg, "XR", 2) == 0)
+	{
+		vr::xr::sim::udpLine(msg);
+		return;
+	}
+#endif
 	int player, x, y;
 	unsigned buttons;
 	if (sscanf(msg, "LG %d %d %d %u", &player, &x, &y, &buttons) == 4)

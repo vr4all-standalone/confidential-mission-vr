@@ -19,6 +19,7 @@
 */
 
 #include "rend/vr/xr_host.h"
+#include "rend/vr/xr_sim.h"
 #include "mainui.h"
 #include "hw/pvr/Renderer_if.h"
 #include "gui.h"
@@ -109,8 +110,9 @@ void mainui_loop(bool forceStart)
 	{
 		fc_profiler::startThread("main");
 
-		// In the headset the frame went to the eye swapchains; the window isn't shown.
-		if (mainui_rend_frame() && imguiDriver != nullptr && !(vr::xr::enabled() && !gui_is_open()))
+		// In the headset the frame went to the eye swapchains; the window isn't shown. The OpenXR
+		// simulator (vr.XrSim) puts the left eye in it: shown.
+		if (mainui_rend_frame() && imguiDriver != nullptr && !(vr::xr::enabled() && !vr::xr::sim::active() && !gui_is_open()))
 		{
 			try {
 				imguiDriver->present();

@@ -104,6 +104,10 @@ Option<bool> VrXr("vr.Xr", true);			// immersive view in the headset
 #else
 Option<bool> VrXr("vr.Xr", false);			// PCVR (OpenXR), when asked: the PCVR zip's emu.cfg does
 #endif
+#ifndef __ANDROID__
+Option<bool> VrXrSim("vr.XrSim", false);	// PC test harness: vr.Xr against the built-in OpenXR simulator (rend/vr/xr_sim.h)
+Option<std::string> VrXrSimProfile("vr.XrSimProfile", "oculus/touch_controller");	// its controllers: /interaction_profiles/<this>
+#endif
 Option<bool> VrXrGun("vr.XrGun", true);		// the controllers drive the light gun (the one that fires holds it)
 Option<bool> VrWiden("vr.Widen", true);		// let the game profile widen the view (vr.FovScale)
 Option<float> VrWorldScale("vr.WorldScale", 0.11f);	// metres per game unit (HOTD2's camera rides 15 units over the street: eye height)

@@ -11,7 +11,8 @@
   confmiss\gds-0001.chd, naomi.zip), $env:VRLGH_HOTD2 (the US disc of The House of the Dead 2,
   MK-51002) and Python with numpy. Prints PASS <name> / FAIL <name>: <reason>; exit 1 when any
   fails. Runs land in build-win\vrtest\accept-<run>\; Confidential Mission's scenarios share
-  six runs (accept-cm-tour, -off, -edges, -hall, -floor, -floor0), each played once per call.
+  six runs (accept-cm-tour, -off, -edges, -hall, -floor, -floor0), each played once per call;
+  cm-sim plays its own (accept-cm-sim) through the OpenXR simulator.
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
 $ErrorActionPreference = 'Stop'
@@ -116,6 +117,8 @@ $cmWiden = 'config:vr.FovScale=2,config:vr.WidenFov=yes'
 $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000, 9000), @(5000, 1000), @(5000, 9000), @(1000, 5000), @(9000, 5000))
 
 function Get-CmStarts { for ($t = 30; $t -le 52; $t += 2) { "$t=start 0" } }
+# the same through the simulator's right controller (vr-test.ps1 -XrSim): A, held 200 ms
+function Get-CmStartsXr { for ($t = 30; $t -le 52; $t += 2) { "$t=xr right/a 1 200" } }
 
 # The window as wide as a Quest 3 eye (104 x 96 degrees: the tan of its half angles), for the
 # floor's runs; their shot every 0.4 s from 52 to 72 s.
@@ -345,8 +348,33 @@ function Test-CmFloor {
 	return $null
 }
 
+# The OpenXR simulator (vr.XrSim, vr-test.ps1 -XrSim): the headset path on the PC, widened. A
+# game started with the right controller's A; the left eye in the window: no shot mostly black,
+# the game moving (55 -> 58 s, stage 1's first room), the view turning with the head (yaw 30
+# degrees at 58.5 s, back at 61 s).
+function Test-CmSim {
+	$name = 'accept-cm-sim'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + '55=shot a', '58=shot b', '58.5=pose head 0 1.6 0 30 0', '60=shot c', '61=pose head 0 1.6 0 0 0', '62=shot d'
+		Expect = 'XRSIM: runtime up for ".*" \(832x720 per eye, 72 Hz, /interaction_profiles/oculus/touch_controller\)',
+			'XR: session created', 'XR: eye buffers 832x720', 'VR: camera profile for  CONFIDENTIAL MISSION ---------$'
+		Reject = 'XR: initialisation failed' }
+	if ($why) { return $why }
+	$shots = 't055-a.png', 't058-b.png', 't060-c.png', 't062-d.png'
+	$why = Test-RunShots $name $shots
+	if ($why) { return $why }
+	$a, $b, $c, $d = @($shots | ForEach-Object { Join-Path $repo "build-win\vrtest\$name\$_" })
+	$why = Invoke-VrCheck 'blank', $a, $b, $c, $d, '--region', 'full', '--max', '0.5'
+	if ($why) { return "a shot mostly black: $why" }
+	$why = Invoke-VrCheck 'differ', $b, $c
+	if ($why) { return "the head turned, the view did not: $why" }
+	$why = Invoke-VrCheck 'differ', $a, $b
+	if ($why) { return "the game stood still: $why" }
+	return $null
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
-	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor' }
+	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }
 $failed = 0

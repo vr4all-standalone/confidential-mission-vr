@@ -13,6 +13,8 @@ window shots leave undrawn.
     python -I vrcheck.py focal <flycast.log> [--expect F --tol 0.02] [--from S] [--to S]
     python -I vrcheck.py blank <png> [<png> ...] [--region lower|full|x0,y0,x1,y1] [--black N] [--patch K]
                                                 [--max F] [--max-jump F]
+    python -I vrcheck.py same <a.png> <b.png> [--box x0,y0,x1,y1] [--max-diff 2.0]
+    python -I vrcheck.py differ <a.png> <b.png> [--box x0,y0,x1,y1] [--min-diff 6.0]
     python -I vrcheck.py selftest
 
 RAM offsets are printed as the profile takes them (address & 0x01FFFFFF: the dump starts at
@@ -444,7 +446,7 @@ def _read_png(path):
 BLACK = 14
 
 
-def _region(spec, h, w):
+def _region(spec, h, w, flag='--region'):
     """lower (half), full, or x0,y0,x1,y1 as fractions of the width and height."""
     if spec == 'full':
         return slice(0, h), slice(0, w)
@@ -453,9 +455,9 @@ def _region(spec, h, w):
     try:
         x0, y0, x1, y1 = (float(v) for v in spec.split(','))
     except ValueError:
-        raise SystemExit(f'--region {spec}: want lower, full or x0,y0,x1,y1 (fractions)')
+        raise SystemExit(f'{flag} {spec}: want lower, full or x0,y0,x1,y1 (fractions)')
     if not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):
-        raise SystemExit(f'--region {spec}: want 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1')
+        raise SystemExit(f'{flag} {spec}: want 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1')
     return slice(round(y0 * h), round(y1 * h)), slice(round(x0 * w), round(x1 * w))
 
 
@@ -492,6 +494,23 @@ def blank(args):
         if args.max_jump is not None and steps[j] > args.max_jump:
             code = 1
     return code
+
+
+def compare(args):
+    """same / differ: how far apart two window shots are, as the mean absolute difference per
+    channel (0-255) over --box (fractions of the picture; default all of it). same passes at
+    --max-diff or less, differ at --min-diff or more."""
+    a, b = _read_png(args.a).astype(np.int16), _read_png(args.b).astype(np.int16)
+    na, nb = os.path.basename(args.a), os.path.basename(args.b)
+    if a.shape != b.shape:
+        raise SystemExit(f'{na}, {nb}: sizes differ ({a.shape[1]}x{a.shape[0]}, {b.shape[1]}x{b.shape[0]})')
+    ys, xs = _region(args.box, *a.shape[:2], flag='--box')
+    part = np.abs(a[ys, xs] - b[ys, xs])
+    diff = float(part.mean()) if part.size else 0.0
+    print(f'{na} {nb} diff {diff:.3f}')
+    if args.cmd == 'same':
+        return 0 if diff <= args.max_diff else 1
+    return 0 if diff >= args.min_diff else 1
 
 
 def main(argv):
@@ -557,6 +576,13 @@ def main(argv):
     s.add_argument('--max', type=float, help='every shot at most this blank')
     s.add_argument('--max-jump', type=float, help='consecutive shots at most this far apart')
     s.set_defaults(run=blank)
+    for name, limit, default, what in (('same', '--max-diff', 2.0, 'at most'), ('differ', '--min-diff', 6.0, 'at least')):
+        s = sub.add_parser(name)
+        s.add_argument('a')
+        s.add_argument('b')
+        s.add_argument('--box', default='full', help='x0,y0,x1,y1 as fractions (default: the whole picture)')
+        s.add_argument(limit, type=float, default=default, help=f'mean absolute difference per channel (0-255) {what} this')
+        s.set_defaults(run=compare)
     s = sub.add_parser('selftest')
     s.set_defaults(run=lambda args: selftest())
     args = ap.parse_args(argv)
@@ -886,6 +912,29 @@ def selftest():
         check(['blank', shot_p, '--patch', '5'], 0, ['p.png blank 0.000'])
         check(['blank', shot_p, '--patch', '4'], '--patch 4: want an odd size >= 1', [])
         check(['blank', shot_a, '--region', '0.5,0,0.5,1'], '--region 0.5,0,0.5,1: want 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1', [])
+        # same / differ: a 64 x 64 picture and its copy, then with a band 10 % wide (x 0.5-0.6:
+        # columns 32-37) brightened by 40: 40 in the band, 40 x 6 / 64 over the whole picture
+        rgb = np.zeros((64, 64, 3), np.uint8)
+        rgb[..., 0] = np.arange(64)[None, :] * 3
+        rgb[..., 1] = np.arange(64)[:, None] * 2
+        rgb[..., 2] = 90
+        shot_s, shot_t, shot_u, shot_v = (os.path.join(tmp, n) for n in ('s.png', 't.png', 'u.png', 'v.png'))
+        _write_png(shot_s, rgb)
+        _write_png(shot_t, rgb)
+        _write_png(shot_v, rgb[:32, :32])
+        rgb[:, 32:38] += 40
+        _write_png(shot_u, rgb)
+        check(['same', shot_s, shot_t], 0, ['s.png t.png diff 0.000'])
+        check(['differ', shot_s, shot_t], 1, ['s.png t.png diff 0.000'])
+        check(['differ', shot_s, shot_u, '--box', '0.5,0,0.6,1'], 0, ['s.png u.png diff 40.000'])
+        check(['same', shot_s, shot_u, '--box', '0.6,0,1,1'], 0, ['s.png u.png diff 0.000'])
+        check(['same', shot_s, shot_u, '--box', '0,0,0.5,1'], 0, ['s.png u.png diff 0.000'])
+        check(['same', shot_s, shot_u], 1, ['s.png u.png diff 3.750'])
+        check(['same', shot_s, shot_u, '--max-diff', '4'], 0, ['s.png u.png diff 3.750'])
+        check(['differ', shot_s, shot_u], 1, ['s.png u.png diff 3.750'])
+        check(['differ', shot_s, shot_u, '--min-diff', '3.5'], 0, ['s.png u.png diff 3.750'])
+        check(['same', shot_s, shot_v], 's.png, v.png: sizes differ (64x64, 32x32)', [])
+        check(['differ', shot_s, shot_u, '--box', '0.6,0,0.6,1'], '--box 0.6,0,0.6,1: want 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1', [])
 
     for f in failures:
         print('FAIL ' + f, end='' if f.endswith('\n') else '\n')

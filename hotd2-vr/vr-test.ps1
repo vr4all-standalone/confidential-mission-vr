@@ -18,14 +18,27 @@
               shot [label]        window screenshot t<seconds>[-label].png (label: letters, digits, . _ -)
               rip count interval ram [texhex polys]   write rip.request
               mark <text>         just the line in actions.log (every action gets one)
-            From the first gun action on, every player used gets "LG p x y buttons" every 50 ms.
+            With -XrSim, the simulated headset and controllers (metres, degrees, in its stage space):
+              xr <hand>/<input> <value> [ms]   left or right; a b x y menu thumbstick: .../<input>/click,
+                                  trigger squeeze: .../<input>/value, one with a / as it is under
+                                  /user/hand/<hand>/input/ (xr left/trackpad/force 1 300); with ms
+                                  back to 0 after that long
+              stick <hand> <x> <y> [ms]       the thumbstick (-1..1), back to the middle after ms
+              pose <head|left|right> <x> <y> <z> <yaw> <pitch> [roll]   where it is and faces
+              xrstate <focused|visible>       visible: focus lost (a system menu over the app)
+            From the first gun action on, every player used gets "LG p x y buttons" every 50 ms;
+            from the first simulator action on, the simulator gets its "XR <path> <value>",
+            "XRPOSE ..." and "XRSTATE ..." lines every 50 ms.
   -Config   more "config:x=y,..." settings, applied last.
   -DebugShots N   the game's own frames every N seconds of game time (shot_*.png).
   -Expect / -Reject   regexes (case-sensitive) that must / must not match a flycast.log line.
   -Xr       PC VR (OpenXR) instead of the flat window.
+  -XrSim    the headset path against Flycast's built-in OpenXR simulator (vr.XrSim): the left
+            eye in the window, controllers from the actions above.
 
   Everything goes to build-win\vrtest\<Name>\ (emptied first), Flycast's working directory:
-  flycast.log, actions.log, screenshots, rip\. Exit 0 all checks pass, 1 a check failed,
+  flycast.log, actions.log, screenshots, rip\. build-win\emu.cfg is put back as it was after
+  the run (emu.cfg.before there); the run's own is kept as emu.cfg.after. Exit 0 all checks pass, 1 a check failed,
   2 Flycast exited early.
 #>
 param(
@@ -37,7 +50,8 @@ param(
 	[int]$DebugShots = 0,
 	[string[]]$Expect = @(),
 	[string[]]$Reject = @(),
-	[switch]$Xr
+	[switch]$Xr,
+	[switch]$XrSim
 )
 $ErrorActionPreference = 'Stop'
 # the run's folder gets emptied: nothing that could reach out of build-win\vrtest
@@ -51,7 +65,8 @@ $port = 27016
 
 # OpenGL with native depth and the reprojection on: what the VR hooks need. Never the
 # vr.ProjAddr/ViewportAddr overrides: they would beat the game's profile.
-$cfg = "config:pvr.rend=0,config:rend.NativeDepthInterpolation=yes,config:vr.Reproject=yes,config:vr.Xr=$(if ($Xr) { 'yes' } else { 'no' })"
+$cfg = "config:pvr.rend=0,config:rend.NativeDepthInterpolation=yes,config:vr.Reproject=yes,config:vr.Xr=$(if ($Xr -or $XrSim) { 'yes' } else { 'no' })"
+$cfg += ",config:vr.XrSim=$(if ($XrSim) { 'yes' } else { 'no' })"
 $cfg += ",config:aica.Volume=0,config:vr.UdpPort=$port,log:LogToFile=yes,log:Verbosity=4"
 if ($Game -match '[\\/.]') {
 	if (-not (Test-Path -LiteralPath $Game -PathType Leaf)) { throw "No disc image at $Game" }
@@ -72,7 +87,11 @@ $forms = @{
 	start = '^start( [0-3])?$'; aim = '^aim [0-3] -?\d+ -?\d+$'; fire = '^fire [0-3] -?\d+ -?\d+$'
 	reload = '^reload( [0-3])?$'; button = '^button [0-3] \d+ \d+(\.\d+)?$'; shot = '^shot( [\w.-]+)?$'
 	rip = '^rip \d+ \d+ \d+( [0-9a-f]+( \d+)?)?$'; mark = '^mark .'
+	xr = '^xr (left|right)/(a|b|x|y|menu|thumbstick|trigger|squeeze|\w+(/\w+)+) -?\d+(\.\d+)?( \d+(\.\d+)?)?$'
+	stick = '^stick (left|right) -?\d+(\.\d+)? -?\d+(\.\d+)?( \d+(\.\d+)?)?$'
+	pose = '^pose (head|left|right)( -?\d+(\.\d+)?){5,6}$'; xrstate = '^xrstate (focused|visible)$'
 }
+$simActions = 'xr', 'stick', 'pose', 'xrstate'
 $events = @()
 foreach ($a in $At) {
 	$time, $action = $a -split '=', 2
@@ -80,8 +99,9 @@ foreach ($a in $At) {
 	$t = 0.0
 	if ($time -notmatch '^\d+(\.\d+)?$' -or -not [double]::TryParse($time,[Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$t) -or
 			-not $forms.ContainsKey(($text -split ' ')[0]) -or $text -notmatch $forms[($text -split ' ')[0]]) {
-		throw "-At '$a': want <seconds>=<action>, action one of start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip count interval ram [texhex polys], mark <text>"
+		throw "-At '$a': want <seconds>=<action>, action one of start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip count interval ram [texhex polys], mark <text>, xr <hand>/<input> <value> [ms], stick <hand> <x> <y> [ms], pose <head|left|right> x y z yaw pitch [roll], xrstate <focused|visible>"
 	}
+	if (-not $XrSim -and ($text -split ' ')[0] -in $simActions) { throw "-At '$a': simulator actions need -XrSim" }
 	if ($t -ge $Seconds) { Write-Warning "-At '$a' comes at or after -Seconds ${Seconds}: it will not run" }
 	$events += [pscustomobject]@{ At = $t; Index = $events.Count; Text = $text; Words = @($text -split ' ') }
 }
@@ -138,6 +158,24 @@ function Get-Gun($player) {
 }
 function Set-Hold($gun, $bits, $ms, $now) { $gun.Bits = [int]$bits; $gun.Until = $now + $ms / 1000.0; $gun.HoldX = $null; $gun.HoldY = $null }
 
+# the simulator's lines (-XrSim), by what each sets; numbers go on as written (no culture)
+$xrLines = [ordered]@{}
+function Get-XrPath($handInput) {
+	$hand, $what = $handInput -split '/', 2
+	$base = "/user/hand/$hand/input"
+	if ($what -match '/') { return "$base/$what" }
+	if ($what -in 'trigger', 'squeeze') { return "$base/$what/value" }
+	return "$base/$what/click"
+}
+function Set-XrLine($key, $line, $release, $ms, $now) {
+	$xrLines[$key] = @{ Line = $line; Release = $release; Until = $(if ($ms) { $now + $ms / 1000.0 } else { $null }) }
+}
+
+# the run's settings come and go with it (Flycast saves the -config ones in emu.cfg)
+$emuCfg = Join-Path $repo 'build-win\emu.cfg'
+$emuBefore = Join-Path $out 'emu.cfg.before'
+$hadCfg = Test-Path -LiteralPath $emuCfg
+if ($hadCfg) { Copy-Item -LiteralPath $emuCfg $emuBefore }
 $p = Start-Process -FilePath $exe -ArgumentList @('-config', "`"$cfg`"", "`"$content`"") -WorkingDirectory $out -PassThru
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $udp = New-Object System.Net.Sockets.UdpClient
@@ -164,7 +202,26 @@ try {
 					if (Save-WindowShot $p $file) { $shots++ } else { Add-Content $actions '        (no window yet: no shot)' }
 				}
 				'rip' { Set-Content -Path (Join-Path $out 'rip.request') -Value $ev.Text.Substring(4).Trim() -NoNewline }
+				'xr' {
+					$path = Get-XrPath $w[1]
+					Set-XrLine $path "XR $path $($w[2])" "XR $path 0" $(if ($w.Count -gt 3) { [double]$w[3] }) $now
+				}
+				'stick' {
+					$ms = $(if ($w.Count -gt 4) { [double]$w[4] })
+					foreach ($axis in @(@('x', $w[2]), @('y', $w[3]))) {
+						$path = "/user/hand/$($w[1])/input/thumbstick/$($axis[0])"
+						Set-XrLine $path "XR $path $($axis[1])" "XR $path 0" $ms $now
+					}
+				}
+				'pose' { Set-XrLine "pose $($w[1])" ('XRPOSE ' + ($w[1..($w.Count - 1)] -join ' ')) $null $null $now }
+				'xrstate' { Set-XrLine 'state' "XRSTATE $($w[1])" $null $null $now }
 			}
+		}
+		foreach ($key in @($xrLines.Keys)) {
+			$x = $xrLines[$key]
+			if ($null -ne $x.Until -and $now -ge $x.Until) { $x.Line = $x.Release; $x.Until = $null }
+			$msg = [Text.Encoding]::ASCII.GetBytes($x.Line)
+			[void]$udp.Send($msg, $msg.Length, '127.0.0.1', $port)
 		}
 		foreach ($pl in $guns.Keys) {
 			$g = $guns[$pl]
@@ -178,7 +235,10 @@ try {
 } finally {
 	$ran = $clock.Elapsed.TotalSeconds
 	$udp.Close()
-	if (-not $p.HasExited) { $p.CloseMainWindow() | Out-Null; Start-Sleep 2; if (-not $p.HasExited) { $p.Kill() } }
+	if (-not $p.HasExited) { $p.CloseMainWindow() | Out-Null; Start-Sleep 2; if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit(5000) | Out-Null } }
+	if (Test-Path -LiteralPath $emuCfg) { Copy-Item -LiteralPath $emuCfg (Join-Path $out 'emu.cfg.after') -Force }
+	if ($hadCfg) { Copy-Item -LiteralPath $emuBefore $emuCfg -Force }
+	elseif (Test-Path -LiteralPath $emuCfg) { Remove-Item -LiteralPath $emuCfg }
 }
 if ($DebugShots -gt 0) { Get-ChildItem $dataDir -Filter 'shot_*.png' -ErrorAction SilentlyContinue | Move-Item -Destination $out }
 Write-Output ('{0}: {1:0} s, {2} actions, {3} screenshots -> {4}' -f $Name, $ran, $next, $shots, $out)

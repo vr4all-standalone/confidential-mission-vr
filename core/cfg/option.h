@@ -469,6 +469,10 @@ extern Option<float> VrOffsetZ;
 extern Option<bool> VrAnimate;
 extern Option<int> VrUdpPort;
 extern Option<bool> VrXr;
+#ifndef __ANDROID__
+extern Option<bool> VrXrSim;
+extern Option<std::string> VrXrSimProfile;
+#endif
 extern Option<bool> VrXrGun;
 extern Option<bool> VrWiden;
 extern Option<float> VrWorldScale;

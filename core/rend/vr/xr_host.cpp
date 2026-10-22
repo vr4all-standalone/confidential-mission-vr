@@ -17,6 +17,7 @@
 #include "xr_gun.h"
 #include "xr_hands.h"
 #include "xr_panel.h"
+#include "xr_sim.h"
 #include "hands_rip.h"
 #include "rend/gles/gles.h"
 #ifdef __ANDROID__
@@ -171,13 +172,72 @@ struct NewGameRegistration
 std::atomic<u32> shotSerial;
 glm::vec2 lastShotScreen(-1.f);
 
+// The OpenXR functions called here, by name: the loader's (the runtime's), or with vr.XrSim the
+// simulator's (xr_sim.h, PC builds). Called as XR(xrName)(...).
+#define XR_FUNCTIONS(F) \
+	F(xrGetInstanceProcAddr) F(xrEnumerateInstanceExtensionProperties) F(xrCreateInstance) F(xrDestroyInstance) \
+	F(xrGetInstanceProperties) F(xrPollEvent) F(xrResultToString) F(xrStringToPath) F(xrPathToString) \
+	F(xrGetSystem) F(xrEnumerateViewConfigurationViews) F(xrCreateSession) F(xrDestroySession) \
+	F(xrBeginSession) F(xrEndSession) F(xrCreateReferenceSpace) F(xrCreateActionSpace) F(xrLocateSpace) \
+	F(xrLocateViews) F(xrEnumerateSwapchainFormats) F(xrCreateSwapchain) F(xrEnumerateSwapchainImages) \
+	F(xrAcquireSwapchainImage) F(xrWaitSwapchainImage) F(xrReleaseSwapchainImage) F(xrWaitFrame) \
+	F(xrBeginFrame) F(xrEndFrame) F(xrCreateActionSet) F(xrCreateAction) F(xrSuggestInteractionProfileBindings) \
+	F(xrAttachSessionActionSets) F(xrGetCurrentInteractionProfile) F(xrSyncActions) F(xrGetActionStateBoolean) \
+	F(xrGetActionStateFloat) F(xrGetActionStateVector2f) F(xrApplyHapticFeedback)
+// the ones there before an instance
+#define XR_PRE_INSTANCE_FUNCTIONS(F) F(xrEnumerateInstanceExtensionProperties) F(xrCreateInstance)
+
+struct Functions
+{
+#define XR_MEMBER(name) PFN_##name name = nullptr;
+	XR_FUNCTIONS(XR_MEMBER)
+#undef XR_MEMBER
+} functions;
+#define XR(fn) (functions.fn)
+
+// Fills the table: with no instance yet the pre-instance functions (the simulator: all of
+// them), then the rest with the instance.
+bool loadFunctions(XrInstance inst)
+{
+	bool ok = true;
+	auto load = [&](const char *name, PFN_xrVoidFunction *function) {
+		if (sim::active())
+			*function = sim::proc(name);
+		else if (XR_FAILED(functions.xrGetInstanceProcAddr(inst, name, function)))
+			*function = nullptr;
+		if (*function == nullptr)
+		{
+			ERROR_LOG(RENDERER, sim::active() ? "XR: the simulator has no %s" : "XR: the OpenXR loader has no %s", name);
+			ok = false;
+		}
+	};
+#define XR_LOAD(name) load(#name, (PFN_xrVoidFunction *)&functions.name);
+	if (inst == XR_NULL_HANDLE)
+	{
+		functions = Functions();
+		if (sim::active())
+		{
+			XR_FUNCTIONS(XR_LOAD)
+			return ok;
+		}
+		functions.xrGetInstanceProcAddr = ::xrGetInstanceProcAddr;
+		XR_PRE_INSTANCE_FUNCTIONS(XR_LOAD)
+	}
+	else if (!sim::active())
+	{
+		XR_FUNCTIONS(XR_LOAD)
+	}
+#undef XR_LOAD
+	return ok;
+}
+
 bool check(XrResult result, const char *what)
 {
 	if (XR_SUCCEEDED(result))
 		return true;
 	char text[XR_MAX_RESULT_STRING_SIZE] = "";
-	if (instance != XR_NULL_HANDLE)
-		xrResultToString(instance, result, text);
+	if (instance != XR_NULL_HANDLE && XR(xrResultToString))
+		XR(xrResultToString)(instance, result, text);
 	ERROR_LOG(RENDERER, "XR: %s failed: %d %s", what, result, text);
 	return false;
 }
@@ -186,7 +246,7 @@ bool check(XrResult result, const char *what)
 XrPath path(const char *s)
 {
 	XrPath p = XR_NULL_PATH;
-	xrStringToPath(instance, s, &p);
+	XR(xrStringToPath)(instance, s, &p);
 	return p;
 }
 
@@ -201,7 +261,7 @@ bool createAction(XrAction& action, const char *name, const char *label, XrActio
 		info.countSubactionPaths = 2;
 		info.subactionPaths = handPaths;
 	}
-	return XRCHECK(xrCreateAction(actionSet, &info, &action));
+	return XRCHECK(XR(xrCreateAction)(actionSet, &info, &action));
 }
 
 bool initActions()
@@ -211,7 +271,7 @@ bool initActions()
 	XrActionSetCreateInfo setInfo { XR_TYPE_ACTION_SET_CREATE_INFO };
 	strcpy(setInfo.actionSetName, "lightgun");
 	strcpy(setInfo.localizedActionSetName, "Light gun");
-	if (!XRCHECK(xrCreateActionSet(instance, &setInfo, &actionSet)))
+	if (!XRCHECK(XR(xrCreateActionSet)(instance, &setInfo, &actionSet)))
 		return false;
 	if (!createAction(aimAction, "aim", "Aim", XR_ACTION_TYPE_POSE_INPUT, true)
 			|| !createAction(handAction, "hand", "Hand (holds the gun)", XR_ACTION_TYPE_POSE_INPUT, true)
@@ -239,7 +299,7 @@ bool initActions()
 		suggested.interactionProfile = path(profile);
 		suggested.countSuggestedBindings = (u32)bindings.size();
 		suggested.suggestedBindings = bindings.data();
-		return check(xrSuggestInteractionProfileBindings(instance, &suggested), profile);
+		return check(XR(xrSuggestInteractionProfileBindings)(instance, &suggested), profile);
 	};
 	bool any = suggest("/interaction_profiles/oculus/touch_controller", {
 		{ stickAction, "/user/hand/left/input/thumbstick" },
@@ -334,7 +394,7 @@ bool initActions()
 	XrSessionActionSetsAttachInfo attach { XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO };
 	attach.countActionSets = 1;
 	attach.actionSets = &actionSet;
-	if (!XRCHECK(xrAttachSessionActionSets(session, &attach)))
+	if (!XRCHECK(XR(xrAttachSessionActionSets)(session, &attach)))
 		return false;
 	for (int hand : { Left, Right })
 	{
@@ -342,10 +402,10 @@ bool initActions()
 		spaceInfo.action = aimAction;
 		spaceInfo.subactionPath = handPaths[hand];
 		spaceInfo.poseInActionSpace.orientation.w = 1.f;
-		if (!XRCHECK(xrCreateActionSpace(session, &spaceInfo, &aimSpaces[hand])))
+		if (!XRCHECK(XR(xrCreateActionSpace)(session, &spaceInfo, &aimSpaces[hand])))
 			return false;
 		spaceInfo.action = handAction;
-		if (!XRCHECK(xrCreateActionSpace(session, &spaceInfo, &gripSpaces[hand])))
+		if (!XRCHECK(XR(xrCreateActionSpace)(session, &spaceInfo, &gripSpaces[hand])))
 			return false;
 	}
 	return true;
@@ -354,10 +414,10 @@ bool initActions()
 bool initSwapchains()
 {
 	u32 formatCount = 0;
-	if (!XRCHECK(xrEnumerateSwapchainFormats(session, 0, &formatCount, nullptr)))
+	if (!XRCHECK(XR(xrEnumerateSwapchainFormats)(session, 0, &formatCount, nullptr)))
 		return false;
 	std::vector<int64_t> formats(formatCount);
-	if (!XRCHECK(xrEnumerateSwapchainFormats(session, formatCount, &formatCount, formats.data())))
+	if (!XRCHECK(XR(xrEnumerateSwapchainFormats)(session, formatCount, &formatCount, formats.data())))
 		return false;
 	int64_t format = 0;
 	for (int64_t wanted : SwapchainFormats)
@@ -369,11 +429,11 @@ bool initSwapchains()
 		return false;
 	}
 	u32 viewCount = 0;
-	if (!XRCHECK(xrEnumerateViewConfigurationViews(instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &viewCount, nullptr))
+	if (!XRCHECK(XR(xrEnumerateViewConfigurationViews)(instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &viewCount, nullptr))
 			|| viewCount != 2)
 		return false;
 	XrViewConfigurationView configViews[2] { { XR_TYPE_VIEW_CONFIGURATION_VIEW }, { XR_TYPE_VIEW_CONFIGURATION_VIEW } };
-	if (!XRCHECK(xrEnumerateViewConfigurationViews(instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 2, &viewCount, configViews)))
+	if (!XRCHECK(XR(xrEnumerateViewConfigurationViews)(instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 2, &viewCount, configViews)))
 		return false;
 	for (int i = 0; i < 2; i++)
 	{
@@ -390,13 +450,13 @@ bool initSwapchains()
 		info.faceCount = 1;
 		info.arraySize = 1;
 		info.mipCount = 1;
-		if (!XRCHECK(xrCreateSwapchain(session, &info, &c.chain)))
+		if (!XRCHECK(XR(xrCreateSwapchain)(session, &info, &c.chain)))
 			return false;
 		u32 imageCount = 0;
-		if (!XRCHECK(xrEnumerateSwapchainImages(c.chain, 0, &imageCount, nullptr)))
+		if (!XRCHECK(XR(xrEnumerateSwapchainImages)(c.chain, 0, &imageCount, nullptr)))
 			return false;
 		c.images.assign(imageCount, { SwapchainImageType });
-		if (!XRCHECK(xrEnumerateSwapchainImages(c.chain, imageCount, &imageCount, (XrSwapchainImageBaseHeader *)c.images.data())))
+		if (!XRCHECK(XR(xrEnumerateSwapchainImages)(c.chain, imageCount, &imageCount, (XrSwapchainImageBaseHeader *)c.images.data())))
 			return false;
 		// Smooth edges (vr.Msaa, off by default): multisampled where the GPU resolves it as it
 		// writes the picture out of its tile memory (GL_EXT_multisampled_render_to_texture: the
@@ -473,12 +533,14 @@ bool init()
 	const char *graphicsExtension = XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
 	std::vector<const char *> extensions { graphicsExtension };
 #endif
+	if (!loadFunctions(XR_NULL_HANDLE))
+		return false;
 
 	u32 available = 0;
-	if (!XRCHECK(xrEnumerateInstanceExtensionProperties(nullptr, 0, &available, nullptr)))
+	if (!XRCHECK(XR(xrEnumerateInstanceExtensionProperties)(nullptr, 0, &available, nullptr)))
 		return false;	// no OpenXR runtime (PC: no SteamVR, Quest Link or Virtual Desktop running)
 	std::vector<XrExtensionProperties> props(available, { XR_TYPE_EXTENSION_PROPERTIES });
-	XRCHECK(xrEnumerateInstanceExtensionProperties(nullptr, available, &available, props.data()));
+	XRCHECK(XR(xrEnumerateInstanceExtensionProperties)(nullptr, available, &available, props.data()));
 	auto has = [&](const char *name) {
 		for (const auto& p : props)
 			if (!strcmp(p.extensionName, name))
@@ -511,25 +573,27 @@ bool init()
 	strcpy(createInfo.applicationInfo.engineName, "Flycast");
 	createInfo.applicationInfo.engineVersion = 1;
 	createInfo.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 34);
-	if (!XRCHECK(xrCreateInstance(&createInfo, &instance)))
+	if (!XRCHECK(XR(xrCreateInstance)(&createInfo, &instance)))
+		return false;
+	if (!loadFunctions(instance))
 		return false;
 	if (refreshRates)
-		xrGetInstanceProcAddr(instance, "xrRequestDisplayRefreshRateFB", (PFN_xrVoidFunction *)&requestRefreshRate);
+		XR(xrGetInstanceProcAddr)(instance, "xrRequestDisplayRefreshRateFB", (PFN_xrVoidFunction *)&requestRefreshRate);
 	if (perfSettings)
-		xrGetInstanceProcAddr(instance, "xrPerfSettingsSetPerformanceLevelEXT", (PFN_xrVoidFunction *)&setPerformanceLevel);
+		XR(xrGetInstanceProcAddr)(instance, "xrPerfSettingsSetPerformanceLevelEXT", (PFN_xrVoidFunction *)&setPerformanceLevel);
 	XrInstanceProperties instanceProps { XR_TYPE_INSTANCE_PROPERTIES };
-	if (XR_SUCCEEDED(xrGetInstanceProperties(instance, &instanceProps)))
+	if (XR_SUCCEEDED(XR(xrGetInstanceProperties)(instance, &instanceProps)))
 		NOTICE_LOG(RENDERER, "XR: runtime %s", instanceProps.runtimeName);
 
 	XrSystemGetInfo systemInfo { XR_TYPE_SYSTEM_GET_INFO };
 	systemInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-	if (!XRCHECK(xrGetSystem(instance, &systemInfo, &systemId)))
+	if (!XRCHECK(XR(xrGetSystem)(instance, &systemInfo, &systemId)))
 		return false;	// (PC: the headset isn't connected)
 
 	// Bind the session to Flycast's own GL context, current on this thread.
 #ifdef __ANDROID__
 	PFN_xrGetOpenGLESGraphicsRequirementsKHR getRequirements = nullptr;
-	if (!XRCHECK(xrGetInstanceProcAddr(instance, "xrGetOpenGLESGraphicsRequirementsKHR", (PFN_xrVoidFunction *)&getRequirements)))
+	if (!XRCHECK(XR(xrGetInstanceProcAddr)(instance, "xrGetOpenGLESGraphicsRequirementsKHR", (PFN_xrVoidFunction *)&getRequirements)))
 		return false;
 	XrGraphicsRequirementsOpenGLESKHR requirements { XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR };
 	if (!XRCHECK(getRequirements(instance, systemId, &requirements)))
@@ -556,7 +620,7 @@ bool init()
 	binding.context = context;
 #else
 	PFN_xrGetOpenGLGraphicsRequirementsKHR getRequirements = nullptr;
-	if (!XRCHECK(xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR", (PFN_xrVoidFunction *)&getRequirements)))
+	if (!XRCHECK(XR(xrGetInstanceProcAddr)(instance, "xrGetOpenGLGraphicsRequirementsKHR", (PFN_xrVoidFunction *)&getRequirements)))
 		return false;
 	XrGraphicsRequirementsOpenGLKHR requirements { XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR };
 	if (!XRCHECK(getRequirements(instance, systemId, &requirements)))
@@ -576,13 +640,13 @@ bool init()
 	XrSessionCreateInfo sessionInfo { XR_TYPE_SESSION_CREATE_INFO };
 	sessionInfo.next = &binding;
 	sessionInfo.systemId = systemId;
-	if (!XRCHECK(xrCreateSession(instance, &sessionInfo, &session)))
+	if (!XRCHECK(XR(xrCreateSession)(instance, &sessionInfo, &session)))
 		return false;
 
 	XrReferenceSpaceCreateInfo spaceInfo { XR_TYPE_REFERENCE_SPACE_CREATE_INFO };
 	spaceInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
 	spaceInfo.poseInReferenceSpace.orientation.w = 1.f;
-	if (!XRCHECK(xrCreateReferenceSpace(session, &spaceInfo, &localSpace)))
+	if (!XRCHECK(XR(xrCreateReferenceSpace)(session, &spaceInfo, &localSpace)))
 		return false;
 	if (!initActions() || !initSwapchains())
 		return false;
@@ -593,7 +657,7 @@ bool init()
 void pollEvents()
 {
 	XrEventDataBuffer event { XR_TYPE_EVENT_DATA_BUFFER };
-	while (xrPollEvent(instance, &event) == XR_SUCCESS)
+	while (XR(xrPollEvent)(instance, &event) == XR_SUCCESS)
 	{
 		if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED)
 		{
@@ -603,7 +667,7 @@ void pollEvents()
 			{
 				XrSessionBeginInfo begin { XR_TYPE_SESSION_BEGIN_INFO };
 				begin.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-				if (XRCHECK(xrBeginSession(session, &begin)))
+				if (XRCHECK(XR(xrBeginSession)(session, &begin)))
 				{
 					sessionRunning = true;
 					if (requestRefreshRate)
@@ -617,7 +681,7 @@ void pollEvents()
 			}
 			else if (change.state == XR_SESSION_STATE_STOPPING)
 			{
-				xrEndSession(session);
+				XR(xrEndSession)(session);
 				sessionRunning = false;
 			}
 			else if (change.state == XR_SESSION_STATE_LOSS_PENDING)
@@ -945,7 +1009,7 @@ bool boolAction(XrAction action, int hand = -1)
 	if (hand >= 0)
 		info.subactionPath = handPaths[hand];
 	XrActionStateBoolean state { XR_TYPE_ACTION_STATE_BOOLEAN };
-	return XR_SUCCEEDED(xrGetActionStateBoolean(session, &info, &state)) && state.isActive && state.currentState;
+	return XR_SUCCEEDED(XR(xrGetActionStateBoolean)(session, &info, &state)) && state.isActive && state.currentState;
 }
 
 float floatAction(XrAction action, int hand)
@@ -954,7 +1018,7 @@ float floatAction(XrAction action, int hand)
 	info.action = action;
 	info.subactionPath = handPaths[hand];
 	XrActionStateFloat state { XR_TYPE_ACTION_STATE_FLOAT };
-	return XR_SUCCEEDED(xrGetActionStateFloat(session, &info, &state)) && state.isActive ? state.currentState : 0.f;
+	return XR_SUCCEEDED(XR(xrGetActionStateFloat)(session, &info, &state)) && state.isActive ? state.currentState : 0.f;
 }
 
 void haptic(int hand, float seconds, float amplitude)
@@ -966,7 +1030,7 @@ void haptic(int hand, float seconds, float amplitude)
 	vibration.duration = (XrDuration)(seconds * 1e9f);
 	vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
 	vibration.amplitude = amplitude;
-	xrApplyHapticFeedback(session, &info, (const XrHapticBaseHeader *)&vibration);
+	XR(xrApplyHapticFeedback)(session, &info, (const XrHapticBaseHeader *)&vibration);
 }
 
 void recoil(int hand)
@@ -979,7 +1043,7 @@ glm::vec2 stickAction2()
 	XrActionStateGetInfo info { XR_TYPE_ACTION_STATE_GET_INFO };
 	info.action = stickAction;
 	XrActionStateVector2f stick { XR_TYPE_ACTION_STATE_VECTOR2F };
-	if (!XR_SUCCEEDED(xrGetActionStateVector2f(session, &info, &stick)) || !stick.isActive)
+	if (!XR_SUCCEEDED(XR(xrGetActionStateVector2f)(session, &info, &stick)) || !stick.isActive)
 		return glm::vec2(0.f);
 	return glm::vec2(stick.currentState.x, stick.currentState.y);
 }
@@ -1014,7 +1078,7 @@ bool adjustWorldSize(XrTime time, const glm::vec2& stick)
 	XrActionStateGetInfo info { XR_TYPE_ACTION_STATE_GET_INFO };
 	info.action = gripAction;
 	XrActionStateFloat grip { XR_TYPE_ACTION_STATE_FLOAT };
-	const bool gripped = XR_SUCCEEDED(xrGetActionStateFloat(session, &info, &grip)) && grip.isActive && grip.currentState > 0.7f;
+	const bool gripped = XR_SUCCEEDED(XR(xrGetActionStateFloat)(session, &info, &grip)) && grip.isActive && grip.currentState > 0.7f;
 	// Only on purpose: the grip squeezed with the stick at rest first, then the stick. A grip
 	// held while the stick was already pushed (a menu, a hand that holds tight) changes nothing.
 	static bool armed;
@@ -1092,7 +1156,7 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 		const glm::mat4 aim = glm::translate(glm::mat4(1.f), relativePosition(location.pose.position)) * glm::mat4_cast(rot);
 		glm::vec3 palm = HandPalm;
 		XrSpaceLocation grip { XR_TYPE_SPACE_LOCATION };
-		if (XR_SUCCEEDED(xrLocateSpace(gripSpaces[hand], aimSpaces[hand], time, &grip))
+		if (XR_SUCCEEDED(XR(xrLocateSpace)(gripSpaces[hand], aimSpaces[hand], time, &grip))
 				&& (grip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)
 				&& glm::length(toVec(grip.pose.position)) < 0.25f)
 			palm = toVec(grip.pose.position);
@@ -1175,7 +1239,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		// pose, seen from the aim pose), at vr.GunScale times the model's size.
 		glm::vec3 palm = HandPalm;
 		XrSpaceLocation grip { XR_TYPE_SPACE_LOCATION };
-		const bool fromRuntime = XR_SUCCEEDED(xrLocateSpace(gripSpaces[g.hand], aimSpaces[g.hand], time, &grip))
+		const bool fromRuntime = XR_SUCCEEDED(XR(xrLocateSpace)(gripSpaces[g.hand], aimSpaces[g.hand], time, &grip))
 				&& (grip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)
 				&& glm::length(toVec(grip.pose.position)) < 0.25f;
 		if (fromRuntime)
@@ -1367,7 +1431,7 @@ void updateLightgun(XrTime time)
 	XrActionsSyncInfo sync { XR_TYPE_ACTIONS_SYNC_INFO };
 	sync.countActiveActionSets = 1;
 	sync.activeActionSets = &active;
-	if (!XR_SUCCEEDED(xrSyncActions(session, &sync)))
+	if (!XR_SUCCEEDED(XR(xrSyncActions)(session, &sync)))
 		return;
 	if (preparing)
 	{
@@ -1422,7 +1486,7 @@ void updateLightgun(XrTime time)
 	float pulls[2];
 	for (int hand : { Left, Right })
 	{
-		tracked[hand] = XR_SUCCEEDED(xrLocateSpace(aimSpaces[hand], localSpace, time, &locations[hand]))
+		tracked[hand] = XR_SUCCEEDED(XR(xrLocateSpace)(aimSpaces[hand], localSpace, time, &locations[hand]))
 				&& (locations[hand].locationFlags & valid) == valid;
 		pulls[hand] = tracked[hand] ? floatAction(triggerAction, hand) : 0.f;
 	}
@@ -1845,8 +1909,8 @@ void term()
 				glDeleteRenderbuffers(1, &c.depthStencil);
 		}
 		if (session != XR_NULL_HANDLE)
-			xrDestroySession(session);	// with its spaces and swapchains
-		xrDestroyInstance(instance);	// with the actions
+			XR(xrDestroySession)(session);	// with its spaces and swapchains
+		XR(xrDestroyInstance)(instance);	// with the actions
 		// let go of the guns
 		if (config::VrXrGun)
 			for (const Gun& g : guns)
@@ -1900,11 +1964,11 @@ bool frame()
 
 	XrFrameWaitInfo waitInfo { XR_TYPE_FRAME_WAIT_INFO };
 	XrFrameState frameState { XR_TYPE_FRAME_STATE };
-	XrResult result = xrWaitFrame(session, &waitInfo, &frameState);
+	XrResult result = XR(xrWaitFrame)(session, &waitInfo, &frameState);
 	if (XR_SUCCEEDED(result))
 	{
 		XrFrameBeginInfo beginInfo { XR_TYPE_FRAME_BEGIN_INFO };
-		result = xrBeginFrame(session, &beginInfo);
+		result = XR(xrBeginFrame)(session, &beginInfo);
 	}
 	if (!check(result, "xrWaitFrame/xrBeginFrame"))
 	{
@@ -1969,7 +2033,7 @@ bool frame()
 	// space set up, or tracking lost for a while) the eyes stay where they last were, or at
 	// eye distance around the middle: before, nothing was drawn at all, and players heard the
 	// game in a black headset.
-	const bool located = XR_SUCCEEDED(xrLocateViews(session, &locateInfo, &viewState, 2, &viewCount, views))
+	const bool located = XR_SUCCEEDED(XR(xrLocateViews)(session, &locateInfo, &viewState, 2, &viewCount, views))
 			&& viewCount == 2 && (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) != 0;
 	if (located)
 	{
@@ -2024,7 +2088,7 @@ bool frame()
 		XrSwapchainImageAcquireInfo acquire { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
 		XrSwapchainImageWaitInfo wait { XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO };
 		wait.timeout = XR_INFINITE_DURATION;
-		if (!XRCHECK(xrAcquireSwapchainImage(c.chain, &acquire, &index)) || !XRCHECK(xrWaitSwapchainImage(c.chain, &wait)))
+		if (!XRCHECK(XR(xrAcquireSwapchainImage)(c.chain, &acquire, &index)) || !XRCHECK(XR(xrWaitSwapchainImage)(c.chain, &wait)))
 		{
 			ok = false;
 			break;
@@ -2101,7 +2165,7 @@ bool frame()
 		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		XrSwapchainImageReleaseInfo release { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
-		if (!XRCHECK(xrReleaseSwapchainImage(c.chain, &release)))
+		if (!XRCHECK(XR(xrReleaseSwapchainImage)(c.chain, &release)))
 		{
 			ok = false;
 			break;
@@ -2122,7 +2186,7 @@ bool frame()
 	endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 	endInfo.layerCount = render && ok ? 1 : 0;
 	endInfo.layers = layers;
-	XRCHECK(xrEndFrame(session, &endInfo));
+	XRCHECK(XR(xrEndFrame)(session, &endInfo));
 	return render && ok;
 }
 

@@ -7,6 +7,7 @@
 #include "hands_rip.h"
 #include "hands_build.h"
 #include "xr_host.h"
+#include "xr_sim.h"
 #include "rend/vr_reproject.h"
 #include "rend/transform_matrix.h"
 #include "hw/pvr/ta_ctx.h"
@@ -116,10 +117,10 @@ void onStart()
 		std::lock_guard<std::mutex> lock(failureMutex);
 		lastFailure.clear();
 	}
-	// The run: in the headset, or on the PC when asked (vr.HandsPrep, for testing). Never
-	// online: it presses Start for this side's player in the shared game (watching for the
-	// scene in play still makes the model when it comes by).
-	if (!xr::enabled() && !config::VrHandsPrep)
+	// The run: in the headset, or on the PC when asked (vr.HandsPrep, for testing; the OpenXR
+	// simulator counts as the PC). Never online: it presses Start for this side's player in the
+	// shared game (watching for the scene in play still makes the model when it comes by).
+	if ((!xr::enabled() || xr::sim::active()) && !config::VrHandsPrep)
 		return;
 	if (config::GGPOEnable)
 	{
