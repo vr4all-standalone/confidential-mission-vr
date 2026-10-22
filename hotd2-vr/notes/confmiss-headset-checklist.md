@@ -16,10 +16,11 @@ the exact code.
 ## Install
 
 `adb` is not on this PC's PATH: the commands below call it by its full path,
-`E:\AndroidSdk\platform-tools\adb.exe`, from a command window (headset on USB, debugging allowed).
+`E:\AndroidSdk\platform-tools\adb.exe`, from **Command Prompt** (press Win+R, type `cmd`, Enter;
+not PowerShell or Terminal), with the headset on USB and debugging allowed.
 
 1. **Remove an old test build**, if there is one: in SideQuest's list of installed apps
-   (`com.vrlightgunhub.app`, *Uninstall*), or in a command window:
+   (`com.vrlightgunhub.app`, *Uninstall*), or in Command Prompt:
    `E:\AndroidSdk\platform-tools\adb.exe uninstall com.vrlightgunhub.app` (an error there just
    means there was none).
 2. **Install the app:** SideQuest, *Install APK file from folder*:
@@ -164,9 +165,8 @@ the panel and player 2 joining and leaving (`hotd2-vr/notes/confmiss-findings.md
     ```
 
 14. **When something is wrong: the log.**
-    Open a command window and go to the folder where the log should land, for example
-    `cd /d %USERPROFILE%\Desktop`: `cm-quest-log.txt` is written into the command window's
-    current folder.
+    Open Command Prompt (Win+R, type `cmd`, Enter; the commands below don't work in PowerShell)
+    and type `cd /d %USERPROFILE%\Desktop`: `cm-quest-log.txt` is then written to your Desktop.
     - Best: before starting the app, with the headset on USB, run
       `E:\AndroidSdk\platform-tools\adb.exe logcat -c` and then
       `E:\AndroidSdk\platform-tools\adb.exe logcat -s flycast:* > cm-quest-log.txt`; play; press
