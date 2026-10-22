@@ -107,6 +107,8 @@ Option<bool> VrXr("vr.Xr", false);			// PCVR (OpenXR), when asked: the PCVR zip'
 #ifndef __ANDROID__
 Option<bool> VrXrSim("vr.XrSim", false);	// PC test harness: vr.Xr against the built-in OpenXR simulator (rend/vr/xr_sim.h)
 Option<std::string> VrXrSimProfile("vr.XrSimProfile", "oculus/touch_controller");	// its controllers: /interaction_profiles/<this>
+Option<std::string> VrWatchRam("vr.WatchRam", "");	// PC test aid: "addr[:size],..." RAM values logged when they change (vr_reproject.cpp)
+Option<std::string> VrWatchTex("vr.WatchTex", "");	// PC test aid: "tex,..." textures logged when they come into the passes and go
 #endif
 Option<bool> VrXrGun("vr.XrGun", true);		// the controllers drive the light gun (the one that fires holds it)
 Option<bool> VrWiden("vr.Widen", true);		// let the game profile widen the view (vr.FovScale)

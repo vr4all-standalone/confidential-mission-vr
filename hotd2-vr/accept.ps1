@@ -14,6 +14,7 @@
   six runs (accept-cm-tour, -off, -edges, -hall, -floor, -floor0), each played once per call;
   cm-sim and cm-buttons play their own (accept-cm-sim, accept-cm-buttons) through the OpenXR
   simulator, cm-buttons-pc two more (accept-cm-buttons-index, -vive) with the PC controllers.
+  spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
 $ErrorActionPreference = 'Stop'
@@ -501,9 +502,28 @@ function Test-CmPause {
 	return $null
 }
 
+# Task 4's scene keys (vr-test.ps1 -On, the poke action, vr.WatchRam): player 1's ammo
+# (+0x4C) and +0x64 watched (the game research's "state", which only changes at boot: 01 -> ff
+# -> 00 at ~11 s), the ammo poked to 3 at 56 s (stage 1's first room), a window shot keyed to the
+# magazine filling (00 -> 06: first at ~30 s, the reload tutorial; the key acts once).
+function Test-SpikeKeys {
+	$name = 'accept-spike-keys'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 60
+		Config = 'config:vr.WatchRam=0c15581c,0c155804'
+		At = @(Get-CmStarts) + '56=poke 0c155804 1 03'
+		On = 'VR: ram 0c155804 00 -> 06|0.5|shot keyed'
+		Expect = 'VR: ram 0c15581c', 'VR: poke 0c155804 = 03', 'VR: ram 0c155804 .. -> 03' }
+	if ($why) { return $why }
+	$keyed = @(Get-ChildItem -LiteralPath (Join-Path $repo "build-win\vrtest\$name") -Filter 't*-keyed.png')
+	Write-Host "  $($keyed.Count) keyed window shots ($($keyed.Name -join ', '))"
+	if ($keyed.Count -ne 1) { return "want 1 keyed window shot t*-keyed.png in $name, got $($keyed.Count)" }
+	return $null
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
-	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause' }
+	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
+	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }
 $failed = 0

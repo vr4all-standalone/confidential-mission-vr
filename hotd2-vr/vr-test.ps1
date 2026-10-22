@@ -18,6 +18,13 @@
               shot [label]        window screenshot t<seconds>[-label].png (label: letters, digits, . _ -)
               rip count interval ram [texhex polys]   write rip.request
               mark <text>         just the line in actions.log (every action gets one)
+              poke addr size value   write RAM (PC; the UDP line POKE): size 1, 2 or 4 bytes of a
+                                  hex value at a hex SH4 address, at the next VBlank, logged as
+                                  "VR: poke 0c155804 = 03". Absolute values only (no add, no
+                                  bit set): read the current value off a vr.WatchRam line first.
+              mute s              the -At actions due in the next s seconds are left out
+                                  ("(muted)" in actions.log): with -On, a trigger held through
+                                  a scripted route (-On '...|0|mute 4', '...|0.2|button 0 1 3000')
             With -XrSim, the simulated headset and controllers (metres, degrees, in its stage space):
               xr <hand>/<input> <value> [ms]   left or right; a b x y menu thumbstick: .../<input>/click,
                                   trigger squeeze: .../<input>/value, one with a / as it is under
@@ -29,7 +36,18 @@
             From the first gun action on, every player used gets "LG p x y buttons" every 50 ms;
             from the first simulator action on, the simulator gets its "XR <path> <value>",
             "XRPOSE ..." and "XRSTATE ..." lines every 50 ms.
-  -Config   more "config:x=y,..." settings, applied last.
+  -On       "<regex>|<delay s>|<action>[|<times>]", scene keys: while Flycast runs, each new
+            flycast.log line the regex matches (case-sensitive; it cannot hold a |: use a
+            character class) schedules the action (as for -At) that many seconds later, for the
+            first <times> such lines (default 1); actions.log gets "on <regex> -> <action>". A
+            keyed shot is named after the time it runs. With the RAM and texture watches below:
+              -On 'VR: ram 0c1558[01][0-9a-f] .* -> 2d|0|rip 3 30 1'
+  -Config   more "config:x=y,..." settings, applied last. PC test aids (vr_reproject.cpp):
+            vr.WatchRam=addr[:1|2|4],...  (hex SH4 addresses, at most 16) logs each change, read
+            every VBlank, as "VR: ram 0c155808 06 -> 2d" (2 and 4 bytes: 4 and 8 hex digits);
+            vr.WatchTex=tex,...  (hex VRAM addresses, riplib's .tex) logs "VR: tex 7e2800 shown
+            (78 polys)" on the first pass with it and "VR: tex 7e2800 gone" 10 passes after.
+            Their lists are quoted for Flycast here (a comma would end the setting).
   -DebugShots N   the game's own frames every N seconds of game time (shot_*.png).
   -Expect / -Reject   regexes (case-sensitive) that must / must not match a flycast.log line.
   -Xr       PC VR (OpenXR) instead of the flat window.
@@ -52,6 +70,7 @@ param(
 	[int]$DebugShots = 0,
 	[string[]]$Expect = @(),
 	[string[]]$Reject = @(),
+	[string[]]$On = @(),
 	[switch]$Xr,
 	[switch]$XrSim
 )
@@ -82,7 +101,8 @@ if ($Game -match '[\\/.]') {
 	$cfg += ",config:Dreamcast.BiosPath=$games,config:Dreamcast.ContentPath=$games"
 }
 if ($DebugShots -gt 0) { $cfg += ",config:vr.DebugShots=$DebugShots" }
-if ($Config) { $cfg += ",$Config" }
+# (a watch list's commas would end its setting in Flycast's -config: quoted, as it takes them)
+if ($Config) { $cfg += ',' + ($Config -replace '(config:vr\.Watch(?:Ram|Tex)=)([0-9a-fA-F]+(?::\d)?(?:,[0-9a-fA-F]+(?::\d)?)*)(?=,|$)', '$1''$2''') }
 
 # the timed actions, checked before anything starts: each action's form, numbers included
 $forms = @{
@@ -92,7 +112,10 @@ $forms = @{
 	xr = '^xr (left|right)/(a|b|x|y|menu|thumbstick|trigger|squeeze|\w+(/\w+)+) -?\d+(\.\d+)?( \d+(\.\d+)?)?$'
 	stick = '^stick (left|right) -?\d+(\.\d+)? -?\d+(\.\d+)?( \d+(\.\d+)?)?$'
 	pose = '^pose (head|left|right)( -?\d+(\.\d+)?){5,6}$'; xrstate = '^xrstate (focused|visible)$'
+	poke = '^poke [0-9a-fA-F]{1,8} [124] [0-9a-fA-F]{1,8}$'; mute = '^mute \d+(\.\d+)?$'
 }
+$actionList = 'start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip count interval ram [texhex polys], mark <text>, poke addr size value, mute s, xr <hand>/<input> <value> [ms], stick <hand> <x> <y> [ms], pose <head|left|right> x y z yaw pitch [roll], xrstate <focused|visible>'
+function Test-ActionForm([string]$text) { $verb = ($text -split ' ')[0]; return $forms.ContainsKey($verb) -and $text -match $forms[$verb] }
 $simActions = 'xr', 'stick', 'pose', 'xrstate'
 $events = @()
 foreach ($a in $At) {
@@ -100,14 +123,31 @@ foreach ($a in $At) {
 	$text = (-split $action) -join ' '
 	$t = 0.0
 	if ($time -notmatch '^\d+(\.\d+)?$' -or -not [double]::TryParse($time,[Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$t) -or
-			-not $forms.ContainsKey(($text -split ' ')[0]) -or $text -notmatch $forms[($text -split ' ')[0]]) {
-		throw "-At '$a': want <seconds>=<action>, action one of start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip count interval ram [texhex polys], mark <text>, xr <hand>/<input> <value> [ms], stick <hand> <x> <y> [ms], pose <head|left|right> x y z yaw pitch [roll], xrstate <focused|visible>"
+			-not (Test-ActionForm $text)) {
+		throw "-At '$a': want <seconds>=<action>, action one of $actionList"
 	}
 	if (-not $XrSim -and ($text -split ' ')[0] -in $simActions) { throw "-At '$a': simulator actions need -XrSim" }
 	if ($t -ge $Seconds) { Write-Warning "-At '$a' comes at or after -Seconds ${Seconds}: it will not run" }
 	$events += [pscustomobject]@{ At = $t; Index = $events.Count; Text = $text; Words = @($text -split ' ') }
 }
 $events = @($events | Sort-Object At, Index)
+# the scene keys (-On), checked the same way
+$keys = @()
+foreach ($o in $On) {
+	$f = @($o -split '\|')
+	$delay = 0.0
+	$times = 1
+	$text = $(if ($f.Count -ge 3) { (-split $f[2]) -join ' ' } else { '' })
+	$re = $null
+	if ($f.Count -ge 1 -and $f[0]) { try { $re = [regex]::new($f[0]) } catch { $re = $null } }
+	if ($f.Count -notin 3, 4 -or $null -eq $re -or $f[1] -notmatch '^\d+(\.\d+)?$' -or
+			-not [double]::TryParse($f[1], [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$delay) -or
+			-not (Test-ActionForm $text) -or ($f.Count -eq 4 -and ($f[3] -notmatch '^\d+$' -or -not [int]::TryParse($f[3], [ref]$times) -or $times -lt 1))) {
+		throw "-On '$o': want <regex>|<delay s>|<action>[|<times>] (the regex without a |), action one of $actionList"
+	}
+	if (-not $XrSim -and ($text -split ' ')[0] -in $simActions) { throw "-On '$o': simulator actions need -XrSim" }
+	$keys += [pscustomobject]@{ Pattern = $f[0]; Re = $re; Delay = $delay; Text = $text; Words = @($text -split ' '); Left = $times }
+}
 
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -191,12 +231,55 @@ $saves = @(foreach ($ext in 'nvmem', 'nvmem2', 'eeprom') {
 	}
 	@{ Path = $path; Had = $had }
 })
+# One action, timed (-At) or keyed (-On); a shot is named after the time it was due.
+function Invoke-Action($ev, [double]$now) {
+	$w = $ev.Words
+	Add-Content $actions ('{0,7:0.00} {1}' -f $now, $ev.Text)
+	switch ($w[0]) {
+		'start' { Set-Hold (Get-Gun $(if ($w.Count -gt 1) { $w[1] } else { 0 })) 4 200 $now }
+		'aim' { $g = Get-Gun $w[1]; $g.X = [int]$w[2]; $g.Y = [int]$w[3] }
+		'fire' { $g = Get-Gun $w[1]; $g.X = [int]$w[2]; $g.Y = [int]$w[3]; Set-Hold $g 1 100 $now }
+		'reload' { $g = Get-Gun $(if ($w.Count -gt 1) { $w[1] } else { 0 }); Set-Hold $g 2 200 $now; $g.HoldX = -10000; $g.HoldY = -10000 }
+		'button' { Set-Hold (Get-Gun $w[1]) $w[2] ([double]$w[3]) $now }
+		'shot' {
+			$file = Join-Path $out ('t{0:000.#}{1}.png' -f $ev.At, $(if ($w.Count -gt 1) { "-$($w[1])" }))
+			if (Save-WindowShot $p $file) { $script:shots++ } else { Add-Content $actions '        (no window yet: no shot)' }
+		}
+		'rip' { Set-Content -Path (Join-Path $out 'rip.request') -Value $ev.Text.Substring(4).Trim() -NoNewline }
+		'poke' {
+			$msg = [Text.Encoding]::ASCII.GetBytes("POKE $($w[1]) $($w[2]) $($w[3])")
+			[void]$udp.Send($msg, $msg.Length, '127.0.0.1', $port)
+		}
+		'mute' { $script:muteUntil = $now + [double]$w[1] }
+		'xr' {
+			$path = Get-XrPath $w[1]
+			Set-XrLine $path "XR $path $($w[2])" "XR $path 0" $(if ($w.Count -gt 3) { [double]$w[3] }) $now
+		}
+		'stick' {
+			$ms = $(if ($w.Count -gt 4) { [double]$w[4] })
+			foreach ($axis in @(@('x', $w[2]), @('y', $w[3]))) {
+				$path = "/user/hand/$($w[1])/input/thumbstick/$($axis[0])"
+				Set-XrLine $path "XR $path $($axis[1])" "XR $path 0" $ms $now
+			}
+		}
+		'pose' { Set-XrLine "pose $($w[1])" ('XRPOSE ' + ($w[1..($w.Count - 1)] -join ' ')) $null $null $now }
+		'xrstate' { Set-XrLine 'state' "XRSTATE $($w[1])" $null $null $now }
+	}
+}
+
 $p = $null
 $clock = $null
 $udp = $null
 $next = 0
 $early = $null
 $shots = 0
+$muteUntil = -1.0
+$keyed = 0
+$pending = [Collections.Generic.List[object]]::new()
+$logPath = Join-Path $out 'flycast.log'
+$tail = $null	# flycast.log as it grows (Flycast flushes each line), for the scene keys
+$tailBuf = New-Object byte[] 65536
+$partial = ''
 try {
 	$p = Start-Process -FilePath $exe -ArgumentList @('-config', "`"$cfg`"", "`"$content`"") -WorkingDirectory $out -PassThru
 	$clock = [Diagnostics.Stopwatch]::StartNew()
@@ -207,32 +290,31 @@ try {
 		if ($p.HasExited) { $early = $now; break }
 		while ($next -lt $events.Count -and $events[$next].At -le $now) {
 			$ev = $events[$next++]
-			$w = $ev.Words
-			Add-Content $actions ('{0,7:0.00} {1}' -f $now, $ev.Text)
-			switch ($w[0]) {
-				'start' { Set-Hold (Get-Gun $(if ($w.Count -gt 1) { $w[1] } else { 0 })) 4 200 $now }
-				'aim' { $g = Get-Gun $w[1]; $g.X = [int]$w[2]; $g.Y = [int]$w[3] }
-				'fire' { $g = Get-Gun $w[1]; $g.X = [int]$w[2]; $g.Y = [int]$w[3]; Set-Hold $g 1 100 $now }
-				'reload' { $g = Get-Gun $(if ($w.Count -gt 1) { $w[1] } else { 0 }); Set-Hold $g 2 200 $now; $g.HoldX = -10000; $g.HoldY = -10000 }
-				'button' { Set-Hold (Get-Gun $w[1]) $w[2] ([double]$w[3]) $now }
-				'shot' {
-					$file = Join-Path $out ('t{0:000.#}{1}.png' -f $ev.At, $(if ($w.Count -gt 1) { "-$($w[1])" }))
-					if (Save-WindowShot $p $file) { $shots++ } else { Add-Content $actions '        (no window yet: no shot)' }
-				}
-				'rip' { Set-Content -Path (Join-Path $out 'rip.request') -Value $ev.Text.Substring(4).Trim() -NoNewline }
-				'xr' {
-					$path = Get-XrPath $w[1]
-					Set-XrLine $path "XR $path $($w[2])" "XR $path 0" $(if ($w.Count -gt 3) { [double]$w[3] }) $now
-				}
-				'stick' {
-					$ms = $(if ($w.Count -gt 4) { [double]$w[4] })
-					foreach ($axis in @(@('x', $w[2]), @('y', $w[3]))) {
-						$path = "/user/hand/$($w[1])/input/thumbstick/$($axis[0])"
-						Set-XrLine $path "XR $path $($axis[1])" "XR $path 0" $ms $now
+			if ($now -lt $muteUntil) { Add-Content $actions ('{0,7:0.00} (muted) {1}' -f $now, $ev.Text); continue }
+			Invoke-Action $ev $now
+		}
+		if ($keys) {
+			if ($null -eq $tail -and (Test-Path -LiteralPath $logPath)) {
+				$tail = [IO.FileStream]::new($logPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+			}
+			if ($null -ne $tail) {
+				while (($n = $tail.Read($tailBuf, 0, $tailBuf.Length)) -gt 0) { $partial += [Text.Encoding]::UTF8.GetString($tailBuf, 0, $n) }
+				$lines = $partial -split "`n"
+				$partial = $lines[-1]
+				for ($i = 0; $i -lt $lines.Count - 1; $i++) {
+					foreach ($k in $keys) {
+						if ($k.Left -gt 0 -and $k.Re.IsMatch($lines[$i])) {
+							$k.Left--
+							Add-Content $actions ('{0,7:0.00} on {1} -> {2}' -f $now, $k.Pattern, $k.Text)
+							$pending.Add([pscustomobject]@{ At = $now + $k.Delay; Text = $k.Text; Words = $k.Words })
+						}
 					}
 				}
-				'pose' { Set-XrLine "pose $($w[1])" ('XRPOSE ' + ($w[1..($w.Count - 1)] -join ' ')) $null $null $now }
-				'xrstate' { Set-XrLine 'state' "XRSTATE $($w[1])" $null $null $now }
+			}
+			foreach ($ev in @($pending | Where-Object { $_.At -le $now } | Sort-Object At)) {
+				[void]$pending.Remove($ev)
+				$keyed++
+				Invoke-Action $ev $now
 			}
 		}
 		foreach ($key in @($xrLines.Keys)) {
@@ -254,6 +336,7 @@ try {
 	$ran = $(if ($null -ne $clock) { $clock.Elapsed.TotalSeconds } else { 0 })
 	# each step on its own: one failing must not keep the rest (above all the put-back) from running
 	try { if ($null -ne $udp) { $udp.Close() } } catch { Write-Warning "UDP client: $_" }
+	try { if ($null -ne $tail) { $tail.Dispose() } } catch { Write-Warning "flycast.log: $_" }
 	try {
 		if ($null -ne $p -and -not $p.HasExited) {
 			$p.CloseMainWindow() | Out-Null; Start-Sleep 2
@@ -275,7 +358,7 @@ try {
 	if ($notBack) { throw "not put back after the run: $($notBack -join '; ')" }
 }
 if ($DebugShots -gt 0) { Get-ChildItem $dataDir -Filter 'shot_*.png' -ErrorAction SilentlyContinue | Move-Item -Destination $out }
-Write-Output ('{0}: {1:0} s, {2} actions, {3} screenshots -> {4}' -f $Name, $ran, $next, $shots, $out)
+Write-Output ('{0}: {1:0} s, {2} actions, {3} keyed, {4} screenshots -> {5}' -f $Name, $ran, $next, $keyed, $shots, $out)
 
 $log = Join-Path $out 'flycast.log'
 $failed = $false

@@ -7,6 +7,7 @@ window shots leave undrawn.
     python -I vrcheck.py matrices <ram.bin>
     python -I vrcheck.py find-float <ram.bin> <value> [--tol 0.01]
     python -I vrcheck.py find-u16 <ram.bin> <v1,v2,...>
+    python -I vrcheck.py find-u8 <ram.bin>... --values v1,v2,... [--range lo-hi]
     python -I vrcheck.py whist <ripdir> <n> [--max-w 3]
     python -I vrcheck.py border <ripdir> <n> <stockFocal> <liveFocal> [--min-ratio 0.5] [--max-w 3]
     python -I vrcheck.py shots <flycast.log> [--tex t1,t2] [--max-off N] [--each-gun N] [--from S] [--to S] [--union]
@@ -87,6 +88,31 @@ def find_u16(args):
         hit &= h[k:k + n] == v
     for i in np.nonzero(hit)[0]:
         print(f'0x{i * 2:06X}')
+    return 0
+
+
+def find_u8(args):
+    """The bytes that take these values in these dumps, in order (one value per dump: a weapon's
+    magazine 6, 45, 44 over a pickup and a shot), as SH4 addresses (0c155808: vr.WatchRam's
+    form). --range lo-hi: only from lo to hi, both in, hex SH4 addresses or RAM offsets."""
+    values = [int(v, 0) for v in args.values.split(',')]
+    if len(values) != len(args.dumps):
+        sys.exit(f'--values: {len(values)} values for {len(args.dumps)} dumps')
+    if not all(0 <= v <= 255 for v in values):
+        sys.exit('--values: bytes, 0..255')
+    dumps = [np.fromfile(path, np.uint8) for path in args.dumps]
+    lo, hi = 0, min(len(d) for d in dumps)
+    if args.range:
+        m = re.fullmatch(r'((?:0x)?[0-9a-fA-F]+)-((?:0x)?[0-9a-fA-F]+)', args.range)
+        if not m:
+            sys.exit(f'--range {args.range}: want lo-hi, hex')
+        lo, top = (int(g, 16) & 0x01FFFFFF for g in m.groups())
+        hi = min(hi, top + 1)
+    hit = np.ones(max(hi - lo, 0), bool)
+    for d, v in zip(dumps, values):
+        hit &= d[lo:hi] == v
+    for i in np.nonzero(hit)[0]:
+        print(f'{0x0C000000 + lo + int(i):08x}')
     return 0
 
 
@@ -528,6 +554,11 @@ def main(argv):
     s.add_argument('ram')
     s.add_argument('values', help='v1,v2,... (decimal or 0x hex)')
     s.set_defaults(run=find_u16)
+    s = sub.add_parser('find-u8')
+    s.add_argument('dumps', nargs='+', help='RAM dumps (rip/ramNNNN.bin), in order')
+    s.add_argument('--values', required=True, help='v1,v2,...: one byte per dump (decimal or 0x hex)')
+    s.add_argument('--range', help='lo-hi: hex SH4 addresses (0c155800-0c1558ff) or RAM offsets')
+    s.set_defaults(run=find_u8)
     s = sub.add_parser('whist')
     s.add_argument('ripdir')
     s.add_argument('n', type=int)
@@ -778,6 +809,20 @@ def selftest():
         check(['find-float', ram, '415.72', '--tol', '0.00001'], 0, [])
         check(['find-u16', ram, '64,128,500,0,128,500'], 0, ['0x0E2058', '0x0E2064'])
         check(['find-u16', ram, '0x40,0x80,0x1f4'], 0, ['0x0E2058', '0x0E2064'])
+        # find-u8: a byte that goes 6, 45, 44 over three dumps (a pickup's magazine), one out of
+        # the range, one that goes 6, 45, 0, one that stays 6
+        dumps = [os.path.join(tmp, f'u8-{k}.bin') for k in range(3)]
+        for k, path in enumerate(dumps):
+            d = bytearray(0x156000)
+            d[0x155808] = d[0x000100] = (6, 45, 44)[k]
+            d[0x155810] = (6, 45, 0)[k]
+            d[0x155804] = 6
+            with open(path, 'wb') as f:
+                f.write(d)
+        check(['find-u8', *dumps, '--values', '6,45,44'], 0, ['0c000100', '0c155808'])
+        check(['find-u8', *dumps, '--values', '6,0x2d,0x2c', '--range', '0c155800-0c1558ff'], 0, ['0c155808'])
+        check(['find-u8', *dumps, '--values', '6,6,6', '--range', '0x155800-0x155807'], 0, ['0c155804'])
+        check(['find-u8', *dumps, '--values', '6,45'], '--values: 2 values for 3 dumps', [])
         check(['whist', ripdir, '0'], 0, ['W 1.082 polys 2 list tr tex 4f6800,50b800 box 12,20..630,470',
                                           'W 1.090 polys 1 list op tex none box 0,0..640,40'])
         check(['whist', ripdir, '0', '--max-w', '4'], 0, ['W 1.082 polys 2 list tr tex 4f6800,50b800 box 12,20..630,470',

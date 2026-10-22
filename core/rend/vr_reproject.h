@@ -53,6 +53,11 @@ glm::vec3 comfortParams();
 // The light gun fired at (x, y), DC pixels (640x480); into3D: into the 3D scene, not at
 // the 2D plane (menus, text). From lightgunSet, any thread.
 void noteGunShot(int x, int y, bool into3D);
+#ifndef __ANDROID__
+// PC test aid: the UDP line "POKE <addr hex> <size> <value hex>" (udp_lightgun.cpp) writes
+// that value, size 1, 2 or 4 bytes, at that SH4 address at the next VBlank. Any thread.
+void queuePoke(unsigned addr, unsigned size, unsigned value);
+#endif
 // After a shot into 3D, takes the game's own 2D shot marker out of a pass the TA just
 // parsed, before its index is built (ta_vtx.cpp parseRenderPass); vr.DropShotMarker.
 // On the PC it also logs what it sees around shots and overlay that could bend, for tuning.

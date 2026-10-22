@@ -472,6 +472,8 @@ extern Option<bool> VrXr;
 #ifndef __ANDROID__
 extern Option<bool> VrXrSim;
 extern Option<std::string> VrXrSimProfile;
+extern Option<std::string> VrWatchRam;
+extern Option<std::string> VrWatchTex;
 #endif
 extern Option<bool> VrXrGun;
 extern Option<bool> VrWiden;

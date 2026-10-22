@@ -14,7 +14,8 @@
 	D-pad (up, down, left, right), bit 7 its B button, bit 8: the shot hit the headset's 2D
 	plane (menus, text), where the game's own shot marker is in the right place.
 
-	PC builds: lines starting "XR" go to the OpenXR simulator (vr.XrSim, rend/vr/xr_sim.h).
+	PC builds: lines starting "XR" go to the OpenXR simulator (vr.XrSim, rend/vr/xr_sim.h), and
+	"POKE <addr hex> <size 1|2|4> <value hex>" writes RAM at the next VBlank (vr::queuePoke).
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -76,6 +77,16 @@ void handle(const char *msg)
 	if (strncmp(msg, "XR", 2) == 0)
 	{
 		vr::xr::sim::udpLine(msg);
+		return;
+	}
+	if (strncmp(msg, "POKE ", 5) == 0)
+	{
+		unsigned addr, size, value;
+		char tail;
+		if (sscanf(msg + 5, "%x %u %x %c", &addr, &size, &value, &tail) == 3)
+			vr::queuePoke(addr, size, value);
+		else
+			WARN_LOG(INPUT, "UDP lightgun: bad line '%s'", msg);
 		return;
 	}
 #endif

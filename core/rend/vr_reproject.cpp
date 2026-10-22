@@ -24,6 +24,8 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -644,6 +646,193 @@ static struct ProfileWritesRegistration
 		EventManager::listen(Event::VBlank, applyProfileWrites);
 	}
 } profileWritesRegistration;
+
+#ifndef __ANDROID__
+//
+// PC test aids for the harness (vr-test.ps1), nothing unless set: vr.WatchRam logs a change of
+// any watched RAM value, read each VBlank ("VR: ram 0c155808 06 -> 2d"; 2 and 4 bytes as 4 and
+// 8 hex digits); the UDP line POKE writes a value at the next VBlank ("VR: poke 0c155808 =
+// 2d"); vr.WatchTex logs a texture coming into the passes and going out of them
+// (watchTextures, from dropShotMarker). Addresses are SH4 ones (0c155808), values hex.
+//
+struct RamWatch
+{
+	u32 addr;		// SH4 address, aligned to its size
+	u32 size;		// bytes: 1, 2 or 4
+	u32 value;		// as last read
+	bool known;		// read at least once
+};
+struct PendingPoke
+{
+	u32 addr, size, value;
+};
+static std::mutex pokeMutex;
+static std::vector<PendingPoke> pendingPokes;
+
+static u32 ramAddress(u32 addr) {
+	return 0x8C000000u | (addr & 0x01FFFFFFu);
+}
+
+// "a,b c;d" -> a, b, c, d (vr-test.ps1 quotes a list with commas in -config)
+static std::vector<std::string> splitWatchList(const std::string& spec)
+{
+	std::vector<std::string> items;
+	std::string item;
+	for (char c : spec + ",")
+	{
+		if (c == ',' || c == ';' || c == ' ')
+		{
+			if (!item.empty())
+				items.push_back(item);
+			item.clear();
+		}
+		else
+			item += c;
+	}
+	return items;
+}
+
+static bool parseHex(const std::string& s, u32& v)
+{
+	if (s.empty() || s.size() > 8 || !isxdigit((unsigned char)s[0]))
+		return false;
+	char *end;
+	v = (u32)strtoul(s.c_str(), &end, 16);
+	return *end == '\0';
+}
+
+// "addr[:size],...", at most 16
+static std::vector<RamWatch> parseRamWatches(const std::string& spec)
+{
+	std::vector<RamWatch> watches;
+	for (const std::string& item : splitWatchList(spec))
+	{
+		const size_t colon = item.find(':');
+		const std::string size = colon == std::string::npos ? "1" : item.substr(colon + 1);
+		const u32 bytes = size == "1" ? 1 : size == "2" ? 2 : size == "4" ? 4 : 0;
+		u32 addr;
+		if (!parseHex(item.substr(0, colon), addr) || bytes == 0 || addr % bytes != 0 || watches.size() == 16)
+			WARN_LOG(RENDERER, "VR: vr.WatchRam: '%s' left out (want addr[:1|2|4], hex, aligned, at most 16)", item.c_str());
+		else
+			watches.push_back({ addr, bytes, 0, false });
+	}
+	return watches;
+}
+
+static void watchRamAndPoke(Event, void *)
+{
+	std::vector<PendingPoke> pokes;
+	{
+		std::lock_guard<std::mutex> lock(pokeMutex);
+		pokes.swap(pendingPokes);
+	}
+	for (const PendingPoke& p : pokes)
+	{
+		switch (p.size)
+		{
+		case 1: WriteMem8_nommu(ramAddress(p.addr), (u8)p.value); break;
+		case 2: WriteMem16_nommu(ramAddress(p.addr), (u16)p.value); break;
+		default: WriteMem32_nommu(ramAddress(p.addr), p.value); break;
+		}
+		NOTICE_LOG(RENDERER, "VR: poke %08x = %0*x", p.addr, (int)p.size * 2, p.value);
+	}
+	static std::string spec;
+	static std::vector<RamWatch> watches;
+	if (config::VrWatchRam.get() != spec)
+	{
+		spec = config::VrWatchRam.get();
+		watches = parseRamWatches(spec);
+	}
+	for (RamWatch& w : watches)
+	{
+		const u32 at = ramAddress(w.addr);
+		const u32 v = w.size == 1 ? ReadMem8_nommu(at) : w.size == 2 ? ReadMem16_nommu(at) : ReadMem32_nommu(at);
+		if (w.known && v != w.value)
+			NOTICE_LOG(RENDERER, "VR: ram %08x %0*x -> %0*x", w.addr, (int)w.size * 2, w.value, (int)w.size * 2, v);
+		w.value = v;
+		w.known = true;
+	}
+}
+
+void queuePoke(unsigned addr, unsigned size, unsigned value)
+{
+	if ((size != 1 && size != 2 && size != 4) || addr % size != 0)
+	{
+		WARN_LOG(RENDERER, "VR: POKE %08x size %u left out (want size 1, 2 or 4, aligned)", addr, size);
+		return;
+	}
+	if (size < 4)
+		value &= (1u << (size * 8)) - 1;
+	std::lock_guard<std::mutex> lock(pokeMutex);
+	pendingPokes.push_back({ addr, size, value });
+}
+
+static struct WatchRamRegistration
+{
+	WatchRamRegistration() {
+		EventManager::listen(Event::VBlank, watchRamAndPoke);
+	}
+} watchRamRegistration;
+
+struct TexWatch
+{
+	u32 tex;		// VRAM address, as riplib's .tex
+	u32 missing;	// passes in a row without it
+	bool shown;
+};
+
+// vr.WatchTex: "VR: tex 7e2800 shown (78 polys)" on the first pass that has it (polygons in
+// the three lists), "VR: tex 7e2800 gone" after 10 passes in a row without it.
+static void watchTextures(const rend_context& ctx, const RenderPass& pass, const RenderPass& prev)
+{
+	static std::string spec;
+	static std::vector<TexWatch> watches;
+	if (config::VrWatchTex.get() != spec)
+	{
+		spec = config::VrWatchTex.get();
+		watches.clear();
+		for (const std::string& item : splitWatchList(spec))
+		{
+			u32 tex;
+			if (!parseHex(item, tex) || watches.size() == 16)
+				WARN_LOG(RENDERER, "VR: vr.WatchTex: '%s' left out (want a hex VRAM address, at most 16)", item.c_str());
+			else
+				watches.push_back({ tex, 0, false });
+		}
+	}
+	if (watches.empty())
+		return;
+	u32 counts[16] {};
+	auto count = [&](const std::vector<PolyParam>& polys, u32 from, u32 to) {
+		for (u32 k = from; k < to && k < polys.size(); k++)
+			if (polys[k].pcw.Texture)
+			{
+				const u32 tex = polys[k].tcw.TexAddr << 3;
+				for (size_t i = 0; i < watches.size(); i++)
+					counts[i] += watches[i].tex == tex;
+			}
+	};
+	count(ctx.global_param_op, std::max(prev.op_count, 1u), pass.op_count);
+	count(ctx.global_param_pt, prev.pt_count, pass.pt_count);
+	count(ctx.global_param_tr, prev.tr_count, pass.tr_count);
+	for (size_t i = 0; i < watches.size(); i++)
+	{
+		TexWatch& w = watches[i];
+		if (counts[i] > 0)
+		{
+			if (!w.shown)
+				NOTICE_LOG(RENDERER, "VR: tex %06x shown (%u polys)", w.tex, counts[i]);
+			w.shown = true;
+			w.missing = 0;
+		}
+		else if (w.shown && ++w.missing >= 10)
+		{
+			NOTICE_LOG(RENDERER, "VR: tex %06x gone", w.tex);
+			w.shown = false;
+		}
+	}
+}
+#endif
 
 float worldScale()
 {
@@ -1712,6 +1901,9 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 	const bool onPC = !xr::enabled();
 	if (onPC)
 		ripRequested(ctx, pass, previousPass);
+#ifndef __ANDROID__
+	watchTextures(ctx, pass, previousPass);
+#endif
 	hands::observePass(ctx, pass, previousPass);
 	const float hudW = config::VrHudW;
 	static u32 parses;
