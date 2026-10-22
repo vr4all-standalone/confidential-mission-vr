@@ -20,6 +20,7 @@
 #include "http_client.h"
 #include "achievements/achievements.h"
 #include "android_locale.h"
+#include "rend/vr/xr_host.h"
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -320,8 +321,9 @@ extern "C" JNIEXPORT void JNICALL Java_com_flycast_emulator_emu_JNIdc_pause(JNIE
 
 extern "C" JNIEXPORT void JNICALL Java_com_flycast_emulator_emu_JNIdc_resume(JNIEnv *env,jobject obj)
 {
-    // (hotd2-vr: an online game in the headset was never paused, see JNIdc_pause)
-    if (game_started && !emu.running())
+    // (hotd2-vr: an online game in the headset was never paused, see JNIdc_pause. One the VR menu
+    // paused stays paused: the player comes back to the menu.)
+    if (game_started && !emu.running() && !vr::xr::menuPaused())
     {
     	game_started = false;
 		savestateThread.WaitToEnd();

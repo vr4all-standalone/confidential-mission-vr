@@ -390,15 +390,15 @@ function Test-CmSim {
 # The 1.1 button layout (Quest Touch) through the simulator, widened: A is player 1's Start
 # (the starts), B player 1's B (the cabinet's second button: CM's own reload) at 56 s, X lets
 # player 2 join at 60 s (stage 1's first room), Y is then player 2's B, the left menu button
-# (the settings menu, for now its log line), the left stick click recenters, the right one
-# turns the laser off (on by default). The controllers' profile is logged when the runtime
+# (the settings menu: last, at 70 s, as it pauses the game), the left stick click recenters
+# (66 s), the right one turns the laser off (68 s; on by default). The controllers' profile is logged when the runtime
 # names it. X is player 2's Start, never player 1's: A's starts (30-52 s) show as player 1
 # Start lines before 53 s on the log's clock (so the count sees them), and none come after.
 function Test-CmButtons {
 	$name = 'accept-cm-buttons'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 72; XrSim = $true; Config = $cmWiden
-		At = @(Get-CmStartsXr) + '56=xr right/b 1 200', '60=xr left/x 1 200', '62=xr left/y 1 200', '64=xr left/menu 1 200',
-			'66=xr left/thumbstick 1 200', '68=xr right/thumbstick 1 200'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 74; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + '56=xr right/b 1 200', '60=xr left/x 1 200', '62=xr left/y 1 200', '66=xr left/thumbstick 1 200',
+			'68=xr right/thumbstick 1 200', '70=xr left/menu 1 200'
 		Expect = 'Light gun P1 at .*start 1', 'Light gun P1 at .* B 1', 'XR: player 2 joins: a gun in each hand',
 			'Light gun P2 at .* B 1', 'XR: menu button', 'XR: recenter \(button\)', 'XR: laser off',
 			'XR: controllers: /interaction_profiles/oculus/touch_controller'
@@ -442,9 +442,63 @@ function Test-CmButtonsPc {
 	return $null
 }
 
+# The VR menu pauses the emulator (the left menu button opens and closes it, B closes it too),
+# through the simulator, widened. Opened on the 2D gun adjustment screen (40.5-41.5 s, between
+# the A starts) and in stage 1's first room (58 s): the picture holds still (p1 -> p2) yet turns
+# with the head (yaw 25 degrees at 61 s: p3), B resumes it at 63 s and the game moves on (r1 ->
+# r2). Then 20 quick open/close cycles (70-109 s), and one open across a focus loss and return
+# (114-116 s, the headset's own menu): still paused and still (f1 -> f2), closed at 119 s, moving
+# again (q1 -> q2). No paused shot black, no black frames, 23 opens and 23 closes, one redraw
+# line each.
+function Test-CmPause {
+	$name = 'accept-cm-pause'
+	$cycles = @(for ($t = 70; $t -le 109; $t++) { "$t=xr left/menu 1 150" })
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 125; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + @('40.5=xr left/menu 1 150', '41=shot g', '41.5=xr left/menu 1 150',
+			'58=xr left/menu 1 150', '59=shot p1', '60.5=shot p2', '61=pose head 0 1.6 0 25 0', '62=shot p3', '62.5=pose head 0 1.6 0 0 0',
+			'63=xr right/b 1 150', '64=shot r1', '67=shot r2') + $cycles + @('113=xr left/menu 1 150', '114=xrstate visible',
+			'116=xrstate focused', '117=shot f1', '118.5=shot f2', '119=xr left/menu 1 150', '121=shot q1', '123=shot q2')
+		Expect = 'XR: menu open \(paused\)', 'XR: menu closed \(resumed\)', 'XR: paused, redrawing the last frame'
+		Reject = 'XR: initialisation failed', 'XR: \d+ black frames' }
+	if ($why) { return $why }
+	foreach ($re in 'XR: menu open \(paused\)', 'XR: menu closed \(resumed\)', 'XR: paused, redrawing the last frame') {
+		$n = Get-LogCount $name $re
+		Write-Host "  $n lines '$re' (want 23)"
+		if ($n -ne 23) { return "$n lines '$re', want 23" }
+	}
+	# B that closes the menu (63 s, the only B here) is no reload for the game
+	$n = Get-LogCount $name 'Light gun P1 at .* B 1'
+	Write-Host "  $n lines 'Light gun P1 at .* B 1' (want 0: B closed the menu)"
+	if ($n -ne 0) { return "$n player 1 B lines: B that closed the menu went to the game too" }
+	$shots = 't041-g.png', 't059-p1.png', 't060.5-p2.png', 't062-p3.png', 't064-r1.png', 't067-r2.png',
+		't117-f1.png', 't118.5-f2.png', 't121-q1.png', 't123-q2.png'
+	$why = Test-RunShots $name $shots
+	if ($why) { return $why }
+	$g, $p1, $p2, $p3, $r1, $r2, $f1, $f2, $q1, $q2 = @($shots | ForEach-Object { Join-Path $repo "build-win\vrtest\$name\$_" })
+	$why = Invoke-VrCheck 'blank', $p1, $p2, $p3, '--region', 'full', '--max', '0.5'
+	if ($why) { return "a paused shot mostly black: $why" }
+	# (g and f1 are 2D screens: a picture in the middle of the view, black around it by design.
+	# Its strip left of the panel, measured 0.15 and 0.00)
+	$why = Invoke-VrCheck 'blank', $g, $f1, '--region', '0.25,0.36,0.34,0.64', '--max', '0.5'
+	if ($why) { return "a paused 2D screen black: $why" }
+	$why = Invoke-VrCheck 'same', $p1, $p2, '--max-diff', '1.5'
+	if ($why) { return "the paused picture moved: $why" }
+	$why = Invoke-VrCheck 'same', $f1, $f2, '--max-diff', '1.5'
+	if ($why) { return "the paused picture moved after the focus came back: $why" }
+	$why = Invoke-VrCheck 'differ', $p2, $p3
+	if ($why) { return "paused, the head turned, the view did not: $why" }
+	# (paused, the picture is the same to the bit: diff 0.000. Going on, r1 -> r2 is the continue
+	# countdown, mostly still: measured 3.4)
+	$why = Invoke-VrCheck 'differ', $r1, $r2, '--min-diff', '2'
+	if ($why) { return "the game stood still after B closed the menu: $why" }
+	$why = Invoke-VrCheck 'differ', $q1, $q2, '--min-diff', '2'
+	if ($why) { return "the game stood still after the menu closed: $why" }
+	return $null
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
-	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc' }
+	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }
 $failed = 0

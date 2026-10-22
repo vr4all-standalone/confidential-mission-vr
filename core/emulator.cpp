@@ -1094,10 +1094,13 @@ bool Emulator::render()
 		run();
 		return true;
 	}
-	if (!checkStatus())
-		return false;
-	if (state != Running)
-		return false;
+	// hotd2-vr: the VR menu stops the emulator here, between headset frames, or lets it go again
+	if (vr::xr::enabled())
+		vr::xr::applyPause();
+	if (!checkStatus() || state != Running)
+		// hotd2-vr: held stopped by the VR menu, the headset still gets its frames: the last game
+		// frame, drawn again from where the head is now
+		return state != Running && vr::xr::enabled() && vr::xr::menuPaused() && vr::xr::frame();
 	if (vr::xr::enabled())
 		// paced by the headset, which also shows the frame (one view per eye)
 		return vr::xr::frame();

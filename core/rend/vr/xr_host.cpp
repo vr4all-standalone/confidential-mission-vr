@@ -159,6 +159,16 @@ Gun guns[2] { { 0 }, { 1, Left } };
 bool dualWield;
 XrTime dualSince;
 bool leftStartWas, recenterWas, laserWas, menuWas;
+// The VR menu (for now a panel that says the game is paused; the settings menu later). Open,
+// the emulator is held stopped: frame() draws the last game frame again for each new head pose,
+// with the guns and the panel, and nothing goes to the game. A button here asks for it to open
+// or close (pauseRequest: 1 open, 0 close, -1 nothing asked); the top of the next
+// Emulator::render does it (applyPause). The frame it opens on takes no button (menuFresh); B
+// held when it closes is no reload for the game until it's let go (skipSwallow).
+std::atomic<bool> menuOpen;		// (read by the app's resume on Android's main thread)
+int pauseRequest = -1;
+bool menuFresh, redrawLogged;
+bool skipWas, skipSwallow;
 bool ringDumpRequested;		// the left stick click held: the frame ring (debug aid) is to be written
 // The controllers on each hand as the runtime last named them (an interaction profile path;
 // empty: none, or not known yet).
@@ -1276,7 +1286,7 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 // the buttons that aren't the trigger's (Start, B, the D-pad). With `slide`, the other hand
 // (`other`) is free to rack the game pistol's slide.
 void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool *tracked, const float *pulls,
-		u32 extra, bool slide)
+		u32 extra, bool slide, bool live = true)
 {
 	// A clean click: pulled past 60%, let go below 35%, so a resting finger or a half
 	// release doesn't fire twice.
@@ -1370,7 +1380,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		}
 		// A gun in each hand leaves no hand for the slide: pointing a gun at the floor
 		// reloads it instead.
-		if (!slide)
+		if (!slide && live)
 		{
 			if (!g.pointedDown && d.y < -0.75f)
 			{
@@ -1382,6 +1392,15 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 			else if (g.pointedDown && d.y > -0.5f)
 				g.pointedDown = false;
 		}
+	}
+
+	if (!live)
+	{
+		// The game is paused (the VR menu): the gun is only drawn where the hand is. A trigger
+		// held when the game goes on again waits to be let go.
+		g.triggerWas = true;
+		g.triggerWait = true;
+		return;
 	}
 
 	// Seen but outside the game's view: the trigger does nothing (no shot, no reload).
@@ -1454,13 +1473,23 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 	lightgunSet(g.player, pos.x, pos.y, buttons);
 }
 
+// Each hand's aim pose, and whether it's tracked.
+void locateHands(XrTime time, XrSpaceLocation *locations, bool *tracked)
+{
+	const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+	for (int hand : { Left, Right })
+	{
+		locations[hand] = { XR_TYPE_SPACE_LOCATION };
+		tracked[hand] = XR_SUCCEEDED(XR(xrLocateSpace)(aimSpaces[hand], localSpace, time, &locations[hand]))
+				&& (locations[hand].locationFlags & valid) == valid;
+	}
+}
+
 void updateLightgun(XrTime time)
 {
 	for (Gun& g : guns)
 		g.visible = false;
-	if (!config::VrXrGun)
-		return;
-	if (newGame.exchange(false))
+	if (config::VrXrGun && newGame.exchange(false))
 	{
 		if (dualWield)
 			lightgunSet(1, OffScreen, OffScreen, 0);
@@ -1476,7 +1505,7 @@ void updateLightgun(XrTime time)
 	if (!focused)
 	{
 		// headset menu or app in the background: let go of everything
-		if (!preparing)
+		if (config::VrXrGun && !preparing && !menuOpen)
 			for (const Gun& g : guns)
 				lightgunSet(g.player, OffScreen, OffScreen, 0);
 		for (Gun& g : guns)
@@ -1518,10 +1547,17 @@ void updateLightgun(XrTime time)
 		leftHoldSince = leftTapUntil = 0;
 		leftHoldMenu = false;
 	}
+	// B (or Y; Vive wands, Windows Mixed Reality: a pad click): the game's reload, or not now for
+	// the gun run, or the VR menu closed
+	const bool skip = boolAction(skipAction);
+	const bool skipEdge = skip && !skipWas;
+	skipWas = skip;
+	if (!skip)
+		skipSwallow = false;
 	if (preparing)
 	{
-		// B (or Y): not now, the arcade gun this time
-		if (boolAction(skipAction))
+		// B (or Y): not now, the arcade gun this time (the menu button does nothing now)
+		if (skip)
 			hands::skipPrep();
 		for (Gun& g : guns)
 		{
@@ -1532,10 +1568,35 @@ void updateLightgun(XrTime time)
 		return;
 	}
 
-	// The settings menu: the left menu button (Index: the left pad squeezed hard; Vive wands,
-	// Windows Mixed Reality: the left Start held)
+	// The VR menu: the left menu button (Index: the left pad squeezed hard; Vive wands, Windows
+	// Mixed Reality: the left Start held) opens and closes it, B closes it too. Open, the game is
+	// paused (applyPause) and gets nothing: the guns only follow the hands.
 	if (menuEdge)
 		NOTICE_LOG(INPUT, "XR: menu button");
+	if (menuOpen)
+	{
+		if (!menuFresh && (menuEdge || skipEdge))
+		{
+			pauseRequest = 0;
+			skipSwallow = skip;
+		}
+		menuFresh = false;
+		if (config::VrXrGun)
+		{
+			XrSpaceLocation locations[2];
+			bool tracked[2];
+			locateHands(time, locations, tracked);
+			const float none[2] {};
+			updateGun(guns[0], time, locations, tracked, none, 0, false, false);
+			if (dualWield)
+				updateGun(guns[1], time, locations, tracked, none, 0, false, false);
+		}
+		return;
+	}
+	if (menuEdge)
+		pauseRequest = 1;
+	if (!config::VrXrGun)
+		return;
 	// the left thumbstick click: recenter
 	const bool recenter = boolAction(recenterAction);
 	if (recenter && !recenterWas)
@@ -1573,16 +1634,12 @@ void updateLightgun(XrTime time)
 	const glm::vec2 stick = stickAction2();
 	const u32 dpad = adjustWorldSize(time, stick) ? dpadFromStick(glm::vec2(0.f)) : dpadFromStick(stick);
 
-	const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
-	XrSpaceLocation locations[2] { { XR_TYPE_SPACE_LOCATION }, { XR_TYPE_SPACE_LOCATION } };
+	XrSpaceLocation locations[2];
 	bool tracked[2];
+	locateHands(time, locations, tracked);
 	float pulls[2];
 	for (int hand : { Left, Right })
-	{
-		tracked[hand] = XR_SUCCEEDED(XR(xrLocateSpace)(aimSpaces[hand], localSpace, time, &locations[hand]))
-				&& (locations[hand].locationFlags & valid) == valid;
 		pulls[hand] = tracked[hand] ? floatAction(triggerAction, hand) : 0.f;
-	}
 	const bool rightStart = boolAction(startAction, Right);
 	// Joining takes both controllers (with one, the left Start does nothing) and a game
 	// that shows when player 2 is out again (its profile knows the prompt). Not online
@@ -1629,15 +1686,15 @@ void updateLightgun(XrTime time)
 	// The buttons that aren't the trigger. One gun: the right Start is player 1's (the left
 	// one only lets player 2 join, above), either B too (the gun's B, bit 128: the cabinet's
 	// second button, which reloads in Confidential Mission). Two guns: each hand's are its
-	// player's. The D-pad (menus) is player 1's.
+	// player's. The D-pad (menus) is player 1's. (B held from closing the VR menu: not yet.)
 	u32 p1 = dpad, p2 = 0;
 	if (dualWield)
 	{
-		p1 |= (rightStart ? 4 : 0) | (boolAction(skipAction, Right) ? 128 : 0);
-		p2 |= (leftStart ? 4 : 0) | (boolAction(skipAction, Left) ? 128 : 0);
+		p1 |= (rightStart ? 4 : 0) | (!skipSwallow && boolAction(skipAction, Right) ? 128 : 0);
+		p2 |= (leftStart ? 4 : 0) | (!skipSwallow && boolAction(skipAction, Left) ? 128 : 0);
 	}
 	else
-		p1 |= (rightStart ? 4 : 0) | (boolAction(skipAction) ? 128 : 0);
+		p1 |= (rightStart ? 4 : 0) | (skip && !skipSwallow ? 128 : 0);
 
 	updateGun(guns[0], time, locations, tracked, pulls, p1, !dualWield);
 	if (dualWield)
@@ -1990,6 +2047,44 @@ const char *controllerProfile()
 	return (profiles[Right].empty() ? profiles[Left] : profiles[Right]).c_str();
 }
 
+bool menuPaused()
+{
+	return menuOpen;
+}
+
+void requestPause(bool on)
+{
+	pauseRequest = on ? 1 : 0;
+}
+
+void applyPause()
+{
+	if (menuOpen && emu.running())
+	{
+		// started again from elsewhere (a new game): the menu holds nothing any more
+		menuOpen = false;
+		NOTICE_LOG(RENDERER, "XR: menu closed (the emulator was started elsewhere)");
+	}
+	const int request = pauseRequest;
+	pauseRequest = -1;
+	if (request == 1 && !menuOpen && emu.running())
+	{
+		// As Flycast's own menu does it from this thread (gui_open_settings): the emulator's
+		// thread is let go of any wait for the renderer (rend_cancel_emu_wait), then waited for.
+		// Its sound stops with it.
+		emu.stop();
+		menuOpen = menuFresh = true;
+		redrawLogged = false;
+		NOTICE_LOG(RENDERER, "XR: menu open (paused)");
+	}
+	else if (request == 0 && menuOpen)
+	{
+		menuOpen = false;
+		NOTICE_LOG(RENDERER, "XR: menu closed (resumed)");
+		emu.start();
+	}
+}
+
 void term()
 {
 	if (instance != XR_NULL_HANDLE)
@@ -2030,6 +2125,8 @@ void term()
 	guns[0] = Gun { 0 };
 	guns[1] = Gun { 1, Left };
 	dualWield = leftStartWas = recenterWas = laserWas = menuWas = false;
+	skipWas = skipSwallow = false;
+	// (menuOpen stays: the emulator is still held stopped, and the next session shows the menu)
 	profiles[Left].clear();
 	profiles[Right].clear();
 	leftHoldSince = leftTapUntil = 0;
@@ -2057,10 +2154,17 @@ bool frame()
 		initTried = quit;
 		exiting = quit;
 	}
+	// Not shown (yet): keep the emulator's frames moving without spinning. Paused by the VR menu
+	// there are none: what it queued before it stopped waits for it to go on again.
+	auto idle = [] {
+		if (menuOpen)
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		else
+			rend_vr_drain(10);
+	};
 	if (!sessionRunning)
 	{
-		// Not shown (yet): keep the emulator's frames moving without spinning.
-		rend_vr_drain(10);
+		idle();
 		return false;
 	}
 
@@ -2075,7 +2179,7 @@ bool frame()
 	if (!check(result, "xrWaitFrame/xrBeginFrame"))
 	{
 		sessionLost = result == XR_ERROR_SESSION_LOST || result == XR_ERROR_INSTANCE_LOST;
-		rend_vr_drain(10);
+		idle();
 		return false;
 	}
 
@@ -2084,7 +2188,16 @@ bool frame()
 	// for the hero's staff, it goes as fast as it can: it waits for each of its frames to be
 	// taken, so keep taking them for most of the headset's frame.
 	const bool preparing = hands::preparing();
-	if (preparing)
+	if (menuOpen)
+	{
+		// Paused by the VR menu: the last frame shown is drawn again, from where the head is now.
+		if (!redrawLogged)
+		{
+			redrawLogged = true;
+			NOTICE_LOG(RENDERER, "XR: paused, redrawing the last frame");
+		}
+	}
+	else if (preparing)
 	{
 		const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(9);
 		while (std::chrono::steady_clock::now() < until && hands::preparing())
@@ -2103,7 +2216,13 @@ bool frame()
 	const hands::Source *source = gameModelSource();
 	const bool staff = source != nullptr && source->kind == hands::Source::HerosStaff;
 	const char *title = staff ? "THE MAZE OF THE KINGS VR" : "THE HOUSE OF THE DEAD 2 VR";
-	if (preparing)
+	if (menuOpen)
+	{
+		// (until the settings menu; the font has no menu button sign)
+		panel.lines = { { "PAUSED", 0.16f, white } };
+		panel.footer = "Menu or B: resume";
+	}
+	else if (preparing)
 	{
 		panel.lines = {
 			{ title, 0.085f, red },
@@ -2124,6 +2243,8 @@ bool frame()
 					: "Reload: grab the back of the pistol with your other hand and pull.", 0.047f, grey },
 		};
 	const bool showPanel = !panel.lines.empty();
+	// the panel alone in a dark room, or over the paused game (the VR menu)
+	const bool darkRoom = showPanel && !menuOpen;
 
 	XrViewState viewState { XR_TYPE_VIEW_STATE };
 	XrViewLocateInfo locateInfo { XR_TYPE_VIEW_LOCATE_INFO };
@@ -2198,7 +2319,7 @@ bool frame()
 		const glm::mat4 view = glm::inverse(glm::translate(glm::mat4(1.f), relativePosition(views[i].pose.position))
 				* glm::mat4_cast(relativeRotation(views[i].pose.orientation)));
 		eye = { c.fbos[index], c.width, c.height, eyeProjection(views[i].fov) * view * gameToWorld() };
-		if (showPanel)
+		if (darkRoom)
 		{
 			// a dark room with the panel in it
 			glBindFramebuffer(GL_FRAMEBUFFER, c.fbos[index]);
@@ -2238,7 +2359,15 @@ bool frame()
 				}
 			}
 		}
-		if (!showPanel && (guns[0].visible || guns[1].visible))
+		if (menuOpen)
+		{
+			// the VR menu over the paused game, the guns over it
+			glBindFramebuffer(GL_FRAMEBUFFER, c.fbos[index]);
+			glViewport(0, 0, c.width, c.height);
+			glcache.Disable(GL_SCISSOR_TEST);
+			drawPanel(eyeProjection(views[i].fov) * view, panel);
+		}
+		if (!darkRoom && (guns[0].visible || guns[1].visible))
 		{
 			// every gun's model, then every gun's glow (dots and flashes over both models)
 			glBindFramebuffer(GL_FRAMEBUFFER, c.fbos[index]);

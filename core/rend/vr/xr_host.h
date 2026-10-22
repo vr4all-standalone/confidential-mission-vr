@@ -39,12 +39,23 @@ void term();
 // the runtime names one. Render thread only (the string changes there when the runtime names
 // other controllers): copy the result if you keep it.
 const char *controllerProfile();
+// The VR menu holds the emulator stopped: from its stop until the menu closes again. Paused,
+// Emulator::render still calls frame(), which draws the last game frame again for each head pose.
+bool menuPaused();
+// The VR menu opens (on) or closes: asked on the render thread, done at the top of the next
+// Emulator::render (applyPause), between headset frames.
+void requestPause(bool on);
+// Emulator::render, render thread, first thing: stops or starts the emulator as requestPause asked.
+void applyPause();
 #else
 inline bool enabled() { return false; }
 inline bool frame() { return false; }
 inline const Eye *currentEye() { return nullptr; }
 inline void term() {}
 inline const char *controllerProfile() { return ""; }
+inline bool menuPaused() { return false; }
+inline void requestPause(bool) {}
+inline void applyPause() {}
 #endif
 
 }
