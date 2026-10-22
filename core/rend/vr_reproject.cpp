@@ -346,6 +346,20 @@ static std::vector<GameProfile> makeProfiles()
 	p.model.file = "staff-mok.bin";
 	p.model.staff = { { { 0xC1C000, 0xCB0800 }, { 0xD87000, 0xDA9800 } } };
 	list.push_back(p);
+	// Confidential Mission (NAOMI GD-ROM, MAME confmiss). Its boot ID starts with a space.
+	// Its field of view changes from shot to shot (the camera zooms: a focal of about 540 in
+	// stage 1, 450-1190 in its intro, 650-1330 in the attract demo). The matrices, found in
+	// RAM dumps of all three: projection 0x0C24F660 (f/320, f/240; the same again at
+	// 0x0C24F8C0), viewport 0x0C24F798 (320, -240).
+	p = GameProfile();
+	p.gameId = " CONFIDENTIAL MISSION ---------";
+	p.projAddr = 0x24F660;
+	p.viewportAddr = 0x24F798;
+	p.focal = 540.8f;	// stage 1's (537.4-542.6: its camera sways)
+	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
+	// 15.1 units over the floor in the attract demo's corridor, HOTD2's 15 over the street;
+	// 12.0 in stage 1's first room, looking 10 degrees down.)
+	list.push_back(p);
 	return list;
 }
 static const std::vector<GameProfile> profiles = makeProfiles();
