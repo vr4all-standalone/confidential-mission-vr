@@ -254,9 +254,18 @@ def focal(args):
     print(f'focal min {fx[0]:.1f} median {median:.1f} max {fx[-1]:.1f}')
     print(f'verts p50 {_rank(verts, 0.5)} p95 {_rank(verts, 0.95)} max {verts[-1]}')
     print('wnear ' + ', '.join(f'{w} x{c}' for w, c in sorted(wnear.items())))
+    code = 0
+    if args.wnear_allow:
+        # the after-census: each frame's nearest W after the 2D passes, one of these (W or lo-hi)
+        allow = [tuple(float(v) for v in item.split('-')) for item in args.wnear_allow.split(',')]
+        out = [(w, c) for w, c in sorted(wnear.items())
+               if not any(a[0] - 0.0005 <= float(w) <= a[-1] + 0.0005 for a in allow)]
+        if out:
+            print('wnear not allowed ' + ', '.join(f'{w} x{c}' for w, c in out))
+            code = 1
     if args.expect is not None and abs(median - args.expect) > args.tol * args.expect:
         return 1
-    return 0
+    return code
 
 
 def main(argv):
@@ -301,6 +310,7 @@ def main(argv):
     s.add_argument('--tol', type=float, default=0.02, help='relative')
     s.add_argument('--from', dest='start', type=float, help='seconds from process start')
     s.add_argument('--to', dest='end', type=float)
+    s.add_argument('--wnear-allow', help='W,lo-hi,...: every frame\'s nearest W one of these')
     s.set_defaults(run=focal)
     s = sub.add_parser('selftest')
     s.set_defaults(run=lambda args: selftest())
@@ -475,6 +485,8 @@ def selftest():
         check(['focal', log, '--from', '43', '--to', '47'], 0, ['count 2', 'focal min 277.1 median 277.1 max 277.1',
                                                                  'verts p50 3000 p95 4000 max 4000', 'wnear 1.000 x1, 1.082 x1'])
         check(['focal', log, '--from', '100'], 1, ['count 0'])
+        check(['focal', log, '--wnear-allow', '0.999-1.001,1.082'], 0, focal)
+        check(['focal', log, '--wnear-allow', '0.300,0.998-1.002'], 1, focal + ['wnear not allowed 1.082 x1'])
 
     for f in failures:
         print('FAIL ' + f, end='' if f.endswith('\n') else '\n')

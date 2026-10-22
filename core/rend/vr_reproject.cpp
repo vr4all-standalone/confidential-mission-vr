@@ -163,7 +163,7 @@ static void logSceneStats(const rend_context& ctx, glm::vec2 focal)
 	invW.reserve(ctx.verts.size());
 	size_t overlay = 0;
 	for (const Vertex& v : ctx.verts)
-		if (std::isfinite(v.z) && v.z > 0.f)
+		if (std::isfinite(v.z) && v.z > 0.f && std::isfinite(v.x))	// (drawn: not hidden)
 		{
 			invW.push_back(v.z);
 			if (std::abs(1.f / v.z - config::VrHudW) < 0.002f)
@@ -227,6 +227,15 @@ struct GameProfile
 	// of this step; the W of the letterbox bars (0: the 2D plane's).
 	float snapMinW = 0.75f, snapMaxW = 1.05f, snapStep = 0.01f;
 	float letterboxW = 0.f;
+	// Textures that make a polygon at the letterbox's W one of its bars whatever its colour
+	// (none: opaque black ones only). See hideLetterbox.
+	u32 letterboxTextures[4] {};
+	// 2D layers nearer than this W are snapped even partly or wholly off the screen, and cut
+	// to it (0: none). Only below the game's near plane: none of its 3D comes that near.
+	float offScreen2DMaxW = 0.f;
+	// The game's sights over its enemies, and the W they are drawn at: see placeSights.
+	u32 sightTextures[8] {};
+	float sightMinW = 0.f, sightMaxW = 0.f;
 	// The W of its 2D plane (0: vr.HudW, HOTD2's 1.0). Never a W its 3D can have: the
 	// headset's vertex shader pins every vertex near it onto the 2D plane.
 	float hudW = 0.f;
@@ -383,18 +392,32 @@ static std::vector<GameProfile> makeProfiles()
 	p.stockFocalAddr = 0x154ED0;
 	p.stockFocalInverse = true;
 	p.focal = 540.8f;	// stage 1's (537.4-542.6: its camera sways)
-	// Its 2D comes in layers from W 0.0078 to 10, its 3D from its near plane at W 0.300 on:
-	// the screen crack when the player is hit at 1/128, the continue prompt 0.050-0.061, credits,
-	// subtitles and the attract demo's caption 0.1-0.11, the cutscenes' bars at 0.2 (lit
-	// white and textured, not the black letterbox: they stay), the briefing 0.25, HUD
-	// pictures 0.5-0.6, the gun adjustment screen 0.8-0.9, the magazines, the shot marker and
-	// the sights' rings at 1.000 (the rings 0.99995-1.00003, which only the plane's own
-	// +-0.002 holds), the how-to-play panels up to 10. So the plane stays at 1.0, and every
-	// layer from 0.005 to 10 at a multiple of 1/16000 (0.001's and 1/128's) is snapped onto it.
+	// Its 2D comes in layers from W 0.0001 (a sprite at 192,272, tex 4df800, which
+	// place2DLayers puts on the plane) to 10, its 3D from its near plane at W 0.300 on: the
+	// screen crack when the player is hit at 1/128, the continue prompt 0.050-0.061, credits,
+	// subtitles and the attract demo's caption 0.1-0.11, the cutscenes' bars at 0.2, the
+	// briefing 0.25, HUD pictures 0.5-0.6, the gun adjustment screen 0.8-0.9, the magazines
+	// and the shot marker at 1.000, the how-to-play panels up to 10. So the plane stays at
+	// 1.0, and every layer from 0.005 to 10 at a multiple of 1/16000 (0.001's and 1/128's) is
+	// snapped onto it. (At W 10 that test is thin: w/step is 160000 there, a float's step
+	// 0.0156, against its 0.02.)
 	p.hudW = 1.f;
 	p.snapMinW = 0.005f;
 	p.snapMaxW = 10.f;
 	p.snapStep = 1.f / 16000.f;
+	// The caption ticker's letters (tex 78b800, W 0.1) run from x -492 to 1256 across the
+	// attract demo: below the near plane, snapped wherever they are and cut to the screen.
+	p.offScreen2DMaxW = 0.3f;
+	// The cutscenes' bars at W 0.2: white, with a texture (400680) that draws them black.
+	p.letterboxW = 0.2f;
+	p.letterboxTextures[0] = 0x400680;
+	// Its sights, a ring and red X marks over each enemy about to fire, tex 400000: the X
+	// marks at W 0.980-0.998 (OP), the rings at 0.99995-1.00003 (TR). The texture's other
+	// polygons are 3D at W 9 and more (shadows, lights) or the how-to-play gun model at
+	// 0.49-0.51 (every rip of the attract demo, intro and stage 1).
+	p.sightTextures[0] = 0x400000;
+	p.sightMinW = 0.95f;
+	p.sightMaxW = 1.005f;
 	// Its logo, advisory and game-over screens: layers up to W 100 without 3D.
 	p.flatScreens = true;
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
@@ -695,6 +718,7 @@ static void snapNear2D(rend_context& ctx, const std::vector<PolyParam>& list, u3
 	const float minW = prof != nullptr ? prof->snapMinW : SnapMinW;
 	const float SnapMaxW = prof != nullptr ? prof->snapMaxW : 1.05f;
 	const float step = prof != nullptr ? prof->snapStep : 0.01f;
+	const float offScreenMaxW = prof != nullptr ? prof->offScreen2DMaxW : 0.f;
 	for (u32 n = from; n < to && n < list.size(); n++)
 	{
 		const PolyParam& pp = list[n];
@@ -706,12 +730,16 @@ static void snapNear2D(rend_context& ctx, const std::vector<PolyParam>& list, u3
 		const float w = 1.f / z;
 		if (w < minW || w > SnapMaxW || w == hudW || std::abs(w / step - std::round(w / step)) > 0.02f)
 			continue;
+		const bool anywhere = w < offScreenMaxW;
+		bool off = false;
 		u32 i = pp.first;
 		for (; i < pp.first + pp.count; i++)
 		{
 			const Vertex& v = ctx.verts[i];
-			if (std::abs(v.z - z) > z * 1e-5f || !(v.x >= -1.f && v.x <= fbWidth + 1.f && v.y >= -1.f && v.y <= fbHeight + 1.f))
+			const bool onScreen = v.x >= -1.f && v.x <= fbWidth + 1.f && v.y >= -1.f && v.y <= fbHeight + 1.f;
+			if (std::abs(v.z - z) > z * 1e-5f || !(onScreen || (anywhere && std::isfinite(v.x) && std::isfinite(v.y))))
 				break;
+			off = off || !onScreen;
 		}
 		if (i != pp.first + pp.count)
 			continue;	// not flat, or not on the screen: 3D
@@ -721,11 +749,11 @@ static void snapNear2D(rend_context& ctx, const std::vector<PolyParam>& list, u3
 		for (u32 j = pp.first; j < pp.first + pp.count; j++)
 			ctx.verts[j].z = 1.f / snapped;
 		// what gets snapped, once per W (in 0.01 steps), to check nothing 3D is caught
-		static u32 seen[202];
+		static u32 seen[202], seenOff[202];
 		const int bucket = (int)std::lround(w * 100.f);
-		if (bucket >= 0 && bucket < (int)std::size(seen) && seen[bucket]++ == 0)
-			NOTICE_LOG(RENDERER, "VR: 2D layer at W %.3f (%u verts at %.0f,%.0f) put on the 2D plane",
-					w, pp.count, ctx.verts[pp.first].x, ctx.verts[pp.first].y);
+		if (bucket >= 0 && bucket < (int)std::size(seen) && (off ? seenOff : seen)[bucket]++ == 0)
+			NOTICE_LOG(RENDERER, "VR: 2D layer at W %.3f (%u verts at %.0f,%.0f) put on the 2D plane%s",
+					w, pp.count, ctx.verts[pp.first].x, ctx.verts[pp.first].y, off ? ", off the screen: cut to it" : "");
 	}
 }
 
@@ -819,6 +847,68 @@ static void cropPlaneToScreen(rend_context& ctx, const std::vector<PolyParam>& l
 	}
 }
 
+// The game's sights (Confidential Mission: a ring and X marks over each enemy about to fire):
+// 2D drawn at the enemy's point on the game's screen, at or just in front of its 2D plane.
+// Widened, that point is the enemy's in the view the game draws now (focal f), but the 2D
+// plane shows the stock framing (vr.Focal): there the sight sat nearer the centre than its
+// enemy, by f / vr.Focal. A sight polygon (one of the profile's textures, every corner from
+// sightMinW to sightMaxW) goes onto the plane with its offset from the screen's centre scaled
+// back out (place2DLayers' unwiden, inverted), then is cut to the screen: an axis-aligned
+// quad cut, any other shape losing the triangles that reach outside. The first one placed
+// after a pass without any is logged (logFirst), with where the game drew it.
+static void placeSights(rend_context& ctx, const std::vector<PolyParam>& list, u32 from, u32 to, float hudW,
+		int fbWidth, int fbHeight, glm::vec2 unwiden, u32& placed, bool logFirst)
+{
+	const GameProfile *prof = activeProfile;
+	if (prof == nullptr || prof->sightTextures[0] == 0)
+		return;
+	const glm::vec2 centre(fbWidth * 0.5f, fbHeight * 0.5f);
+	for (u32 n = from; n < to && n < list.size(); n++)
+	{
+		const PolyParam& pp = list[n];
+		if (pp.count < 3 || pp.first + pp.count > ctx.verts.size())
+			continue;
+		const u32 tex = pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
+		if (tex == 0 || std::find(std::begin(prof->sightTextures), std::end(prof->sightTextures), tex) == std::end(prof->sightTextures))
+			continue;
+		glm::vec2 drawn(0.f);
+		u32 i = pp.first;
+		for (; i < pp.first + pp.count; i++)
+		{
+			const Vertex& v = ctx.verts[i];
+			if (!(v.z > 0.f) || !std::isfinite(v.x) || !std::isfinite(v.y)
+					|| 1.f / v.z < prof->sightMinW || 1.f / v.z > prof->sightMaxW)
+				break;
+			drawn += glm::vec2(v.x, v.y);
+		}
+		if (i != pp.first + pp.count)
+			continue;
+		drawn /= (float)pp.count;
+		const float w = 1.f / ctx.verts[pp.first].z;
+		for (u32 j = pp.first; j < pp.first + pp.count; j++)
+		{
+			Vertex& v = ctx.verts[j];
+			const float wj = 1.f / v.z;
+			const float t = wj < hudW ? (wj - hudW) / (hudW - prof->snapMinW) : (wj - hudW) / (prof->snapMaxW - hudW);
+			v.z = 1.f / (hudW + 0.0015f * std::clamp(t, -1.f, 1.f));
+			v.x = centre.x + (v.x - centre.x) / unwiden.x;
+			v.y = centre.y + (v.y - centre.y) / unwiden.y;
+		}
+		if (logFirst && placed == 0)
+			NOTICE_LOG(RENDERER, "VR: sight (tex %06x, W %.4f, %u verts) drawn at %.1f,%.1f put on the 2D plane at %.1f,%.1f (focal %.1f, stock %.1f)",
+					tex, w, pp.count, drawn.x, drawn.y, centre.x + (drawn.x - centre.x) / unwiden.x,
+					centre.y + (drawn.y - centre.y) / unwiden.y, unwiden.y * (float)config::VrFocal, (float)config::VrFocal);
+		placed++;
+		cropToScreen(ctx, pp, (float)fbWidth, (float)fbHeight);
+		for (u32 j = pp.first; j < pp.first + pp.count; j++)
+		{
+			Vertex& v = ctx.verts[j];
+			if (v.x < 0.f || v.x > fbWidth || v.y < 0.f || v.y > fbHeight)
+				v.x = v.y = std::numeric_limits<float>::quiet_NaN();
+		}
+	}
+}
+
 // A textured polygon whose texture lies on the screen texel for pixel, upright or turned a
 // quarter (the map from texels to pixels over its first triangle: one 1 per row, no scale).
 static bool texelForPixel(const rend_context& ctx, const PolyParam& pp)
@@ -897,6 +987,8 @@ static void place2DLayers(rend_context& ctx, const std::vector<PolyParam>& list,
 		}
 		if (i != pp.first + pp.count)
 			continue;
+		// (SnapMinW, not the profile's snapMinW, on purpose: "well in front of the plane" for
+		// every game, whatever band its layers are snapped from)
 		const bool onTop = pp.isp.DepthMode == 7 && w < SnapMinW && onScreen;
 		const bool sprite = aligned && texelForPixel(ctx, pp);
 		if (!sprite && !onTop)
@@ -985,21 +1077,29 @@ static bool snapFlatScreen(rend_context& ctx, const RenderPass& pass, const Rend
 
 // The cinematic letterbox: opaque black polygons on the 2D plane. Whole polygons only, so
 // one with just some black corners (a text box, a fade) is never torn apart, as the old
-// per-vertex hiding in the vertex shader did.
-static void hideLetterbox(rend_context& ctx, const std::vector<PolyParam>& list, u32 from, u32 to, float hudW)
+// per-vertex hiding in the vertex shader did. A game's profile can name the bars' textures,
+// for bars drawn in another colour with a texture that blackens them (counted in barsHidden).
+static void hideLetterbox(rend_context& ctx, const std::vector<PolyParam>& list, u32 from, u32 to, float hudW, u32& barsHidden)
 {
-	if (activeProfile != nullptr && activeProfile->letterboxW > 0.f)
-		hudW = activeProfile->letterboxW;
+	const GameProfile *prof = activeProfile;
+	if (prof != nullptr && prof->letterboxW > 0.f)
+		hudW = prof->letterboxW;
 	for (u32 n = from; n < to && n < list.size(); n++)
 	{
 		const PolyParam& pp = list[n];
 		if (pp.count < 3 || pp.first + pp.count > ctx.verts.size())
 			continue;
+		const u32 tex = pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
+		const bool bar = prof != nullptr && tex != 0
+				&& std::find(std::begin(prof->letterboxTextures), std::end(prof->letterboxTextures), tex) != std::end(prof->letterboxTextures);
 		u32 i = pp.first;
-		while (i < pp.first + pp.count && onOverlay(ctx.verts[i], hudW) && opaqueBlack(ctx.verts[i]))
+		while (i < pp.first + pp.count && onOverlay(ctx.verts[i], hudW) && (bar || opaqueBlack(ctx.verts[i])))
 			i++;
 		if (i == pp.first + pp.count)
+		{
 			hideVertices(ctx, pp);
+			barsHidden += bar;
+		}
 	}
 }
 
@@ -1530,17 +1630,31 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 	// background plane.
 	if (config::VrHideLetterbox)
 	{
-		hideLetterbox(ctx, ctx.global_param_op, std::max(previousPass.op_count, 1u), pass.op_count, hudW);
-		hideLetterbox(ctx, ctx.global_param_pt, previousPass.pt_count, pass.pt_count, hudW);
-		hideLetterbox(ctx, ctx.global_param_tr, previousPass.tr_count, pass.tr_count, hudW);
+		static bool barsShown;
+		u32 bars = 0;
+		hideLetterbox(ctx, ctx.global_param_op, std::max(previousPass.op_count, 1u), pass.op_count, hudW, bars);
+		hideLetterbox(ctx, ctx.global_param_pt, previousPass.pt_count, pass.pt_count, hudW, bars);
+		hideLetterbox(ctx, ctx.global_param_tr, previousPass.tr_count, pass.tr_count, hudW, bars);
+		if (bars > 0 && !barsShown)
+			NOTICE_LOG(RENDERER, "VR: letterbox bars hidden (%u drawn with the profile's textures at W %.3f)", bars, activeProfile->letterboxW);
+		barsShown = bars > 0;
 	}
 	if (!snapFlatScreen(ctx, pass, previousPass, hudW))
 	{
+		// (the stock framing: the plane's focal over the one the game draws with now)
+		const glm::vec2 unwiden = readGameFocal() / (float)config::VrFocal;
+		static bool sightsShown;
+		static u32 sightLogs;
+		u32 sights = 0;
+		const bool logSight = !sightsShown && sightLogs < 64;
+		placeSights(ctx, ctx.global_param_op, std::max(previousPass.op_count, 1u), pass.op_count, hudW, fbWidth, fbHeight, unwiden, sights, logSight);
+		placeSights(ctx, ctx.global_param_pt, previousPass.pt_count, pass.pt_count, hudW, fbWidth, fbHeight, unwiden, sights, logSight);
+		placeSights(ctx, ctx.global_param_tr, previousPass.tr_count, pass.tr_count, hudW, fbWidth, fbHeight, unwiden, sights, logSight);
+		sightLogs += logSight && sights > 0;
+		sightsShown = sights > 0;
 		snapNear2D(ctx, ctx.global_param_op, std::max(previousPass.op_count, 1u), pass.op_count, hudW, fbWidth, fbHeight);
 		snapNear2D(ctx, ctx.global_param_pt, previousPass.pt_count, pass.pt_count, hudW, fbWidth, fbHeight);
 		snapNear2D(ctx, ctx.global_param_tr, previousPass.tr_count, pass.tr_count, hudW, fbWidth, fbHeight);
-		// (the stock framing: the plane's focal over the one the game draws with now)
-		const glm::vec2 unwiden = readGameFocal() / (float)config::VrFocal;
 		place2DLayers(ctx, ctx.global_param_op, std::max(previousPass.op_count, 1u), pass.op_count, hudW, fbWidth, fbHeight, unwiden);
 		place2DLayers(ctx, ctx.global_param_pt, previousPass.pt_count, pass.pt_count, hudW, fbWidth, fbHeight, unwiden);
 		place2DLayers(ctx, ctx.global_param_tr, previousPass.tr_count, pass.tr_count, hudW, fbWidth, fbHeight, unwiden);
