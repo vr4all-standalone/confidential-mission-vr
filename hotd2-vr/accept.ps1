@@ -66,7 +66,7 @@ function Invoke-VrCheck([string[]]$arguments, [string[]]$Want = @()) {
 
 # The House of the Dead 2 (US): its field of view literals widened 3x, from boot on. Start as
 # the title needs it (the menu at 56 s, Arcade mode at 60 s; later presses would pause the
-# intro), the intro to ~85 s, then the agent loses (CONTINUE? at ~100 s).
+# intro), the intro to ~85 s, then the agent loses (the continue countdown at ~100 s).
 function Test-Hotd2 {
 	if (-not $env:VRLGH_HOTD2) { return 'set $env:VRLGH_HOTD2 to the US disc image of The House of the Dead 2' }
 	$at = @(for ($t = 44; $t -le 62; $t += 2) { "$t=start 0" }) + '60=shot', '75=shot', '92=shot'
@@ -162,12 +162,11 @@ $cmRunDefs = [ordered]@{
 		Config = "$cmWiden,config:vr.Yaw=25,config:vr.Pitch=-15"
 		At = @(Get-CmStarts) + '46.3=shot cutscene', '49=shot cutscene', '55=shot stage1', '60=shot stage1', '65=shot continue',
 			'79=shot', '95=shot', '108=shot attract', '118=shot attract', '130=shot attract', '142=shot attract', '148=shot attract', '154=shot attract' }
-	# widening off, the marker at the gun: t5-g2-off (shots on the adjustment screen included).
-	# The player 2 prompt stays: Task 6's hiding of it also hides flat polygons on its line at the
-	# bottom right while it blinks on, which took the lower half of the marker at 576,432 here
-	# (t5-g2-off, before Task 6, had all of it); with the defaults the marker is hidden anyway.
+	# widening off, the marker at the gun: t5-g2-off (shots on the adjustment screen included),
+	# with the player 2 prompt hidden (the default; CM's profile keeps the flat 2D beside it,
+	# p2HideTrailing off, so the marker at 576,432 stays whole)
 	'accept-cm-off' = @{ Game = 'confmiss'; Name = 'accept-cm-off'; Seconds = 60
-		Config = 'config:vr.DropShotMarker=no,config:vr.DropShotFlash=no,config:vr.HideP2Prompt=no'
+		Config = 'config:vr.DropShotMarker=no,config:vr.DropShotFlash=no'
 		At = @(Get-CmStarts) + '33=fire 0 5313 5313', '36=fire 0 5313 5313', '39=fire 0 5313 5313' + @(Get-CmTable 52.5 0.75) }
 	# widened, the screen's edges in stage 1's first room: t5-w2 (B, reload, B, centre after)
 	'accept-cm-edges' = @{ Game = 'confmiss'; Name = 'accept-cm-edges'; Seconds = 62
@@ -230,8 +229,12 @@ function Test-CmWiden {
 	# 3-5's runs, the first and third full runs), or 5641 verts at 436.4, the widened 879.2 as in
 	# the attract (the second full run). Either, widened. Moving the press to 44.6 s skips both
 	# (t9probe1-2: the guard's zooming close-up at 46 s, 657.1 and 662.1).
-	$why = Invoke-VrCheck 'focal', $log, '--from', '45.5', '--to', '46.5', '--expect', '224.7'
-	if ($why) { $why = Invoke-VrCheck 'focal', $log, '--from', '45.5', '--to', '46.5', '--expect', '436.4' }
+	# (--tol 0.01: the default 2 % takes 436.4 up to 445, within reach of the swaying stock 449.6)
+	$why = Invoke-VrCheck 'focal', $log, '--from', '45.5', '--to', '46.5', '--expect', '224.7', '--tol', '0.01'
+	if ($why) {
+		$why = Invoke-VrCheck 'focal', $log, '--from', '45.5', '--to', '46.5', '--expect', '436.4', '--tol', '0.01'
+		if (-not $why) { Write-Host '  (the 224.7 check above failed: this run caught the other intro camera, 5641 verts at 436.4, the widened 879.2: OK)' }
+	}
 	if ($why) { return "$why (from 45.5 to 46.5 s: neither 224.7 nor 436.4)" }
 	foreach ($check in @(@('52', '72', '219.7'), @('142', '156', '436.4'))) {
 		$why = Invoke-VrCheck 'focal', $log, '--from', $check[0], '--to', $check[1], '--expect', $check[2]
@@ -261,7 +264,7 @@ function Test-CmAim {
 	$out | ForEach-Object { Write-Host "  $_" }
 	$sum = $out | Where-Object { $_ -match '^shots \d+ matched' } | Select-Object -Last 1
 	if (-not ($sum -match '^shots \d+ matched (\d+) worst (\d+) px off$') -or [int]$Matches[1] -lt 6 -or [int]$Matches[2] -gt 3) { return "hall: 3D impacts (tex 614000) want 6 or more matched, worst <= 3 px: $sum" }
-	$why = Invoke-VrCheck 'shots', $edges, '--tex', '5e8000', '--union', '--max-off', '3', '--from', '52.5', '--to', '55' -Want '^shots 4 matched 4 '
+	$why = Invoke-VrCheck 'shots', $edges, '--tex', '5e8000', '--union', '--max-off', '3', '--from', '52.5', '--to', '55', '--max-ratio', '0.9' -Want '^shots 4 matched 4 '
 	if ($why) { return "edges: $why" }
 	return Invoke-VrCheck 'shots', $hall, '--tex', '5e8000', '--union', '--max-ratio', '0.9'
 }
@@ -269,7 +272,8 @@ function Test-CmAim {
 # The 2D plane: layers, sights, the letterbox and the flat screens go onto it; no more 3D
 # polygons kept with a corner on its W than Task 4 saw (1 a run; the hall route 2 in Task 5);
 # each frame's nearest W after it the 3D's near plane or the plane's own; the shot marker
-# hidden but not the game's own white fade (tex 404800, ~119 s on the hall route); yawed window shots.
+# hidden but not the game's own cross-fade (tex 404800: the previous view drawn with white
+# vertex colour, ~119 s on the hall route); yawed window shots.
 function Test-CmHud {
 	foreach ($run in 'accept-cm-tour', 'accept-cm-hall') {
 		$why = Invoke-CmRun $run

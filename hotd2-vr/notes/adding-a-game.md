@@ -92,7 +92,7 @@ Generic thresholds tuned on HOTD2 (no profile field): `MarkerMaxSize 96`, `Marke
 
 ---
 
-## 3. The profile (`vr_reproject.cpp:185-240`)
+## 3. The profile (`struct GameProfile`, `vr_reproject.cpp:199-261`)
 
 All RAM offsets are `address & 0x01FFFFFF`, accessed at `0x8C000000 + offset` (NAOMI `0x0C0E7A60` ->
 `0x0E7A60`) [V :44-58]. Code words are 16-bit little-endian.
@@ -103,14 +103,21 @@ All RAM offsets are `address & 0x01FFFFFF`, accessed at `0x8C000000 + offset` (N
 | `projAddr`, `viewportAddr` | 4x4 float matrices; live focal = `abs(vp[0]*proj[0])`, `abs(vp[5]*proj[5])` (`readGameFocal` :64-76; offsets 0 and 20 bytes). Applied only if the config value is 0. |
 | `fovScale` | how much wider (tan of half angle) for `fovLiterals` / viewport scaling; for a `fovPatch` game only a "widen" flag (>1) |
 | `fovLiterals[4]`, `fovStock` | RAM offsets of 16-bit angle literals (65536 = 360 deg), rewritten each vblank while they still hold `fovStock` (`widenGameView` :112-150). HOTD2 style. |
-| `fovPatch[4]` `{offset, stock, patched}` | code words; written all-or-nothing once every word is stock (`applyProfileWrites` :459-482), only with `vr.WidenFov` and `vr.FovScale > 1`. MOK style. Also gates pokes (`profileCodeThere`). |
-| `stockFocalAddr` | float in RAM: the focal the game's light-gun hit test unprojects with (may change per scene); read by `stockFocal()` :520 -> `GameCamera::stockTan` -> aim (`xr_host.cpp:919`) |
+| `fovPatch[8]` `{offset, stock, patched}` | code words; written all-or-nothing once every word is stock (`applyProfileWrites`), only with `vr.WidenFov` and `vr.FovScale > 1`; the list ends at the first `offset` 0. MOK style (4 words); CM uses all 8, three of them unchanged guard words (`stock == patched`) that make sure the patch lands only on the code it expects. Also gates pokes (`profileCodeThere`). |
+| `stockFocalAddr` | float in RAM: the focal the game's light-gun hit test unprojects with (may change per scene); read by `stockFocal()` -> `GameCamera::stockTan` -> aim (`xr_host.cpp:919`) |
+| `stockFocalInverse` | the float at `stockFocalAddr` is 1/focal, not the focal (default off). CM: `tan(A/2)/320` at 0x0C154ED0. |
 | `focal` | stock focal constant -> overrides `vr.Focal` (fallback for the above, and the 2D plane's stock framing) |
 | `pokes[12]` `{offset, u16}` | written every vblank when different, once the code is there |
-| `markerTextures[4]`, `markerMinW/MaxW` | the game's shot marker / flash (VRAM tex addresses, W band); hidden after shots into 3D within 120 px / 500 ms (`dropShotMarker` :1585-1593) |
-| `p2PromptTextures[4]`, `p2PromptBox` | player 2's "press start" sprites and their screen box (640x480 px). Hidden (`vr.HideP2Prompt`) and used as "P2 not playing"; **dual wield only works when set** (`player2PromptKnown()` :1021, `xr_host.cpp:1435`) |
-| `snapMaxW`, `snapStep` | 2D layers between W 0.75 and `snapMaxW` on multiples of `snapStep` go onto the 2D plane (`snapNear2D` :633) |
-| `letterboxW` | W of black letterbox bars (0: the 2D plane's) (`hideLetterbox` :929) |
+| `markerTextures[4]`, `markerMinW/MaxW` | the game's shot marker / flash (VRAM tex addresses, W band); hidden after shots into 3D within 120 px / 500 ms (`dropShotMarker`) |
+| `markerWidened` | the game draws its marker and impacts where its widened view puts the shot, not at the gun (its hit test keeps the stock view): `shotDrawnAt` maps the gun by live/stock focal (default off: at the gun). CM. |
+| `noShotFlash` | the game draws no shot flash: `vr.DropShotFlash` never applies, so a bright full-screen 2D quad after a shot stays (default off). CM, whose cross-fade (tex 404800) the flash rule took for one. |
+| `p2PromptTextures[4]`, `p2PromptBox` | player 2's start prompt sprites and their screen box (640x480 px). Hidden (`vr.HideP2Prompt`) and used as "P2 not playing"; **dual wield only works when set** (`player2PromptKnown()`, `xr_host.cpp:1450`) |
+| `p2HideTrailing` | while the prompt shows, flat polygons on its line just after it are hidden too (HOTD2's credit count) (default on). CM: off, nothing follows its prompt in free play. |
+| `snapMinW`, `snapMaxW`, `snapStep` | 2D layers between W `snapMinW` (default 0.75) and `snapMaxW` on multiples of `snapStep` go onto the 2D plane (`snapNear2D`). CM: 0.005 to 10 in steps of 1/16000. |
+| `offScreen2DMaxW` | 2D layers nearer than this W are snapped even partly or wholly off the screen; `cropPlaneToScreen` hides those wholly off it and cuts axis-aligned quads to it (default 0: none). Keep it below the game's near plane. CM: 0.3 (its caption ticker). |
+| `letterboxW` | W of black letterbox bars (0: the 2D plane's) (`hideLetterbox`) |
+| `letterboxTextures[4]` | textures that make a polygon at `letterboxW` a bar whatever its colour (default none: opaque black ones only). CM: 400680 (white bars drawn black by it). |
+| `sightTextures[8]`, `sightMinW/MaxW` | the game's sights over its enemies and their W band, put on the 2D plane before the snap (`placeSights`; default none). CM: 400000 at W 0.95-1.005. |
 | `hudW` | W of its 2D plane (0: `vr.HudW` = 1.0). Must never be a W its 3D uses: the vertex shader pins anything at it onto the plane (`gles.cpp:139`) |
 | `flatScreens` | a pass with no 3D (menus in layers of depth) goes wholly onto the 2D plane (`snapFlatScreen` :879) |
 | `unitScale` | game unit size vs HOTD2's (metres = `vr.WorldScale * unitScale`, `worldScale()` :513). HOTD2 camera ~15 units over the street. |

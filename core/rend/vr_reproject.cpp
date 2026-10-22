@@ -230,6 +230,9 @@ struct GameProfile
 	// Player 2's prompt pictures and where they are: see hidePlayer2Prompt.
 	u32 p2PromptTextures[4] {};
 	ScreenBox p2PromptBox { 352.f, 384.f, 640.f, 480.f };
+	// While the prompt shows, flat polygons on its line just after it go too (HOTD2's credit
+	// count after it): off for a game where nothing follows it there. See hidePlayer2Prompt.
+	bool p2HideTrailing = true;
 	// 2D layers near the 2D plane (see snapNear2D): from and up to these W, at W in multiples
 	// of this step; the W of the letterbox bars (0: the 2D plane's).
 	float snapMinW = 0.75f, snapMaxW = 1.05f, snapStep = 0.01f;
@@ -237,8 +240,9 @@ struct GameProfile
 	// Textures that make a polygon at the letterbox's W one of its bars whatever its colour
 	// (none: opaque black ones only). See hideLetterbox.
 	u32 letterboxTextures[4] {};
-	// 2D layers nearer than this W are snapped even partly or wholly off the screen, and cut
-	// to it (0: none). Only below the game's near plane: none of its 3D comes that near.
+	// 2D layers nearer than this W are snapped even partly or wholly off the screen (0: none);
+	// those wholly off it are hidden, and axis-aligned quads cut to it (see cropPlaneToScreen).
+	// Only below the game's near plane: none of its 3D comes that near.
 	float offScreen2DMaxW = 0.f;
 	// The game's sights over its enemies, and the W they are drawn at: see placeSights.
 	u32 sightTextures[8] {};
@@ -325,7 +329,7 @@ static std::vector<GameProfile> makeProfiles()
 	p.fovPatch[3] = { 0x08DC4E, 0x3F00, 0x4080 };
 	p.stockFocalAddr = 0x0E7248;
 	p.focal = 415.72f;	// the maze's
-	// The gun calibration (ROD CONTROLLER SETTINGS; factory 64, 128, 500, 0, 128, 500 for
+	// The gun calibration (its gun settings screen; factory 64, 128, 500, 0, 128, 500 for
 	// each player at 0x0C0E2058 and 0x0C0E2064) stretches the gun's position outward from
 	// the centre, up to 30 px off. Kept at 0, 0, 512, 0, 0, 512, the game's aim is where the
 	// gun points (within a pixel).
@@ -338,13 +342,14 @@ static std::vector<GameProfile> makeProfiles()
 	p.markerTextures[1] = 0x4f6800;
 	p.markerMinW = 1.45f;
 	p.markerMaxW = 1.55f;
-	// "PRESS 2P START" at the bottom centre (the same sheets as FREE PLAY under it and
+	// Player 2's start prompt at the bottom centre (the same sheets as FREE PLAY under it and
 	// player 1's prompt, which are wider and lower).
 	p.p2PromptTextures[0] = 0x68d800;
 	p.p2PromptTextures[1] = 0x48c000;
 	p.p2PromptBox = { 250.f, 440.f, 390.f, 462.f };
-	// The HUD at W 1.082, subtitles 1.040, area names 1.052-1.054, CONTINUE 1.08-1.085, the
-	// damage flash 1.4 and its shot effects 1.5, in steps of 0.001; letterbox bars at 1.090.
+	// The HUD at W 1.082, subtitles 1.040, area names 1.052-1.054, the continue prompt
+	// 1.08-1.085, the damage flash 1.4 and its shot effects 1.5, in steps of 0.001; letterbox
+	// bars at 1.090.
 	p.snapMaxW = 1.6f;
 	p.snapStep = 0.001f;
 	p.letterboxW = 1.090f;
@@ -444,20 +449,25 @@ static std::vector<GameProfile> makeProfiles()
 	p.markerTextures[0] = 0x5e8000;
 	p.markerTextures[1] = 0x5e7800;
 	// It draws no shot flash. In every run (t5-w1, t5-d, t5f-hall, t5f-hall2, t5f-room1,
-	// t5-g2-off) the only bright full-screen all-2D quad after a shot is its own white fade,
-	// tex 404800: 640x480, alpha fa -> 04 over ~1 s, at the same point on the route (t5-w1
-	// 118.8 s, with vr.DropShotFlash off: 61 lines, none hidden), starting 175-192 ms after
-	// the shot before it. With the rule on it was hidden in alternating ~200 ms blocks
-	// (t5f-hall2: 28 of its 60 frames), a full-field white strobing at ~2.5 Hz while the
-	// player fires. So the rule is off for it.
+	// t5-g2-off) the only bright full-screen all-2D quad after a shot is its own cross-fade,
+	// tex 404800: the previous view drawn over the new one with white vertex colour (which is
+	// what the rule's bright test goes by), 640x480, alpha fa -> 04 over ~1 s, at the same
+	// point on the route (t5-w1 118.8 s, with vr.DropShotFlash off: 61 lines, none hidden),
+	// starting 175-192 ms after the shot before it. With the rule on it was hidden in
+	// alternating ~200 ms blocks (t5f-hall2: 28 of its 60 frames), the full-screen cross-fade
+	// strobing at ~2.5 Hz while the player fires. So the rule is off for it.
 	p.noShotFlash = true;
-	// Player 2's "PRESS START BUTTON", blinking at the bottom right all through a one-player
-	// game and again once player 2 is out: tex 4ce800 at W 0.1 (406,431..552,448 with its
-	// shadow at 0.11), the sheet of FREE PLAY beside it (248,440..392,456) and of player 1's
-	// own prompt in its continue (86,431..232,448), which the box leaves out, as it does
-	// player 2's HUD (no prompt seen while player 2 played). Rips of a one-player game.
+	// Player 2's start prompt, blinking at the bottom right all through a one-player game and
+	// again once player 2 is out: tex 4ce800, drawn at W 0.1 (the W before snapNear2D puts it
+	// on the 2D plane, where hidePlayer2Prompt finds it), 406,431..552,448 with its shadow at
+	// 0.11; the sheet of FREE PLAY beside it (248,440..392,456) and of player 1's own prompt
+	// in its continue (86,431..232,448), which the box leaves out, as it does player 2's HUD
+	// (no prompt seen while player 2 played). From t6-rip, rips of a one-player game.
 	p.p2PromptTextures[0] = 0x4ce800;
 	p.p2PromptBox = { 400.f, 424.f, 560.f, 452.f };
+	// Nothing follows the prompt on its line in free play, and the trailing pass took flat 2D
+	// beside it: the lower half of the widening-off shot marker at 576,432 (accept-cm-off).
+	p.p2HideTrailing = false;
 	// Its logo, advisory and game-over screens: layers up to W 100 without 3D.
 	p.flatScreens = true;
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
@@ -806,7 +816,7 @@ static void snapNear2D(rend_context& ctx, const std::vector<PolyParam>& list, u3
 		const int bucket = (int)std::lround(w * 100.f);
 		if (bucket >= 0 && bucket < (int)std::size(seen) && (off ? seenOff : seen)[bucket]++ == 0)
 			NOTICE_LOG(RENDERER, "VR: 2D layer at W %.3f (%u verts at %.0f,%.0f) put on the 2D plane%s",
-					w, pp.count, ctx.verts[pp.first].x, ctx.verts[pp.first].y, off ? ", off the screen: cut to it" : "");
+					w, pp.count, ctx.verts[pp.first].x, ctx.verts[pp.first].y, off ? ", off the screen (quads cut to it)" : "");
 	}
 }
 
@@ -1156,11 +1166,11 @@ static void hideLetterbox(rend_context& ctx, const std::vector<PolyParam>& list,
 	}
 }
 
-// Player 2's "PRESS START BUTTON" with "CREDIT(S)" and its number under it, in the bottom
-// right corner all through a one-player game: in the headset it floats in the room for
-// nothing (asked for on Reddit, twice). Its pictures go when the game profile knows them
-// (vr.HideP2Prompt), and so does what's on the line right after them (the number). Player
-// 1's own, bottom left, stays, and so do the story's subtitles.
+// Player 2's start prompt with the credit count under it, in the bottom right corner all
+// through a one-player game: in the headset it floats in the room for nothing (asked for on
+// Reddit, twice). Its pictures go when the game profile knows them (vr.HideP2Prompt), and so
+// does what's on the line right after them (the number), unless the profile turns that off
+// (p2HideTrailing). Player 1's own, bottom left, stays, and so do the story's subtitles.
 static std::atomic<int64_t> p2PromptAt { -1000000 };
 
 static void hidePlayer2Prompt(rend_context& ctx, const RenderPass& pass, const RenderPass& prev, float hudW,
@@ -1215,6 +1225,8 @@ static void hidePlayer2Prompt(rend_context& ctx, const RenderPass& pass, const R
 	if (!hide)
 		return;
 	const GameProfile *prof = activeProfile;
+	if (prof != nullptr && !prof->p2HideTrailing)
+		return;
 	each([&](const PolyParam& pp) {
 		Box b;
 		const u32 tex = pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
@@ -1231,19 +1243,19 @@ static void hidePlayer2Prompt(rend_context& ctx, const RenderPass& pass, const R
 	});
 }
 
-// (for a second after its last frame: the prompts blink, HOTD2's about 1.05 s on and
-// 0.53-0.56 s off, CM's 0.5 s on and 0.52-0.56 s off, so with half a second this came and
-// went with each blink)
 bool player2Prompting() {
-	return steadyMs() - p2PromptAt < 1000;
+	return steadyMs() - p2PromptAt < 500;
 }
 
-// Each change of player2Prompting() logged: what the headset's join and leave go by (see
-// xr_host.cpp's dual wielding), seen in PC runs too.
+// The prompt's comings and goings logged, so PC runs show what the headset's join and leave
+// go by (see xr_host.cpp's dual wielding). Held for a second after its last frame, not half
+// a second: the prompts blink (HOTD2's about 1.05 s on and 0.53-0.56 s off, CM's 0.5 s on
+// and 0.52-0.56 s off), and with half a second the log came and went with each blink. (The
+// dual wielding acts only on player2Prompting() being true, so its gaps don't matter there.)
 static void logPlayer2Prompt()
 {
 	static bool prompting;
-	if (player2Prompting() == prompting)
+	if ((steadyMs() - p2PromptAt < 1000) == prompting)
 		return;
 	prompting = !prompting;
 	NOTICE_LOG(RENDERER, "VR: player 2 prompt %s", prompting ? "shown" : "gone");

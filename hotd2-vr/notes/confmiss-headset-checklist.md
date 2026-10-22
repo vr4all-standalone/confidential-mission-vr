@@ -1,8 +1,9 @@
 # Confidential Mission on the headset: checklist
 
 **This is the release-signed build** of VR Light Gun Hub (`com.vrlightgunhub.app`), signed with
-your own release key. Its version is `0.1.0-g` and a commit code (the build report has the exact
-one).
+your own release key. Its version shows in SideQuest's list of installed apps, or in the
+headset's app info, as `0.1.0-g` followed by a code; the message that sent you this build gives
+the exact code.
 
 - **First uninstall any earlier VR Light Gun Hub test build** (`com.vrlightgunhub.app`). Those
   were signed with the debug key, and an app signed with a different key can't install over them
@@ -14,12 +15,17 @@ one).
 
 ## Install
 
+`adb` is not on this PC's PATH: the commands below call it by its full path,
+`E:\AndroidSdk\platform-tools\adb.exe`, from a command window (headset on USB, debugging allowed).
+
 1. **Remove an old test build**, if there is one: in SideQuest's list of installed apps
    (`com.vrlightgunhub.app`, *Uninstall*), or in a command window:
-   `adb uninstall com.vrlightgunhub.app` (an error there just means there was none).
+   `E:\AndroidSdk\platform-tools\adb.exe uninstall com.vrlightgunhub.app` (an error there just
+   means there was none).
 2. **Install the app:** SideQuest, *Install APK file from folder*:
    `E:\___flattovrdev\hotd2-vr\dist\vr-light-gun-hub-quest.apk`. Or:
-   `adb install -r E:\___flattovrdev\hotd2-vr\dist\vr-light-gun-hub-quest.apk` (it says `Success`).
+   `E:\AndroidSdk\platform-tools\adb.exe install -r E:\___flattovrdev\hotd2-vr\dist\vr-light-gun-hub-quest.apk`
+   (it says `Success`).
 3. **Copy the games** into the headset's **Download** folder (SideQuest *Manage files*, or USB:
    *Quest > Internal shared storage > Download*). The zips stay zipped.
 
@@ -54,15 +60,17 @@ the panel and player 2 joining and leaving (`hotd2-vr/notes/confmiss-findings.md
 2. **The setup panel.**
    Do: start VR Light Gun Hub.
    Good: the first time, a panel asks for *All files access*: tap *Allow*, switch it on, come
-   back. Then it says "Found, pick one below:" with Confidential Mission (and The House of the
-   Dead 2 and The Maze of the Kings if their files are there). Picking Confidential Mission
-   starts it.
+   back. Then it lists the game files it found, by path: with only Confidential Mission's,
+   "Found: Download/confmiss.zip"; with The House of the Dead 2's or The Maze of the Kings' there
+   too, "Found, pick one below:" and a path on each line. Under that is a "Play ..." button for
+   each game, named after it; *Play Confidential Mission* starts it.
    Report: OK, or what the panel says instead.
 
 3. **Boot and attract.**
    Do: let it run a few minutes without pressing anything.
-   Good: the logos, the title and the How to Play screen sit flat on the panel; the attract's 3D
-   demo is all around you, not only on the panel.
+   Good: the logos and the title sit flat on the panel. The How to Play scene is 3D around you;
+   only its text panels sit flat on the panel. The attract's 3D demo is all around you, not only
+   on the panel.
    Report: OK, or the scene that looks wrong.
 
 4. **Start a game.**
@@ -97,7 +105,8 @@ the panel and player 2 joining and leaving (`hotd2-vr/notes/confmiss-findings.md
 8. **The panel: HUD, fades, results.**
    Good: the HUD (lives, ammo, score) and the subtitles are flat on the panel. No streaks or
    stretched lines where the HUD meets the 3D. When you shoot, no flash or shot marker from the
-   game itself, and the game's own white fades don't flicker or strobe while you shoot.
+   game itself, and the game's own fades from one view to the next don't flicker or strobe while
+   you shoot.
    - **Results screen and stage titles:** at the end of stage 1 and the start of stage 2, the
      results screen and the stage's title are flat on the panel. (The PC never got that far.)
    Report: OK, or what looks wrong, in words.
@@ -105,26 +114,27 @@ the panel and player 2 joining and leaving (`hotd2-vr/notes/confmiss-findings.md
 9. **Player 2 (two guns).**
    Do: during a game, press the menu button (≡) on the left controller.
    Good: player 2 joins with a gun in your left hand (blue aim), and both guns shoot. In
-   one-player play there is no "PRESS START BUTTON" for player 2 at the bottom right. When player
-   2 is out of the game, it's one gun again.
-   - **Player 2 reloads:** with two guns, empty the left gun, reload it (point it at the floor,
-     or shoot past the view) and keep playing with both for a while. Good: you keep both guns; it
-     doesn't drop back to one.
+   one-player play there is no blinking start prompt for player 2 at the bottom right. When
+   player 2 is out of the game, it's one gun again.
+   - **Player 2 reloads:** more than 5 s after player 2 joined, empty the left gun and hold it
+     empty for 2-3 s before reloading it (point it at the floor, or shoot past the view); then
+     keep playing with both for a while. Good: you keep both guns; it doesn't drop back to one.
    Report: OK, or what happened and when.
 
 10. **Frame rate.**
     Good: smooth at 72 Hz all through stage 1, with no judder (the picture stuttering or doubling
     when you turn your head). If the OVR Metrics Tool is installed, its overlay shows the frame
-    rate (72 is good). Watch the story scene that plays right after you press Start, before the
-    shooting begins: it is the busiest scene so far (on the PC about 46-52 s after the app
-    started, with Start pressed early).
+    rate (72 is good). Watch the story scene after the mission briefing, the one that plays
+    right after you press Start, before the shooting begins: it is the busiest scene so far (on
+    the PC about 46-52 s after the app started, with Start pressed early).
     Report: OK, or which scene stutters and for how long.
 
 11. **After stage 1.**
     Do: play on into stage 2 (continues are free).
     Good: in the shooting scenes there, the hits still land on the dot. (The PC checked stage 1
-    only.)
-    Report: OK, or the scene and where shots land instead.
+    only.) No 3D bits (sparks, muzzle flashes, explosions) flicker onto the panel, flat or in the
+    wrong place, for a frame.
+    Report: OK, or the scene and where shots land instead; for a 3D bit on the panel, the scene.
 
 12. **The other two games.**
     Do: quit (Meta button, *Quit*), start the hub again and play one stage of The House of the
@@ -135,12 +145,15 @@ the panel and player 2 joining and leaving (`hotd2-vr/notes/confmiss-findings.md
 
 13. **PC VR over Link.**
     Do:
-    - Connect the Quest with Link (cable or Air Link). In the Meta Quest Link app on the PC, make
-      it the active OpenXR runtime (*Settings > General > OpenXR Runtime*); the PC currently uses
+    - Connect the Quest with Link (cable or Air Link). In the Link app on the PC (it may be named
+      *Meta Horizon Link* or *Meta Quest Link*; installed under `C:\Program Files\Meta Horizon\`),
+      make it the active OpenXR runtime: look in its *Settings*, *General* tab, for *OpenXR
+      Runtime* (check: the exact menu path may differ by version). The PC currently uses
       Virtual Desktop's.
     - Unzip `E:\___flattovrdev\hotd2-vr\dist\vr-light-gun-hub-pcvr.zip` into a new folder and
       start `flycast.exe`. In its window add the folder `E:\___flattovrdev\confidential mission\Roms`
-      (naomi.zip is in it), start Confidential Mission and play stage 1.
+      (*Settings > General > Content Location > Add*; naomi.zip is in it), start Confidential
+      Mission and play stage 1.
     Good: checks 3 to 9 as on the Quest.
     Report: the check numbers with "PC" in front, e.g. `PC 7 OK`.
     For a log on the PC, add these two lines at the end of `emu.cfg` (next to `flycast.exe`); it
@@ -151,15 +164,15 @@ the panel and player 2 joining and leaving (`hotd2-vr/notes/confmiss-findings.md
     ```
 
 14. **When something is wrong: the log.**
-    - Best: before starting the app, with the headset on USB, run in a command window
-      `adb logcat -c` and then `adb logcat -s flycast:* > cm-quest-log.txt`; play; press Ctrl+C
-      when done.
-    - Afterwards: `adb logcat -d -s flycast:* > cm-quest-log.txt`, straight away (it only holds
-      the last few minutes).
-    - As a file instead: put the two `[log]` lines above at the end of
-      `/sdcard/Android/data/com.vrlightgunhub.app/files/emu.cfg`; the app then writes
-      `/sdcard/Android/data/com.vrlightgunhub.app/files/data/flycast.log`
-      (`adb pull /sdcard/Android/data/com.vrlightgunhub.app/files/data/flycast.log`).
+    Open a command window and go to the folder where the log should land, for example
+    `cd /d %USERPROFILE%\Desktop`: `cm-quest-log.txt` is written into the command window's
+    current folder.
+    - Best: before starting the app, with the headset on USB, run
+      `E:\AndroidSdk\platform-tools\adb.exe logcat -c` and then
+      `E:\AndroidSdk\platform-tools\adb.exe logcat -s flycast:* > cm-quest-log.txt`; play; press
+      Ctrl+C when done.
+    - Afterwards: `E:\AndroidSdk\platform-tools\adb.exe logcat -d -s flycast:* > cm-quest-log.txt`,
+      straight away (it only holds the last few minutes).
 
     Send the log with your notes. It has a `VR diag: shot` line for each of the first 8 shots
     after the app starts, which shows where those shots went. On GitHub later, the issue form

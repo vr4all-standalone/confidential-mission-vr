@@ -44,3 +44,9 @@ HND1*.bin
 release-signing.properties
 *.jks
 !shell/android-studio/playstore.jks
+# (nor any other key store or certificate; Flycast's debug.keystore and sign_cert.pfx stay tracked)
+*.keystore
+!shell/android-studio/debug.keystore
+*.p12
+*.pfx
+!shell/uwp/sign_cert.pfx

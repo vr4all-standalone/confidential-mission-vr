@@ -10,6 +10,11 @@
   public debug key (no release key, see make-release-key.ps1) it is refused, since anyone could
   sign an "update" of the app with that key.
 
+  A release is built from a commit, the one its published source is: the working tree must be
+  clean (the gamesdk submodule's local change aside), and the APK's versionName (0.1.0-g<commit>),
+  its libflycast.so and flycast.exe must all name HEAD (a -SkipBuild after a new commit fails
+  that). -AllowDebugKey test builds skip both checks.
+
   .\package-release.ps1                  build both, then package
   .\package-release.ps1 -SkipBuild       package what was built last
   .\package-release.ps1 -AllowDebugKey   take a debug-signed APK too (a test build, not for release)
@@ -26,8 +31,10 @@ $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # What must never be in a release: game discs and keys, rips (rip\), frame grabs, models made
-# from a game (the app makes those on the player's device, from the player's game).
-$bannedNames = '*.chd', '*.gdi', '*.cue', '*.cdi', '*.pic', 'shot_*.png', 'hands*.bin', 'staff*.bin', 'HND1*.bin'
+# from a game (the app makes those on the player's device, from the player's game), and archives
+# or disc images inside it (a ROM set, a BIOS zip): neither the APK nor the zip holds one.
+$bannedNames = '*.chd', '*.gdi', '*.cue', '*.cdi', '*.pic', 'shot_*.png', 'hands*.bin', 'staff*.bin', 'HND1*.bin',
+	'*.zip', '*.7z', '*.rar', '*.iso'
 $bannedDirs = 'rip'
 
 # The entries of a zip or APK whose names are on the lists above.
@@ -64,6 +71,43 @@ if ($CheckOnly) {
 	if (Test-Archives ($CheckOnly | ForEach-Object { $_ -split ',' })) { exit 0 } else { exit 1 }
 }
 
+function Invoke-Git { $ErrorActionPreference = 'Continue'; & git -C $repo @args 2>$null }
+
+# One entry of a zip or APK, as bytes ($null when it has none by that name).
+function Read-ZipEntry([string]$archive, [string]$name) {
+	$z = [IO.Compression.ZipFile]::OpenRead($archive)
+	try {
+		$e = $z.GetEntry($name)
+		if (-not $e) { return $null }
+		$ms = New-Object IO.MemoryStream
+		$s = $e.Open()
+		try { $s.CopyTo($ms) } finally { $s.Dispose() }
+		, $ms.ToArray()
+	} finally { $z.Dispose() }
+}
+
+# A built binary names this commit: the version core\version.h gave it (v<tag>-<n>-g<commit>).
+function Test-NamesCommit([string]$what, [byte[]]$bytes, [string]$hash) {
+	if ($bytes -and [Text.Encoding]::ASCII.GetString($bytes).Contains("-g$hash")) {
+		Write-Host "version check: $what names $hash"
+		return $true
+	}
+	Write-Host ("$what does not name HEAD ($hash): build again without -SkipBuild (if libflycast.so still " +
+		"doesn't, delete shell\android-studio\flycast\.cxx so its CMake configure runs again).") -ForegroundColor Red
+	$false
+}
+
+# the working tree as committed (the gamesdk submodule's local change aside)
+$head = Invoke-Git rev-parse HEAD
+if (-not $AllowDebugKey) {
+	$dirty = @(Invoke-Git status --porcelain | Where-Object { $_ -and $_ -notmatch '^.. core/deps/gamesdk$' })
+	if ($dirty.Count) {
+		Write-Host 'The working tree has changes that are not committed; a release is built from a commit:' -ForegroundColor Red
+		$dirty | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+		exit 1
+	}
+}
+
 # the SDK's newest build-tools and a JDK, as build-quest.cmd finds them
 $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
 $tools = Get-ChildItem (Join-Path $sdk 'build-tools') -Directory -ErrorAction SilentlyContinue |
@@ -77,10 +121,16 @@ if (-not $jdk) { Write-Host 'No JDK found (set JAVA_HOME).' -ForegroundColor Red
 $env:JAVA_HOME = $jdk   # this process only: apksigner.bat runs on it
 
 if (-not $SkipBuild) {
-	& $cmd /c (Join-Path $PSScriptRoot 'build-quest.cmd')
-	if ($LASTEXITCODE -ne 0) { throw 'build-quest.cmd failed' }
+	# The PC first: build-win.cmd runs CMake's configure every time, which writes core\version.h
+	# (the version both builds embed) for HEAD. The Quest build's configure runs only when its
+	# CMake files change, so it alone would keep an old commit's version.h; its ninja rebuilds
+	# what includes the new one.
 	& $cmd /c (Join-Path $PSScriptRoot 'build-win.cmd') Release
 	if ($LASTEXITCODE -ne 0) { throw 'build-win.cmd failed' }
+	$short = Invoke-Git rev-parse --short HEAD
+	if ((Get-Content -Raw (Join-Path $repo 'core\version.h')) -notmatch "GIT_HASH\s+""$short""") { throw "core\version.h does not name HEAD ($short)" }
+	& $cmd /c (Join-Path $PSScriptRoot 'build-quest.cmd')
+	if ($LASTEXITCODE -ne 0) { throw 'build-quest.cmd failed' }
 }
 New-Item -ItemType Directory -Force $dist | Out-Null
 $apkOut = Join-Path $dist 'vr-light-gun-hub-quest.apk'
@@ -116,6 +166,20 @@ if ($digests -contains $debugDigest) {
 		exit 1
 	}
 	Write-Host 'Signed with the public debug key: a test build, do not publish it.' -ForegroundColor Yellow
+}
+# built from HEAD: the APK's versionName, its libflycast.so and flycast.exe
+if (-not $AllowDebugKey) {
+	$built = if ($badging -match "versionName='[^']*-g([0-9a-f]+)'") { $Matches[1] } else { $null }
+	$at = if ($built) { Invoke-Git rev-parse --verify --quiet "$built^{commit}" } else { $null }
+	if (-not $built -or -not $head -or $at -ne $head) {
+		Write-Host ("The APK was built from $(if ($built) { "commit $built" } else { 'no commit its versionName names' }), " +
+			"not HEAD ($head): build it again (without -SkipBuild).") -ForegroundColor Red
+		exit 1
+	}
+	if (-not (Test-NamesCommit 'libflycast.so in the APK' (Read-ZipEntry $apk 'lib/arm64-v8a/libflycast.so') $built) -or
+		-not (Test-NamesCommit 'build-win\flycast.exe' ([IO.File]::ReadAllBytes((Join-Path $repo 'build-win\flycast.exe'))) $built)) {
+		exit 1
+	}
 }
 Copy-Item $apk $apkOut
 

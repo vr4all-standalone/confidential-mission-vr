@@ -437,7 +437,9 @@ The older scripts look for your game in a `game` folder next to the repository, 
 
 Open an [issue](../../issues) here (not on mikermak's project): the form asks for the build
 (Quest app or PC VR), the release, the headset (and the PC VR runtime), the game and its
-version, and a log, which is what it takes to find out what's wrong. PC VR writes `flycast.log`
+version, and a log, which is what it takes to find out what's wrong. On the Quest, with the
+headset connected to a PC by USB, `adb logcat -d -s flycast:*` (adb comes with Android's
+platform-tools) prints the app's log, right after the problem. PC VR writes `flycast.log`
 next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or link game files.
 
 ## Credits and licences

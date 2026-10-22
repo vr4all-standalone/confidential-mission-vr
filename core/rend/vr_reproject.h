@@ -94,8 +94,8 @@ GameCamera gameCamera(const rend_context& ctx);
 // pistol, the hero's staff), or nullptr when its profile has none.
 const hands::Source *gameModelSource();
 
-// The game asks for player 2 in its corner ("PRESS START BUTTON"): player 2 isn't playing.
-// Seen in the last second, across its blinks (when the game's profile knows the picture).
+// The game asks for player 2 in its corner (its start prompt): player 2 isn't playing.
+// Seen in the last half second (when the game's profile knows the picture).
 bool player2Prompting();
 // Metres per game unit: vr.WorldScale, times the game profile's unit size next to HOTD2's.
 float worldScale();
