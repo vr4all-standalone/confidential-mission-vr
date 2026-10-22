@@ -93,12 +93,7 @@ tell me how it goes.
    was. For the NAOMI games, put `naomi.zip` next to `flycast.exe` or in the `data` folder next
    to it, or have the BIOS inside the game's zip.
 
-Controllers: Quest Touch as on the Quest. Valve Index: A is Start (the left A lets player 2
-join), B the gun's B, the left thumbstick click recenters, the right one turns the laser off
-or on. Vive wands and Windows Mixed Reality: the menu button is Start (the left one lets player
-2 join), a click on the pad the gun's B; the pad or stick is the D-pad (Windows Mixed Reality:
-the thumbstick clicks as on the Index, Vive wands: the runtime's own recenter). With
-`vr.DualWield = no` the left Start is player 1's. The first start of The House of the Dead 2 or
+Controllers: see [Controls](#controls). The first start of The House of the Dead 2 or
 The Maze of the Kings makes the hands or the staff, as on the Quest. Settings: `emu.cfg` next to
 `flycast.exe` (`vr.Xr = yes` turns VR on; without a headset the game plays in the window).
 
@@ -107,34 +102,50 @@ adjust from there.
 
 ## Controls
 
-| | Left controller | Right controller |
-|---|---|---|
-| Shoot | trigger | trigger |
-| Reload | shoot away from the view (past the grey ring), or rack the slide (below); with two guns: point the gun at the floor | the same |
-| Skip a story scene, back in menus (the gun's B) | Y | B |
-| Start, pause | | A |
-| Player 2 joins: a gun in each hand | menu button ≡ | |
-| Menus (the gun's D-pad) | thumbstick | thumbstick |
-| Recenter | X or thumbstick click | |
-| Laser off/on (kept) | | thumbstick click |
-| World size (kept) | squeeze grip (thumbstick at rest), then thumbstick up/down | the same |
-| Gun size (kept) | squeeze grip (thumbstick at rest), then thumbstick left/right | the same |
-| Rack the slide (the agent's pistol) | grip, near the back of the pistol, and pull | the same |
+Quest Touch:
 
-The gun goes to the hand you last fired with; B and Y both work, whichever hand holds it.
-In Confidential Mission, B (Y) is the cabinet's second button, which reloads there.
+| Button | Does |
+|---|---|
+| A | Start, player 1 |
+| B | reload, player 1 |
+| X | Start, player 2 (player 2 joins: a gun in each hand) |
+| Y | reload, player 2 |
+| ≡ (left menu button) | opens or closes the settings menu |
+| left thumbstick click | recenter |
+| right thumbstick click | laser off/on (kept) |
+| trigger | shoot |
+| grip + thumbstick up/down | world size (kept) |
+| thumbstick | the game's D-pad (menus) |
 
-**Two guns.** Press ≡ on the left controller and player 2 joins, as at the cabinet: the
-right hand holds player 1's gun (red aim), the left player 2's (blue aim), both lives and
-scores on screen. With no hand free for the slide, point a gun at the floor to reload it
-(or shoot past the view). When player 2 is out of the game (the game asks for player 2's
-Start again), it's one gun again. `vr.DualWield = no` makes ≡ player 1's Start as before.
+Reload by shooting away from the game's view (past the grey ring), as before; with two guns,
+pointing a gun at the floor reloads it too. B and Y are the cabinet's second button, the game's
+own reload: with one gun either reloads it, with two guns B reloads the right one and Y the
+left one. Grip + thumbstick left/right sizes the gun (kept). The gun goes to the hand you last
+fired with.
 
-With the agent's pistol, bring the other hand to the back of the pistol, over the gun
-hand, squeeze its grip and pull towards you: the hand takes the slide, and all the way back
-it reloads (a knock in both hands). Let go and it springs home.
+**Two guns.** Press X and player 2 joins, as at the cabinet: the right hand holds player 1's
+gun (red aim), the left player 2's (blue aim), both lives and scores on screen. When player 2
+is out of the game (the game asks for player 2's Start again), it's one gun again. X only
+joins while the game takes player 2; at other times it does nothing. `vr.DualWield = no` turns
+joining off.
+
 Holding the Meta button recenters too.
 Quit with the Meta button, then *Quit*.
+
+**PC VR controllers.** Quest Touch (Link, Virtual Desktop) as above. The others:
+
+| | Valve Index | Vive wands | Windows Mixed Reality |
+|---|---|---|---|
+| Start (right: player 1, left: player 2) | A | menu button | menu button |
+| Reload (right: player 1, left: player 2) | B | trackpad click | trackpad click |
+| Settings menu | squeeze the left trackpad hard | hold the left menu button (0.8 s) | hold the left menu button (0.8 s) |
+| Recenter | left thumbstick click | the runtime's own | left thumbstick click |
+| Laser off/on | right thumbstick click | none | right thumbstick click |
+| The game's D-pad (menus) | thumbstick | trackpad | thumbstick |
+| World size | grip + thumbstick up/down | grip + trackpad up/down | grip + thumbstick up/down |
+
+Where the settings menu is a hold, a shorter press of the left menu button is player 2's Start
+when you let go.
 
 ## The House of the Dead 2
 

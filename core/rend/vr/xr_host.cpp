@@ -98,7 +98,7 @@ XrPath handPaths[2];
 XrSpace aimSpaces[2];
 XrSpace gripSpaces[2];		// the hand on the handle (grip pose): where the gun's grip goes
 XrActionSet actionSet = XR_NULL_HANDLE;
-XrAction aimAction, handAction, triggerAction, startAction, skipAction, recenterAction, laserAction, hapticAction, stickAction, gripAction;
+XrAction aimAction, handAction, triggerAction, startAction, skipAction, menuAction, recenterAction, laserAction, hapticAction, stickAction, gripAction;
 PFN_xrRequestDisplayRefreshRateFB requestRefreshRate;
 PFN_xrPerfSettingsSetPerformanceLevelEXT setPerformanceLevel;
 
@@ -158,8 +158,17 @@ struct Gun
 Gun guns[2] { { 0 }, { 1, Left } };
 bool dualWield;
 XrTime dualSince;
-bool leftStartWas, recenterWas, laserWas;
-bool ringDumpRequested;		// X held: the frame ring (debug aid) is to be written
+bool leftStartWas, recenterWas, laserWas, menuWas;
+bool ringDumpRequested;		// the left stick click held: the frame ring (debug aid) is to be written
+// The controllers on each hand as the runtime last named them (an interaction profile path;
+// empty: none, or not known yet).
+std::string profiles[2];
+// Controllers with no button to spare for the settings menu (menuByHold): since when the
+// left Start is held (0: it isn't), whether this hold already opened the menu, and until when
+// a short press, let go, is the left Start.
+XrTime leftHoldSince;
+bool leftHoldMenu;
+XrTime leftTapUntil;
 // A game (re)started: one gun again (EventManager calls on the emulator's thread).
 std::atomic<bool> newGame;
 struct NewGameRegistration
@@ -277,20 +286,21 @@ bool initActions()
 			|| !createAction(handAction, "hand", "Hand (holds the gun)", XR_ACTION_TYPE_POSE_INPUT, true)
 			|| !createAction(triggerAction, "trigger", "Fire", XR_ACTION_TYPE_FLOAT_INPUT, true)
 			|| !createAction(startAction, "start", "Start (left: player 2 joins)", XR_ACTION_TYPE_BOOLEAN_INPUT, true)
-			|| !createAction(skipAction, "skip", "Skip, back (the gun's B)", XR_ACTION_TYPE_BOOLEAN_INPUT, true)
+			|| !createAction(skipAction, "skip", "Reload (the gun's B)", XR_ACTION_TYPE_BOOLEAN_INPUT, true)
+			|| !createAction(menuAction, "menu", "Settings menu", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(recenterAction, "recenter", "Recenter", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(laserAction, "laser", "Laser on/off", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(hapticAction, "recoil", "Recoil", XR_ACTION_TYPE_VIBRATION_OUTPUT, true)
 			|| !createAction(stickAction, "stick", "Menus (D-pad), world size", XR_ACTION_TYPE_VECTOR2F_INPUT)
 			|| !createAction(gripAction, "grip", "Rack the slide; hold for world size", XR_ACTION_TYPE_FLOAT_INPUT, true))
 		return false;
-	// Either trigger fires; shooting away from the screen reloads. Start (pauses): A. The
-	// menu button on the left lets player 2 join (vr.DualWield), else it is player 1's Start
-	// too. The gun's B (skips a story scene, backs out of menus): B or Y, under the thumb of
-	// whichever hand holds the gun (with two guns: each its player's). Recenter: X, or the left
-	// thumbstick click. The right thumbstick click turns the laser off or on (kept).
-	// Thumbstick: the gun's D-pad (menus); with a grip held, up/down sizes the world. The
-	// other hand's grip racks the game pistol's slide.
+	// Either trigger fires; shooting away from the screen reloads. A: player 1's Start. X: the
+	// left Start, which lets player 2 join (vr.DualWield) and is then player 2's Start. B and Y:
+	// the gun's B (the cabinet's second button, Confidential Mission's reload), B player 1's,
+	// Y player 2's once player 2 is in (before that, either is player 1's). The menu button on
+	// the left: the settings menu. The left thumbstick click recenters (held: the frame ring),
+	// the right one turns the laser off or on (kept). Thumbstick: the gun's D-pad (menus); with
+	// a grip held, up/down sizes the world. The other hand's grip racks the game pistol's slide.
 	auto suggest = [](const char *profile, std::initializer_list<std::pair<XrAction, const char *>> list) {
 		std::vector<XrActionSuggestedBinding> bindings;
 		for (const auto& [action, where] : list)
@@ -313,10 +323,10 @@ bool initActions()
 		{ triggerAction, "/user/hand/left/input/trigger/value" },
 		{ triggerAction, "/user/hand/right/input/trigger/value" },
 		{ startAction, "/user/hand/right/input/a/click" },
-		{ startAction, "/user/hand/left/input/menu/click" },
+		{ startAction, "/user/hand/left/input/x/click" },
 		{ skipAction, "/user/hand/right/input/b/click" },
 		{ skipAction, "/user/hand/left/input/y/click" },
-		{ recenterAction, "/user/hand/left/input/x/click" },
+		{ menuAction, "/user/hand/left/input/menu/click" },
 		{ recenterAction, "/user/hand/left/input/thumbstick/click" },
 		{ laserAction, "/user/hand/right/input/thumbstick/click" },
 		{ hapticAction, "/user/hand/left/output/haptic" },
@@ -324,10 +334,12 @@ bool initActions()
 	});
 #ifndef __ANDROID__
 	// PCVR: the other controllers, as near as they come: a Start on each hand (the left one
-	// lets player 2 join) and the gun's B. Index: A and B, recenter with the left stick click,
-	// the laser with the right one. Vive wands and Windows Mixed Reality: the menu button is
-	// Start, a click on the pad the gun's B; the pad or stick is the D-pad (Windows Mixed
-	// Reality: the stick clicks as on the Index).
+	// lets player 2 join), the gun's B (reload) on each, and a settings menu. Index: A and B;
+	// the menu a hard squeeze of the left pad (its menu button is the system's); recenter with
+	// the left stick click, the laser with the right one. Vive wands and Windows Mixed Reality:
+	// the menu button is Start, and the left one held 0.8 s the settings menu (menuByHold); a
+	// click on the pad is the gun's B; the pad or stick is the D-pad (Windows Mixed Reality: the
+	// stick clicks as on the Index; Vive wands: the runtime's own recenter, no laser button).
 	any |= suggest("/interaction_profiles/valve/index_controller", {
 		{ stickAction, "/user/hand/left/input/thumbstick" },
 		{ stickAction, "/user/hand/right/input/thumbstick" },
@@ -345,6 +357,7 @@ bool initActions()
 		{ startAction, "/user/hand/left/input/a/click" },
 		{ skipAction, "/user/hand/right/input/b/click" },
 		{ skipAction, "/user/hand/left/input/b/click" },
+		{ menuAction, "/user/hand/left/input/trackpad/force" },
 		{ recenterAction, "/user/hand/left/input/thumbstick/click" },
 		{ laserAction, "/user/hand/right/input/thumbstick/click" },
 		{ hapticAction, "/user/hand/left/output/haptic" },
@@ -659,6 +672,40 @@ bool init()
 	return true;
 }
 
+// The controllers the runtime has on each hand now (their interaction profile), logged when
+// they change: the menu's hold rule (menuByHold) goes by them, and controllerProfile() gives them.
+void readProfiles()
+{
+	std::string now[2];
+	for (int hand : { Left, Right })
+	{
+		XrInteractionProfileState state { XR_TYPE_INTERACTION_PROFILE_STATE };
+		char name[XR_MAX_PATH_LENGTH] = "";
+		u32 length = 0;
+		if (XR_SUCCEEDED(XR(xrGetCurrentInteractionProfile)(session, handPaths[hand], &state))
+				&& state.interactionProfile != XR_NULL_PATH
+				&& XR_SUCCEEDED(XR(xrPathToString)(instance, state.interactionProfile, sizeof(name), &length, name)))
+			now[hand] = name;
+	}
+	if (now[Left] == profiles[Left] && now[Right] == profiles[Right])
+		return;
+	profiles[Left] = now[Left];
+	profiles[Right] = now[Right];
+	auto shown = [](const std::string& p) { return p.empty() ? "none" : p.c_str(); };
+	if (profiles[Left] == profiles[Right])
+		NOTICE_LOG(INPUT, "XR: controllers: %s", shown(profiles[Left]));
+	else
+		NOTICE_LOG(INPUT, "XR: controllers: %s (left), %s (right)", shown(profiles[Left]), shown(profiles[Right]));
+}
+
+// Vive wands and Windows Mixed Reality have no button to spare for the settings menu: their
+// left Start (the menu button) held 0.8 s is the menu.
+bool menuByHold()
+{
+	return profiles[Left] == "/interaction_profiles/htc/vive_controller"
+			|| profiles[Left] == "/interaction_profiles/microsoft/motion_controller";
+}
+
 void pollEvents()
 {
 	XrEventDataBuffer event { XR_TYPE_EVENT_DATA_BUFFER };
@@ -710,6 +757,10 @@ void pollEvents()
 		else if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING)
 		{
 			recenterRequested = true;
+		}
+		else if (event.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED)
+		{
+			readProfiles();
 		}
 		event = { XR_TYPE_EVENT_DATA_BUFFER };
 	}
@@ -1430,6 +1481,8 @@ void updateLightgun(XrTime time)
 				lightgunSet(g.player, OffScreen, OffScreen, 0);
 		for (Gun& g : guns)
 			g.triggerWas = false;
+		leftHoldSince = leftTapUntil = 0;
+		leftHoldMenu = false;
 		return;
 	}
 	const XrActiveActionSet active { actionSet, XR_NULL_PATH };
@@ -1438,6 +1491,33 @@ void updateLightgun(XrTime time)
 	sync.activeActionSets = &active;
 	if (!XR_SUCCEEDED(XR(xrSyncActions)(session, &sync)))
 		return;
+	// The left Start, and the settings menu just asked for (menuEdge). Where the menu is the left
+	// Start held 0.8 s (menuByHold), that hold is the menu, and a shorter press acts as the left
+	// Start once it's let go, held for 150 ms (the game reads its buttons once a frame).
+	bool leftStart = boolAction(startAction, Left);
+	const bool menu = boolAction(menuAction);
+	bool menuEdge = menu && !menuWas;
+	menuWas = menu;
+	if (menuByHold())
+	{
+		if (!leftStart)
+		{
+			if (leftHoldSince != 0 && !leftHoldMenu)
+				leftTapUntil = time + 150'000'000LL;
+			leftHoldSince = 0;
+			leftHoldMenu = false;
+		}
+		else if (leftHoldSince == 0)
+			leftHoldSince = time;
+		else if (!leftHoldMenu && time - leftHoldSince >= 800'000'000LL)
+			leftHoldMenu = menuEdge = true;
+		leftStart = time < leftTapUntil;
+	}
+	else
+	{
+		leftHoldSince = leftTapUntil = 0;
+		leftHoldMenu = false;
+	}
 	if (preparing)
 	{
 		// B (or Y): not now, the arcade gun this time
@@ -1452,11 +1532,19 @@ void updateLightgun(XrTime time)
 		return;
 	}
 
+	// The settings menu: the left menu button (Index: the left pad squeezed hard; Vive wands,
+	// Windows Mixed Reality: the left Start held)
+	if (menuEdge)
+		NOTICE_LOG(INPUT, "XR: menu button");
+	// the left thumbstick click: recenter
 	const bool recenter = boolAction(recenterAction);
 	if (recenter && !recenterWas)
+	{
 		recenterRequested = true;
+		NOTICE_LOG(INPUT, "XR: recenter (button)");
+	}
 	recenterWas = recenter;
-	// X held for 1.5 s: write the frame ring (the debug aid, when it's on), with a tick
+	// ... held for 1.5 s: write the frame ring (the debug aid, when it's on), with a tick
 	{
 		static XrTime heldSince;
 		static bool dumped;
@@ -1495,9 +1583,8 @@ void updateLightgun(XrTime time)
 				&& (locations[hand].locationFlags & valid) == valid;
 		pulls[hand] = tracked[hand] ? floatAction(triggerAction, hand) : 0.f;
 	}
-	const bool leftStart = boolAction(startAction, Left);
 	const bool rightStart = boolAction(startAction, Right);
-	// Joining takes both controllers (with one, the left Start stays player 1's) and a game
+	// Joining takes both controllers (with one, the left Start does nothing) and a game
 	// that shows when player 2 is out again (its profile knows the prompt). Not online:
 	// player 2 is the other player there, and only this side's player 1 is sent (both Start
 	// buttons are then that player's).
@@ -1539,10 +1626,10 @@ void updateLightgun(XrTime time)
 		}
 	}
 
-	// The buttons that aren't the trigger. One gun: either Start is player 1's (unless the
-	// left one lets player 2 join), either B too (the gun's B: HOTD2 skips a story scene and
-	// backs out of menus with it). Two guns: each hand's are its player's. The D-pad (menus)
-	// is player 1's.
+	// The buttons that aren't the trigger. One gun: the right Start is player 1's (the left
+	// one only lets player 2 join, above), either B too (the gun's B, bit 128: the cabinet's
+	// second button, which reloads in Confidential Mission). Two guns: each hand's are its
+	// player's. The D-pad (menus) is player 1's.
 	u32 p1 = dpad, p2 = 0;
 	if (dualWield)
 	{
@@ -1550,7 +1637,7 @@ void updateLightgun(XrTime time)
 		p2 |= (leftStart ? 4 : 0) | (boolAction(skipAction, Left) ? 128 : 0);
 	}
 	else
-		p1 |= (rightStart || (leftStart && !canJoin) ? 4 : 0) | (boolAction(skipAction) ? 128 : 0);
+		p1 |= (rightStart ? 4 : 0) | (boolAction(skipAction) ? 128 : 0);
 
 	updateGun(guns[0], time, locations, tracked, pulls, p1, !dualWield);
 	if (dualWield)
@@ -1752,7 +1839,7 @@ static void ringCapture(GLuint fbo, int width, int height, bool gameFrame)
 	count = std::min(count + 1, Frames);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-	// (polled every 16th frame: a file check a frame adds up; X held asks at once)
+	// (polled every 16th frame: a file check a frame adds up; the left stick click held asks at once)
 	static u32 polls;
 	const std::string request = dir + "/ring.request";
 	const bool asked = ringDumpRequested || (polls++ % 16 == 0 && file_exists(request));
@@ -1898,6 +1985,11 @@ const Eye *currentEye()
 	return drawingEye ? &eye : nullptr;
 }
 
+const char *controllerProfile()
+{
+	return (profiles[Right].empty() ? profiles[Left] : profiles[Right]).c_str();
+}
+
 void term()
 {
 	if (instance != XR_NULL_HANDLE)
@@ -1929,7 +2021,7 @@ void term()
 	session = XR_NULL_HANDLE;
 	localSpace = aimSpaces[Left] = aimSpaces[Right] = gripSpaces[Left] = gripSpaces[Right] = XR_NULL_HANDLE;
 	actionSet = XR_NULL_HANDLE;
-	aimAction = handAction = triggerAction = startAction = skipAction = recenterAction = laserAction = hapticAction = stickAction = gripAction = XR_NULL_HANDLE;
+	aimAction = handAction = triggerAction = startAction = skipAction = menuAction = recenterAction = laserAction = hapticAction = stickAction = gripAction = XR_NULL_HANDLE;
 	requestRefreshRate = nullptr;
 	setPerformanceLevel = nullptr;
 	sessionRunning = focused = drawingEye = viewsLogged = false;
@@ -1937,7 +2029,11 @@ void term()
 	originSet = recenterRequested = false;
 	guns[0] = Gun { 0 };
 	guns[1] = Gun { 1, Left };
-	dualWield = leftStartWas = recenterWas = laserWas = false;
+	dualWield = leftStartWas = recenterWas = laserWas = menuWas = false;
+	profiles[Left].clear();
+	profiles[Right].clear();
+	leftHoldSince = leftTapUntil = 0;
+	leftHoldMenu = false;
 	initTried = false;
 }
 

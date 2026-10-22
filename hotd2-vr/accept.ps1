@@ -12,7 +12,8 @@
   MK-51002) and Python with numpy. Prints PASS <name> / FAIL <name>: <reason>; exit 1 when any
   fails. Runs land in build-win\vrtest\accept-<run>\; Confidential Mission's scenarios share
   six runs (accept-cm-tour, -off, -edges, -hall, -floor, -floor0), each played once per call;
-  cm-sim plays its own (accept-cm-sim) through the OpenXR simulator.
+  cm-sim and cm-buttons play their own (accept-cm-sim, accept-cm-buttons) through the OpenXR
+  simulator, cm-buttons-pc two more (accept-cm-buttons-index, -vive) with the PC controllers.
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
 $ErrorActionPreference = 'Stop'
@@ -211,9 +212,14 @@ function Test-RunShots([string]$name, [string[]]$files) {
 	return $(if ($missing) { "no window shot $($missing -join ', ') in $name" } else { $null })
 }
 
+# How many lines of a run's log match a regex (case-sensitive).
+function Get-LogCount([string]$run, [string]$regex) {
+	return @(Select-String -LiteralPath (Get-RunLog $run) -Pattern $regex -CaseSensitive).Count
+}
+
 # Lines matching a regex in a run's log, at most $max: $null when so.
 function Test-LogCount([string]$name, [string]$re, [int]$max) {
-	$n = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern $re -CaseSensitive).Count
+	$n = Get-LogCount $name $re
 	Write-Host "  $n lines '$re' in $name (at most $max)"
 	return $(if ($n -gt $max) { "$n lines '$re' in $name, over $max" } else { $null })
 }
@@ -376,8 +382,45 @@ function Test-CmSim {
 	return $null
 }
 
+# The 1.1 button layout (Quest Touch) through the simulator, widened: A is player 1's Start
+# (the starts), B player 1's B (the cabinet's second button: CM's own reload) at 56 s, X lets
+# player 2 join at 60 s (stage 1's first room), Y is then player 2's B, the left menu button
+# (the settings menu, for now its log line), the left stick click recenters, the right one
+# turns the laser off (on by default). The controllers' profile is logged when the runtime
+# names it.
+function Test-CmButtons {
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-buttons'; Seconds = 72; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + '56=xr right/b 1 200', '60=xr left/x 1 200', '62=xr left/y 1 200', '64=xr left/menu 1 200',
+			'66=xr left/thumbstick 1 200', '68=xr right/thumbstick 1 200'
+		Expect = 'Light gun P1 at .*start 1', 'Light gun P1 at .* B 1', 'XR: player 2 joins: a gun in each hand',
+			'Light gun P2 at .* B 1', 'XR: menu button', 'XR: recenter \(button\)', 'XR: laser off',
+			'XR: controllers: /interaction_profiles/oculus/touch_controller'
+		Reject = 'XR: initialisation failed' }
+}
+
+# The PC controllers' settings menu, in attract (no starts). Index: the left pad squeezed hard
+# (trackpad/force) is the menu button, once. Vive wands (and Windows Mixed Reality): the left
+# menu button is Start; held 0.8 s it is the menu instead. A short press (33 s) acts as the left
+# Start when let go (player 2 joins), a 1.2 s hold (36 s) opens the menu: one menu line.
+function Test-CmButtonsPc {
+	foreach ($pc in @(
+			@{ Name = 'accept-cm-buttons-index'; Profile = 'valve/index_controller'; At = @('35=xr left/trackpad/force 1 300'); Expect = @() },
+			@{ Name = 'accept-cm-buttons-vive'; Profile = 'htc/vive_controller'; At = @('33=xr left/menu 1 200', '36=xr left/menu 1 1200')
+				Expect = @('XR: player 2 joins: a gun in each hand') })) {
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $pc.Name; Seconds = 40; XrSim = $true
+			Config = "$cmWiden,config:vr.XrSimProfile=$($pc.Profile)"; At = $pc.At
+			Expect = @("XR: controllers: /interaction_profiles/$($pc.Profile)") + $pc.Expect; Reject = 'XR: initialisation failed' }
+		if ($why) { return "$($pc.Profile): $why" }
+		$n = Get-LogCount $pc.Name 'XR: menu button'
+		Write-Host "  $n lines 'XR: menu button' in $($pc.Name) (want 1)"
+		if ($n -ne 1) { return "$($pc.Profile): $n lines 'XR: menu button', want 1" }
+	}
+	return $null
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
-	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim' }
+	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
+	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }
 $failed = 0

@@ -12,3 +12,7 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 ## Task 1
 
 - [ ] PC VR (Link/SteamVR) still uses the real runtime: the log says `XR: runtime <name>`, never `XRSIM`.
+
+## Task 2
+
+- [ ] Each Quest button does what the README table says (A, B, X, Y, the left menu button, both thumbstick clicks, trigger, grip + thumbstick); B's reload sounds like the game's own.

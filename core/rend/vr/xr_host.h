@@ -34,11 +34,16 @@ const Eye *currentEye();
 // The render context is going away (app in the background, renderer restart): drop the
 // session bound to it. The next frame() starts a new one on the new context.
 void term();
+// The controllers in use: the runtime's interaction profile for the right hand (the left's
+// when the right has none), e.g. "/interaction_profiles/oculus/touch_controller"; "" before
+// the runtime names one.
+const char *controllerProfile();
 #else
 inline bool enabled() { return false; }
 inline bool frame() { return false; }
 inline const Eye *currentEye() { return nullptr; }
 inline void term() {}
+inline const char *controllerProfile() { return ""; }
 #endif
 
 }
