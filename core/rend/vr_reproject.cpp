@@ -362,16 +362,17 @@ static std::vector<GameProfile> makeProfiles()
 	// keeps 1/focal = tan(A/2)/320 at 0x0C154ED0 (the stock view: the game's own screen checks
 	// project with it, as at 0x8C02AE0A). Two more copies of that code (0x8C05ACC0, literal
 	// 0x8C05AEC0; 0x8C05D068, literal 0x8C05D260, half the angle, for the builder 0x8C098A40)
-	// were not seen running. Those literals are made 116736.0 (high half 4780 -> 47E8): the
+	// were not seen running. Those literals are made 118784.0 (high half 4780 -> 47E8): the
 	// angle 1.8125 times as wide, stage 1's 61 degrees across (48 high) 111 (95 high). The
 	// cutscene cameras (0x8C041D4E, 0x8C049B24's) build theirs from a lens angle instead, as
 	// 2 atan(32 tan(L/2) / 18): both 32.0 literals (0x8C041EB8, 0x8C049BDC) are made 64.0 (high
 	// half 4200 -> 4280), the tangent twice as wide, the intro's 70 degrees across (55 high)
-	// 109 (92 high); there they also widen 0x0C154EC8 and 0x0C154ED0. The builder makes the projection, frustum planes and screen matrices from
-	// the angle, so the game draws and culls the wider view, while 0x0C154ED0 stays stock. The
-	// code reading three of the literals (unchanged) makes sure the patch lands only on it.
+	// 109 (92 high); there they also widen 0x0C154EC8 and 0x0C154ED0. The builder makes the
+	// projection, frustum planes and screen matrices from the angle, so the game draws and
+	// culls the wider view, while 0x0C154ED0 stays stock in play. The code reading three of
+	// the literals (unchanged) makes sure the patch lands only on it.
 	p.fovScale = 2.f;	// (only says "widen": the patch's own factors are fixed)
-	p.fovPatch[0] = { 0x0274B6, 0x4780, 0x47E8 };	// high half of the float 65536.0 -> 116736.0
+	p.fovPatch[0] = { 0x0274B6, 0x4780, 0x47E8 };	// high half of the float 65536.0 -> 118784.0
 	p.fovPatch[1] = { 0x05AEC2, 0x4780, 0x47E8 };	// the same, the second copy's
 	p.fovPatch[2] = { 0x05D262, 0x4780, 0x47E8 };	// the same, the third copy's
 	p.fovPatch[3] = { 0x041EBA, 0x4200, 0x4280 };	// high half of the float 32.0 -> 64.0
