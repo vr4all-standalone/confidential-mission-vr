@@ -220,6 +220,10 @@ struct GameProfile
 	// see dropShotMarker.
 	u32 markerTextures[4] {};
 	float markerMinW = 0.85f, markerMaxW = 1.15f;
+	// Its marker and hit effects are drawn where its widened view puts the shot, not at the
+	// gun: its hit test keeps the stock view (stockFocalAddr) while it draws the wider one.
+	// See shotDrawnAt.
+	bool markerWidened = false;
 	// Player 2's prompt pictures and where they are: see hidePlayer2Prompt.
 	u32 p2PromptTextures[4] {};
 	ScreenBox p2PromptBox { 352.f, 384.f, 640.f, 480.f };
@@ -418,6 +422,24 @@ static std::vector<GameProfile> makeProfiles()
 	p.sightTextures[0] = 0x400000;
 	p.sightMinW = 0.95f;
 	p.sightMaxW = 1.005f;
+	// The gun calibration: 6 bytes per player at 0x0C15A9C0 and 0x0C15A9C6 (the centre's x and
+	// y, the right and left edges', then the y edges'; factory 128, 128, 248, 8, 8, 248),
+	// which the game copies into each player's gun state (0x0C155844, 0x0C155958) at a game's
+	// start and turns into the scales 312/(right-centre), 312/(centre-left), 232/(centre-y2),
+	// 232/(y1-centre). Its adjustment screen moves the centre to an on-target shot. Kept at
+	// 128, 128, 251, 1, 2, 250, the game's aim is where the gun points.
+	const u16 gunCalibration[3] { 0x8080, 0x01fb, 0xfa02 };
+	for (int player = 0; player < 2; player++)
+		for (int k = 0; k < 3; k++)
+			p.pokes[player * 3 + k] = { (u32)(0x15A9C0 + player * 6 + k * 2), gunCalibration[k] };
+	// Its marker and impacts are drawn where its widened view puts the shot (its hit test
+	// keeps the stock focal, 0x0C154ED0).
+	p.markerWidened = true;
+	// Its shot marker: a burst of 12 triangles, tex 5e8000 (and 5e7800, the census's other
+	// marker texture at W 1.000), flat at W 1.000: inside the generic 0.85-1.15 band, so no
+	// markerMinW/MaxW.
+	p.markerTextures[0] = 0x5e8000;
+	p.markerTextures[1] = 0x5e7800;
 	// Its logo, advisory and game-over screens: layers up to W 100 without 3D.
 	p.flatScreens = true;
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
@@ -607,6 +629,19 @@ static float stockFocal()
 			return f;
 	}
 	return config::VrFocal;
+}
+
+// Where the game draws a shot's hit (its marker, sparks on a wall), in framebuffer pixels: at
+// the gun; or, with the profile's markerWidened and its view widened, where that view puts
+// the ray the hit test cast with the stock focal: the centre plus the gun's offset times the
+// live over the stock focal.
+static glm::vec2 shotDrawnAt(glm::vec2 gun, int fbWidth, int fbHeight)
+{
+	const GameProfile *prof = activeProfile;
+	if (prof == nullptr || !prof->markerWidened || !widensByCode() || config::VrFovScale <= 1.f)
+		return gun;
+	const glm::vec2 centre(fbWidth * 0.5f, fbHeight * 0.5f);
+	return centre + (gun - centre) * readGameFocal() / stockFocal();
 }
 
 GameCamera gameCamera(const rend_context& ctx)
@@ -1274,6 +1309,7 @@ static void logShotTextures(const rend_context& ctx, const RenderPass& pass, con
 	}
 	const int64_t since = steadyMs() - at;
 	const bool window = since >= 0 && since <= 500;
+	const glm::vec2 drawn = shotDrawnAt(gun, fbWidth, fbHeight);
 	if (window && snapFor != at)
 	{
 		snapFor = at;
@@ -1305,9 +1341,9 @@ static void logShotTextures(const rend_context& ctx, const RenderPass& pass, con
 					wMax = std::max(wMax, w);
 				}
 				const u8 *c = ctx.verts[pp.first].col;
-				NOTICE_LOG(RENDERER, "VR new after shot +%d ms gun %.0f,%.0f: %s %u tex %06x tsp %08x isp %08x tcw %08x, %u verts at %.0f,%.0f..%.0f,%.0f (centre %.0f px from the gun) W %.2f..%.2f col %02x%02x%02x%02x",
+				NOTICE_LOG(RENDERER, "VR new after shot +%d ms gun %.0f,%.0f: %s %u tex %06x tsp %08x isp %08x tcw %08x, %u verts at %.0f,%.0f..%.0f,%.0f (centre %.0f px from the gun) W %.2f..%.2f col %02x%02x%02x%02x, shot drawn at %.0f,%.0f",
 						(int)since, gun.x, gun.y, name, n, tex, pp.tsp.full, pp.isp.full, pp.tcw.full, pp.count, lo.x, lo.y, hi.x, hi.y,
-						glm::distance((lo + hi) * 0.5f, gun), wMin, wMax, c[0], c[1], c[2], c[3]);
+						glm::distance((lo + hi) * 0.5f, gun), wMin, wMax, c[0], c[1], c[2], c[3], drawn.x, drawn.y);
 			}
 			lastSeen[tex] = parse;
 		}
@@ -1684,7 +1720,8 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 	}
 
 	// the recent shots, in DC framebuffer pixels
-	struct Recent { glm::vec2 gun; int64_t since, at; bool into3D; };
+	// (hit: where the game draws its marker, shotDrawnAt)
+	struct Recent { glm::vec2 gun, hit; int64_t since, at; bool into3D; };
 	Recent recent[std::size(gunShots)];
 	u32 count = 0;
 	const int64_t now = steadyMs();
@@ -1695,8 +1732,8 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 		const bool into3D = s.into3D;
 		if (s.ms != at || now - at < 0 || now - at > MarkerMs)
 			continue;
-		recent[count++] = { glm::vec2((packed & 0xffff) * fbWidth / 640.f, (packed >> 16) * fbHeight / 480.f),
-				now - at, at, into3D };
+		const glm::vec2 gun((packed & 0xffff) * fbWidth / 640.f, (packed >> 16) * fbHeight / 480.f);
+		recent[count++] = { gun, shotDrawnAt(gun, fbWidth, fbHeight), now - at, at, into3D };
 	}
 	if (onPC)
 		logShotTextures(ctx, pass, previousPass, fbWidth, fbHeight);
@@ -1721,9 +1758,9 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 	if (diag && pass.op_count > 0 && !ctx.global_param_op.empty() && ctx.global_param_op[0].first < ctx.verts.size())
 	{
 		const u8 *bg = ctx.verts[ctx.global_param_op[0].first].col;
-		NOTICE_LOG(RENDERER, "VR diag: shot +%d ms gun %.0f,%.0f%s, fb %dx%d, polygons op %u pt %u tr %u, background %02x%02x%02x%02x",
+		NOTICE_LOG(RENDERER, "VR diag: shot +%d ms gun %.0f,%.0f%s, fb %dx%d, polygons op %u pt %u tr %u, background %02x%02x%02x%02x, focal %.1f stock %.1f",
 				(int)latest->since, latest->gun.x, latest->gun.y, latest->into3D ? "" : " (2D)", fbWidth, fbHeight,
-				pass.op_count, pass.pt_count, pass.tr_count, bg[0], bg[1], bg[2], bg[3]);
+				pass.op_count, pass.pt_count, pass.tr_count, bg[0], bg[1], bg[2], bg[3], readGameFocal().x, stockFocal());
 	}
 	if (!dropMarkers && !dropFlash && !diag)
 		return;
@@ -1772,22 +1809,23 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 			// the nearest recent shot, for the log
 			const Recent *near = &recent[0];
 			for (u32 k = 1; k < count; k++)
-				if (glm::distance(centre, recent[k].gun) < glm::distance(centre, near->gun))
+				if (glm::distance(centre, recent[k].hit) < glm::distance(centre, near->hit))
 					near = &recent[k];
 			const float offset = glm::distance(centre, near->gun);
 			bool hide = false;
 			for (u32 k = 0; k < count; k++)
 			{
 				const Recent& r = recent[k];
-				hide = hide || (markerLike && dropMarkers && r.into3D && glm::distance(centre, r.gun) <= MarkerMaxOffset);
+				hide = hide || (markerLike && dropMarkers && r.into3D && glm::distance(centre, r.hit) <= MarkerMaxOffset);
 				hide = hide || (all2D && dropFlash && fullScreen && bright && r.since <= FlashMs);
 			}
 			const bool big = size.x >= fbWidth * 0.5f && size.y >= fbHeight * 0.5f && size.x < fbWidth * 4.f && size.y < fbHeight * 4.f;
-			if (diag && (((all2D || markerLike) && offset <= MarkerMaxOffset) || (big && (all2D || bright))))
-				NOTICE_LOG(RENDERER, "VR: shot +%d ms gun %.0f,%.0f%s: %s %u (%u verts) %.0fx%.0f, %.0f px off, W %.3f..%.3f%s, tex %06x tsp %08x col %02x%02x%02x%02x%s",
+			if (diag && (((all2D || markerLike) && glm::distance(centre, near->hit) <= MarkerMaxOffset) || (big && (all2D || bright))))
+				NOTICE_LOG(RENDERER, "VR: shot +%d ms gun %.0f,%.0f%s: %s %u (%u verts) %.0fx%.0f, %.0f px off, W %.3f..%.3f%s, tex %06x tsp %08x col %02x%02x%02x%02x%s, at %.0f,%.0f..%.0f,%.0f, shot drawn at %.0f,%.0f",
 						(int)near->since, near->gun.x, near->gun.y, near->into3D ? "" : " (2D)", name, n, pp.count,
 						size.x, size.y, offset, wMin, wMax, all2D ? " all-2D" : "",
-						(unsigned)(pp.tcw.TexAddr << 3), pp.tsp.full, c[0], c[1], c[2], c[3], hide ? " DROPPED" : "");
+						(unsigned)(pp.tcw.TexAddr << 3), pp.tsp.full, c[0], c[1], c[2], c[3], hide ? " DROPPED" : "",
+						lo.x, lo.y, hi.x, hi.y, near->hit.x, near->hit.y);
 			if (!hide)
 				continue;
 			hideVertices(ctx, pp);
