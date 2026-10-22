@@ -164,6 +164,37 @@ function Get-CmHallRoute {
 	'59.6=aim 1 5000 5000', '60=start 1', '140=start 1'
 }
 
+# Task 4's rifle hunt route (t4-h3, the furthest of its runs; no rifle picked up on it, see
+# confmiss-findings.md ## Rifle): widened ($cmWiden), the 9 points from 52.5 s, then a sweep
+# every 0.3 s to $seconds - 1 with a reload every 6th and Start every 4 s from 60.7 s: 17
+# columns 500 apart (x 800-9200; a far guard is ~470 units wide widened) on rows cycling over
+# y 4000, 5500, 7000, 2500, 8500, a row running right to left when its index mod 4 is 1 or 2.
+# It clears the first rooms, the corridor and the gallery and reaches a timed target sequence
+# (312-356 s, 2 of 2 runs: t4-h3, t4-r1), then a green-lit corridor. Key it with -On
+# (Get-CmRifleKeys) and $cmRifleWatch.
+$cmRifleWatch = 'config:vr.WatchRam=0c155800:4,0c155804,0c155808,0c155818:2,0c15581c'
+$cmRiflePickup = 'VR: ram 0c15580[4-9] .* -> 2d'
+function Get-CmRifleRoute([double]$seconds = 400) {
+	Get-CmStarts
+	Get-CmTable 52.5 0.75
+	$cols = @(for ($x = 800; $x -le 9200; $x += 500) { $x })
+	$sweep = @(for ($k = 0; $k -lt 10; $k++) {
+		$y = @(4000, 5500, 7000, 2500, 8500)[$k % 5]
+		$row = $(if ($k % 4 -eq 1 -or $k % 4 -eq 2) { $cols[($cols.Count - 1)..0] } else { $cols })
+		foreach ($x in $row) { , @($x, $y) }
+	})
+	$n = 0
+	for ($t = 60.0; $t -lt $seconds - 1; $t += 0.3) {
+		$p = $sweep[$n % $sweep.Count]
+		(T $t) + "=fire 0 $($p[0]) $($p[1])"
+		$n++
+		if ($n % 6 -eq 0) { (T ($t + 0.15)) + '=reload 0' }
+	}
+	for ($t = 60.7; $t -lt $seconds - 1; $t += 4) { (T $t) + '=start 0' }
+}
+# the pickup (ammo or magazine to 45): a window shot, then the trigger held 3 s (fire rate)
+function Get-CmRifleKeys { "$cmRiflePickup|0|shot pickup|3", "$cmRiflePickup|0.2|mute 5", "$cmRiflePickup|0.3|aim 0 5000 5000", "$cmRiflePickup|0.4|button 0 1 3000" }
+
 # The shared runs (vr-test.ps1 parameters, no checks: each scenario checks its own lines).
 $cmRunDefs = [ordered]@{
 	# boot to the attract's 3D: Start to 52 s, then nothing (t3-stage1d, t5-gate2's timeline),
