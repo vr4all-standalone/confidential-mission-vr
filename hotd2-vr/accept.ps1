@@ -351,7 +351,8 @@ function Test-CmFloor {
 # The OpenXR simulator (vr.XrSim, vr-test.ps1 -XrSim): the headset path on the PC, widened. A
 # game started with the right controller's A; the left eye in the window: no shot mostly black,
 # the game moving (55 -> 58 s, stage 1's first room), the view turning with the head (yaw 30
-# degrees at 58.5 s, back at 61 s).
+# degrees at 58.5 s, back at 61 s): b -> c (the turn, measured ~21) well beyond b -> d (the
+# same pose 4 s on: the scene by itself, measured ~5).
 function Test-CmSim {
 	$name = 'accept-cm-sim'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWiden
@@ -366,7 +367,9 @@ function Test-CmSim {
 	$a, $b, $c, $d = @($shots | ForEach-Object { Join-Path $repo "build-win\vrtest\$name\$_" })
 	$why = Invoke-VrCheck 'blank', $a, $b, $c, $d, '--region', 'full', '--max', '0.5'
 	if ($why) { return "a shot mostly black: $why" }
-	$why = Invoke-VrCheck 'differ', $b, $c
+	$why = Invoke-VrCheck 'same', $b, $d, '--max-diff', '8'
+	if ($why) { return "the scene moved too much for the head-turn check: $why" }
+	$why = Invoke-VrCheck 'differ', $b, $c, '--min-diff', '12'
 	if ($why) { return "the head turned, the view did not: $why" }
 	$why = Invoke-VrCheck 'differ', $a, $b
 	if ($why) { return "the game stood still: $why" }

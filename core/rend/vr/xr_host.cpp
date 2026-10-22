@@ -576,7 +576,12 @@ bool init()
 	if (!XRCHECK(XR(xrCreateInstance)(&createInfo, &instance)))
 		return false;
 	if (!loadFunctions(instance))
+	{
+		// (only the loader's can fail here: the simulator's table is full from the start)
+		(XR(xrDestroyInstance) != nullptr ? XR(xrDestroyInstance) : ::xrDestroyInstance)(instance);
+		instance = XR_NULL_HANDLE;
 		return false;
+	}
 	if (refreshRates)
 		XR(xrGetInstanceProcAddr)(instance, "xrRequestDisplayRefreshRateFB", (PFN_xrVoidFunction *)&requestRefreshRate);
 	if (perfSettings)
@@ -1908,9 +1913,10 @@ void term()
 			if (c.depthStencil != 0)
 				glDeleteRenderbuffers(1, &c.depthStencil);
 		}
-		if (session != XR_NULL_HANDLE)
+		if (session != XR_NULL_HANDLE && XR(xrDestroySession) != nullptr)
 			XR(xrDestroySession)(session);	// with its spaces and swapchains
-		XR(xrDestroyInstance)(instance);	// with the actions
+		if (XR(xrDestroyInstance) != nullptr)
+			XR(xrDestroyInstance)(instance);	// with the actions
 		// let go of the guns
 		if (config::VrXrGun)
 			for (const Gun& g : guns)

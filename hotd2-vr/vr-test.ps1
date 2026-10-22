@@ -37,8 +37,10 @@
             eye in the window, controllers from the actions above.
 
   Everything goes to build-win\vrtest\<Name>\ (emptied first), Flycast's working directory:
-  flycast.log, actions.log, screenshots, rip\. build-win\emu.cfg is put back as it was after
-  the run (emu.cfg.before there); the run's own is kept as emu.cfg.after. Exit 0 all checks pass, 1 a check failed,
+  flycast.log, actions.log, screenshots, rip\. build-win\emu.cfg and the game's saves in
+  build-win\data (<game file>.nvmem, .nvmem2, .eeprom) are put back as they were after the run
+  (emu.cfg.before, saves.before there; a save the run made is deleted); the run's own emu.cfg
+  is kept as emu.cfg.after. Exit 0 all checks pass, 1 a check failed,
   2 Flycast exited early.
 #>
 param(
@@ -171,18 +173,34 @@ function Set-XrLine($key, $line, $release, $ms, $now) {
 	$xrLines[$key] = @{ Line = $line; Release = $release; Until = $(if ($ms) { $now + $ms / 1000.0 } else { $null }) }
 }
 
-# the run's settings come and go with it (Flycast saves the -config ones in emu.cfg)
+# The run's settings and the game's saves come and go with it: Flycast keeps the -config ones
+# in emu.cfg, and the game's NVRAM / EEPROM (<content>.nvmem, .nvmem2, .eeprom in the data dir:
+# scores, play counts) would otherwise drift from run to run and change what the game does.
+# Copied before anything starts; put back in the finally below, a save the run made deleted.
 $emuCfg = Join-Path $repo 'build-win\emu.cfg'
 $emuBefore = Join-Path $out 'emu.cfg.before'
 $hadCfg = Test-Path -LiteralPath $emuCfg
 if ($hadCfg) { Copy-Item -LiteralPath $emuCfg $emuBefore }
-$p = Start-Process -FilePath $exe -ArgumentList @('-config', "`"$cfg`"", "`"$content`"") -WorkingDirectory $out -PassThru
-$clock = [Diagnostics.Stopwatch]::StartNew()
-$udp = New-Object System.Net.Sockets.UdpClient
+$savesBefore = Join-Path $out 'saves.before'
+$saves = @(foreach ($ext in 'nvmem', 'nvmem2', 'eeprom') {
+	$path = Join-Path $dataDir "$(Split-Path -Leaf $content).$ext"
+	$had = Test-Path -LiteralPath $path
+	if ($had) {
+		New-Item -ItemType Directory -Force $savesBefore | Out-Null
+		Copy-Item -LiteralPath $path $savesBefore
+	}
+	@{ Path = $path; Had = $had }
+})
+$p = $null
+$clock = $null
+$udp = $null
 $next = 0
 $early = $null
 $shots = 0
 try {
+	$p = Start-Process -FilePath $exe -ArgumentList @('-config', "`"$cfg`"", "`"$content`"") -WorkingDirectory $out -PassThru
+	$clock = [Diagnostics.Stopwatch]::StartNew()
+	$udp = New-Object System.Net.Sockets.UdpClient
 	while ($true) {
 		$now = $clock.Elapsed.TotalSeconds
 		if ($now -ge $Seconds) { break }
@@ -233,12 +251,28 @@ try {
 		Start-Sleep -Milliseconds 50
 	}
 } finally {
-	$ran = $clock.Elapsed.TotalSeconds
-	$udp.Close()
-	if (-not $p.HasExited) { $p.CloseMainWindow() | Out-Null; Start-Sleep 2; if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit(5000) | Out-Null } }
-	if (Test-Path -LiteralPath $emuCfg) { Copy-Item -LiteralPath $emuCfg (Join-Path $out 'emu.cfg.after') -Force }
-	if ($hadCfg) { Copy-Item -LiteralPath $emuBefore $emuCfg -Force }
-	elseif (Test-Path -LiteralPath $emuCfg) { Remove-Item -LiteralPath $emuCfg }
+	$ran = $(if ($null -ne $clock) { $clock.Elapsed.TotalSeconds } else { 0 })
+	# each step on its own: one failing must not keep the rest (above all the put-back) from running
+	try { if ($null -ne $udp) { $udp.Close() } } catch { Write-Warning "UDP client: $_" }
+	try {
+		if ($null -ne $p -and -not $p.HasExited) {
+			$p.CloseMainWindow() | Out-Null; Start-Sleep 2
+			if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit(5000) | Out-Null }
+		}
+	} catch { Write-Warning "closing Flycast: $_" }
+	try { if (Test-Path -LiteralPath $emuCfg) { Copy-Item -LiteralPath $emuCfg (Join-Path $out 'emu.cfg.after') -Force } } catch { Write-Warning "emu.cfg.after: $_" }
+	$notBack = @()
+	try {
+		if ($hadCfg) { Copy-Item -LiteralPath $emuBefore $emuCfg -Force }
+		elseif (Test-Path -LiteralPath $emuCfg) { Remove-Item -LiteralPath $emuCfg }
+	} catch { $notBack += "emu.cfg: $_" }
+	foreach ($save in $saves) {
+		try {
+			if ($save.Had) { Copy-Item -LiteralPath (Join-Path $savesBefore (Split-Path -Leaf $save.Path)) $save.Path -Force }
+			elseif (Test-Path -LiteralPath $save.Path) { Remove-Item -LiteralPath $save.Path }
+		} catch { $notBack += "$($save.Path): $_" }
+	}
+	if ($notBack) { throw "not put back after the run: $($notBack -join '; ')" }
 }
 if ($DebugShots -gt 0) { Get-ChildItem $dataDir -Filter 'shot_*.png' -ErrorAction SilentlyContinue | Move-Item -Destination $out }
 Write-Output ('{0}: {1:0} s, {2} actions, {3} screenshots -> {4}' -f $Name, $ran, $next, $shots, $out)
