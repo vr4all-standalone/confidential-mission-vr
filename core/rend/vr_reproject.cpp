@@ -224,6 +224,9 @@ struct GameProfile
 	// gun: its hit test keeps the stock view (stockFocalAddr) while it draws the wider one.
 	// See shotDrawnAt.
 	bool markerWidened = false;
+	// It draws no shot flash: vr.DropShotFlash never applies, so a bright full-screen 2D quad
+	// just after a shot (its own fade, say) stays. See dropShotMarker.
+	bool noShotFlash = false;
 	// Player 2's prompt pictures and where they are: see hidePlayer2Prompt.
 	u32 p2PromptTextures[4] {};
 	ScreenBox p2PromptBox { 352.f, 384.f, 640.f, 480.f };
@@ -440,6 +443,14 @@ static std::vector<GameProfile> makeProfiles()
 	// markerMinW/MaxW.
 	p.markerTextures[0] = 0x5e8000;
 	p.markerTextures[1] = 0x5e7800;
+	// It draws no shot flash. In every run (t5-w1, t5-d, t5f-hall, t5f-hall2, t5f-room1,
+	// t5-g2-off) the only bright full-screen all-2D quad after a shot is its own white fade,
+	// tex 404800: 640x480, alpha fa -> 04 over ~1 s, at the same point on the route (t5-w1
+	// 118.8 s, with vr.DropShotFlash off: 61 lines, none hidden), starting 175-192 ms after
+	// the shot before it. With the rule on it was hidden in alternating ~200 ms blocks
+	// (t5f-hall2: 28 of its 60 frames), a full-field white strobing at ~2.5 Hz while the
+	// player fires. So the rule is off for it.
+	p.noShotFlash = true;
 	// Its logo, advisory and game-over screens: layers up to W 100 without 3D.
 	p.flatScreens = true;
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
@@ -1740,7 +1751,7 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 	if (count == 0)
 		return;
 	const bool dropMarkers = config::VrDropShotMarker;
-	const bool dropFlash = config::VrDropShotFlash;
+	const bool dropFlash = config::VrDropShotFlash && !(activeProfile != nullptr && activeProfile->noShotFlash);
 	// Diagnostics on the headset too, for the first few shots: what the game draws right
 	// after a shot (to pin down its marker / flash). The PC logs every shot.
 	static u32 diagShots;
