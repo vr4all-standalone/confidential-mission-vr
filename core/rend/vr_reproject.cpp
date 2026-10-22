@@ -451,6 +451,13 @@ static std::vector<GameProfile> makeProfiles()
 	// (t5f-hall2: 28 of its 60 frames), a full-field white strobing at ~2.5 Hz while the
 	// player fires. So the rule is off for it.
 	p.noShotFlash = true;
+	// Player 2's "PRESS START BUTTON", blinking at the bottom right all through a one-player
+	// game and again once player 2 is out: tex 4ce800 at W 0.1 (406,431..552,448 with its
+	// shadow at 0.11), the sheet of FREE PLAY beside it (248,440..392,456) and of player 1's
+	// own prompt in its continue (86,431..232,448), which the box leaves out, as it does
+	// player 2's HUD (no prompt seen while player 2 played). Rips of a one-player game.
+	p.p2PromptTextures[0] = 0x4ce800;
+	p.p2PromptBox = { 400.f, 424.f, 560.f, 452.f };
 	// Its logo, advisory and game-over screens: layers up to W 100 without 3D.
 	p.flatScreens = true;
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
@@ -1207,9 +1214,13 @@ static void hidePlayer2Prompt(rend_context& ctx, const RenderPass& pass, const R
 	p2PromptAt = steadyMs();
 	if (!hide)
 		return;
+	const GameProfile *prof = activeProfile;
 	each([&](const PolyParam& pp) {
 		Box b;
-		if (!flat(pp, b))
+		const u32 tex = pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
+		// (never a sight the game draws over an enemy there: see placeSights)
+		if (!flat(pp, b) || (prof != nullptr && tex != 0
+				&& std::find(std::begin(prof->sightTextures), std::end(prof->sightTextures), tex) != std::end(prof->sightTextures)))
 			return;
 		for (int k = 0; k < count; k++)
 			if (b.x0 >= gone[k].x0 && b.x1 <= gone[k].x1 + fbWidth * 0.12f && b.y0 >= gone[k].y0 - 4.f && b.y1 <= gone[k].y1 + 4.f)
@@ -1220,8 +1231,22 @@ static void hidePlayer2Prompt(rend_context& ctx, const RenderPass& pass, const R
 	});
 }
 
+// (for a second after its last frame: the prompts blink, HOTD2's about 1.05 s on and
+// 0.53-0.56 s off, CM's 0.5 s on and 0.52-0.56 s off, so with half a second this came and
+// went with each blink)
 bool player2Prompting() {
-	return steadyMs() - p2PromptAt < 500;
+	return steadyMs() - p2PromptAt < 1000;
+}
+
+// Each change of player2Prompting() logged: what the headset's join and leave go by (see
+// xr_host.cpp's dual wielding), seen in PC runs too.
+static void logPlayer2Prompt()
+{
+	static bool prompting;
+	if (player2Prompting() == prompting)
+		return;
+	prompting = !prompting;
+	NOTICE_LOG(RENDERER, "VR: player 2 prompt %s", prompting ? "shown" : "gone");
 }
 
 bool player2PromptKnown() {
@@ -1707,6 +1732,7 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 		place2DLayers(ctx, ctx.global_param_tr, previousPass.tr_count, pass.tr_count, hudW, fbWidth, fbHeight, unwiden);
 	}
 	hidePlayer2Prompt(ctx, pass, previousPass, hudW, fbWidth, fbHeight);
+	logPlayer2Prompt();
 	keepMixedIn3D(ctx, ctx.global_param_op, std::max(previousPass.op_count, 1u), pass.op_count, hudW);
 	keepMixedIn3D(ctx, ctx.global_param_pt, previousPass.pt_count, pass.pt_count, hudW);
 	keepMixedIn3D(ctx, ctx.global_param_tr, previousPass.tr_count, pass.tr_count, hudW);
