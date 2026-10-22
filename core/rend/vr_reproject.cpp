@@ -223,9 +223,9 @@ struct GameProfile
 	// Player 2's prompt pictures and where they are: see hidePlayer2Prompt.
 	u32 p2PromptTextures[4] {};
 	ScreenBox p2PromptBox { 352.f, 384.f, 640.f, 480.f };
-	// 2D layers near the 2D plane (see snapNear2D): up to this W, at W in multiples of
-	// this step; the W of the letterbox bars (0: the 2D plane's).
-	float snapMaxW = 1.05f, snapStep = 0.01f;
+	// 2D layers near the 2D plane (see snapNear2D): from and up to these W, at W in multiples
+	// of this step; the W of the letterbox bars (0: the 2D plane's).
+	float snapMinW = 0.75f, snapMaxW = 1.05f, snapStep = 0.01f;
 	float letterboxW = 0.f;
 	// The W of its 2D plane (0: vr.HudW, HOTD2's 1.0). Never a W its 3D can have: the
 	// headset's vertex shader pins every vertex near it onto the 2D plane.
@@ -383,6 +383,20 @@ static std::vector<GameProfile> makeProfiles()
 	p.stockFocalAddr = 0x154ED0;
 	p.stockFocalInverse = true;
 	p.focal = 540.8f;	// stage 1's (537.4-542.6: its camera sways)
+	// Its 2D comes in layers from W 0.0078 to 10, its 3D from its near plane at W 0.300 on:
+	// the screen crack when the player is hit at 1/128, the continue prompt 0.050-0.061, credits,
+	// subtitles and the attract demo's caption 0.1-0.11, the cutscenes' bars at 0.2 (lit
+	// white and textured, not the black letterbox: they stay), the briefing 0.25, HUD
+	// pictures 0.5-0.6, the gun adjustment screen 0.8-0.9, the magazines, the shot marker and
+	// the sights' rings at 1.000 (the rings 0.99995-1.00003, which only the plane's own
+	// +-0.002 holds), the how-to-play panels up to 10. So the plane stays at 1.0, and every
+	// layer from 0.005 to 10 at a multiple of 1/16000 (0.001's and 1/128's) is snapped onto it.
+	p.hudW = 1.f;
+	p.snapMinW = 0.005f;
+	p.snapMaxW = 10.f;
+	p.snapStep = 1.f / 16000.f;
+	// Its logo, advisory and game-over screens: layers up to W 100 without 3D.
+	p.flatScreens = true;
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
 	// 15.1 units over the floor in the attract demo's corridor, HOTD2's 15 over the street;
 	// 12.0 in stage 1's first room, looking 10 degrees down.)
@@ -670,13 +684,15 @@ static void hideVertices(rend_context& ctx, const PolyParam& pp)
 // eyes, and the comfort zone pushed them back bent ("B to cancel" sucked into a vortex).
 // They are pulled onto the plane, their order kept. Only what looks like such a layer:
 // one W, a round one (a multiple of 0.01: sprites and debris flying past the camera pass
-// through every W, see the headset logs), near the plane, and on the screen.
+// through every W, see the headset logs), near the plane, and on the screen. The game's
+// profile can move the band (snapMinW, snapMaxW) and the step (snapStep).
 constexpr float SnapMinW = 0.75f;
 
 static void snapNear2D(rend_context& ctx, const std::vector<PolyParam>& list, u32 from, u32 to, float hudW,
 		int fbWidth, int fbHeight)
 {
 	const GameProfile *prof = activeProfile;
+	const float minW = prof != nullptr ? prof->snapMinW : SnapMinW;
 	const float SnapMaxW = prof != nullptr ? prof->snapMaxW : 1.05f;
 	const float step = prof != nullptr ? prof->snapStep : 0.01f;
 	for (u32 n = from; n < to && n < list.size(); n++)
@@ -688,7 +704,7 @@ static void snapNear2D(rend_context& ctx, const std::vector<PolyParam>& list, u3
 		if (!(z > 0.f) || !std::isfinite(z))
 			continue;
 		const float w = 1.f / z;
-		if (w < SnapMinW || w > SnapMaxW || w == hudW || std::abs(w / step - std::round(w / step)) > 0.02f)
+		if (w < minW || w > SnapMaxW || w == hudW || std::abs(w / step - std::round(w / step)) > 0.02f)
 			continue;
 		u32 i = pp.first;
 		for (; i < pp.first + pp.count; i++)
@@ -700,7 +716,7 @@ static void snapNear2D(rend_context& ctx, const std::vector<PolyParam>& list, u3
 		if (i != pp.first + pp.count)
 			continue;	// not flat, or not on the screen: 3D
 		// one linear scale per side over the whole band, inside the plane's +-0.002
-		const float t = w < hudW ? (w - hudW) / (hudW - SnapMinW) : (w - hudW) / (SnapMaxW - hudW);
+		const float t = w < hudW ? (w - hudW) / (hudW - minW) : (w - hudW) / (SnapMaxW - hudW);
 		const float snapped = hudW + 0.0015f * std::clamp(t, -1.f, 1.f);
 		for (u32 j = pp.first; j < pp.first + pp.count; j++)
 			ctx.verts[j].z = 1.f / snapped;
@@ -852,6 +868,7 @@ static void place2DLayers(rend_context& ctx, const std::vector<PolyParam>& list,
 		int fbWidth, int fbHeight, glm::vec2 unwiden)
 {
 	const GameProfile *prof = activeProfile;
+	const float minW = prof != nullptr ? prof->snapMinW : SnapMinW;
 	const float SnapMaxW = prof != nullptr ? prof->snapMaxW : 1.05f;
 	const float hudDepth = config::VrHudDepth;
 	const glm::vec2 centre(fbWidth * 0.5f, fbHeight * 0.5f);
@@ -887,7 +904,7 @@ static void place2DLayers(rend_context& ctx, const std::vector<PolyParam>& list,
 		const char *how;
 		if (w < hudDepth)
 		{
-			const float t = w < hudW ? (w - hudW) / (hudW - SnapMinW) : (w - hudW) / (SnapMaxW - hudW);
+			const float t = w < hudW ? (w - hudW) / (hudW - minW) : (w - hudW) / (SnapMaxW - hudW);
 			const float snapped = hudW + 0.0015f * std::clamp(t, -1.f, 1.f);
 			for (u32 j = pp.first; j < pp.first + pp.count; j++)
 				ctx.verts[j].z = 1.f / snapped;
