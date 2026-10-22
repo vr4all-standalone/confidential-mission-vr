@@ -9,14 +9,14 @@
 
   -Game     a MAME set name, as <set>.zip in $env:VRLGH_GAMES (with its CHD in <set>\ and
             naomi.zip), or the path of a disc image (its gun in port A).
-  -At       "<seconds>=<action>", seconds from Flycast's start:
-              start [p]           Start, held 200 ms (p: player 0 or 1, default 0)
+  -At       "<seconds>=<action>", seconds from Flycast's start (checked before the run):
+              start [p]           Start, held 200 ms (p: player 0-3, default 0)
               aim p x y           where the gun rests (0..10000 across and down the screen)
               fire p x y          aim there and pull the trigger for 100 ms
               reload [p]          off screen with the reload button, 200 ms
               button p bits ms    hold buttons (1 trigger, 2 reload, 4 start, 8-64 d-pad, 128 B)
-              shot [label]        window screenshot t<seconds>[-label].png
-              rip <request>       write rip.request: count interval ram [texhex polys]
+              shot [label]        window screenshot t<seconds>[-label].png (label: letters, digits, . _ -)
+              rip count interval ram [texhex polys]   write rip.request
               mark <text>         just the line in actions.log (every action gets one)
             From the first gun action on, every player used gets "LG p x y buttons" every 50 ms.
   -Config   more "config:x=y,..." settings, applied last.
@@ -40,6 +40,8 @@ param(
 	[switch]$Xr
 )
 $ErrorActionPreference = 'Stop'
+# the run's folder gets emptied: nothing that could reach out of build-win\vrtest
+if (-not $Name -or $Name -match '\.\.|[\\/:]') { throw "-Name '$Name': want a plain folder name" }
 $repo = Split-Path -Parent $PSScriptRoot
 $exe = Join-Path $repo 'build-win\flycast.exe'
 if (-not (Test-Path $exe)) { throw "Build the Windows version first: hotd2-vr\build-win.cmd" }
@@ -57,24 +59,31 @@ if ($Game -match '[\\/.]') {
 	$cfg += ',input:device1=7'	# the light gun in port A
 } else {
 	if (-not $env:VRLGH_GAMES) { throw 'Set $env:VRLGH_GAMES to the folder with the MAME sets (<set>.zip, <set>\*.chd, naomi.zip).' }
-	$content = Join-Path $env:VRLGH_GAMES "$Game.zip"
+	$games = $env:VRLGH_GAMES.TrimEnd('\')	# a trailing \ would escape the quote around -config
+	$content = Join-Path $games "$Game.zip"
 	if (-not (Test-Path -LiteralPath $content)) { throw "No $content" }
-	$cfg += ",config:Dreamcast.BiosPath=$env:VRLGH_GAMES,config:Dreamcast.ContentPath=$env:VRLGH_GAMES"
+	$cfg += ",config:Dreamcast.BiosPath=$games,config:Dreamcast.ContentPath=$games"
 }
 if ($DebugShots -gt 0) { $cfg += ",config:vr.DebugShots=$DebugShots" }
 if ($Config) { $cfg += ",$Config" }
 
-# the timed actions, checked before anything starts
-$arity = @{ start = 1, 2; aim = 4, 4; fire = 4, 4; reload = 1, 2; button = 4, 4; shot = 1, 2; rip = 2, 99; mark = 2, 99 }
+# the timed actions, checked before anything starts: each action's form, numbers included
+$forms = @{
+	start = '^start( [0-3])?$'; aim = '^aim [0-3] -?\d+ -?\d+$'; fire = '^fire [0-3] -?\d+ -?\d+$'
+	reload = '^reload( [0-3])?$'; button = '^button [0-3] \d+ \d+(\.\d+)?$'; shot = '^shot( [\w.-]+)?$'
+	rip = '^rip \d+ \d+ \d+( [0-9a-f]+( \d+)?)?$'; mark = '^mark .'
+}
 $events = @()
 foreach ($a in $At) {
 	$time, $action = $a -split '=', 2
-	$words = @(-split $action)
-	if ($null -eq $action -or $words.Count -eq 0 -or -not $arity.ContainsKey($words[0]) -or
-			$words.Count -lt $arity[$words[0]][0] -or $words.Count -gt $arity[$words[0]][1]) {
-		throw "-At '$a': want <seconds>=<action>, action one of start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip <request>, mark <text>"
+	$text = (-split $action) -join ' '
+	$t = 0.0
+	if (-not [double]::TryParse($time, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$t) -or
+			-not $forms.ContainsKey(($text -split ' ')[0]) -or $text -notmatch $forms[($text -split ' ')[0]]) {
+		throw "-At '$a': want <seconds>=<action>, action one of start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip count interval ram [texhex polys], mark <text>"
 	}
-	$events += [pscustomobject]@{ At = [double]$time; Index = $events.Count; Text = $action.Trim(); Words = $words }
+	if ($t -ge $Seconds) { Write-Warning "-At '$a' comes at or after -Seconds ${Seconds}: it will not run" }
+	$events += [pscustomobject]@{ At = $t; Index = $events.Count; Text = $text; Words = @($text -split ' ') }
 }
 $events = @($events | Sort-Object At, Index)
 
@@ -176,13 +185,18 @@ Write-Output ('{0}: {1:0} s, {2} actions, {3} screenshots -> {4}' -f $Name, $ran
 
 $log = Join-Path $out 'flycast.log'
 $failed = $false
-foreach ($re in $Expect) {
-	if ((Test-Path $log) -and (Select-String -LiteralPath $log -Pattern $re -CaseSensitive -Quiet)) { Write-Output "PASS expect $re" }
-	else { Write-Output "FAIL expect $re"; $failed = $true }
-}
-foreach ($re in $Reject) {
-	$hit = if (Test-Path $log) { Select-String -LiteralPath $log -Pattern $re -CaseSensitive | Select-Object -First 1 }
-	if ($hit) { Write-Output "FAIL reject $re (line $($hit.LineNumber))"; $failed = $true }
+if (-not (Test-Path $log)) {
+	Write-Output "FAIL no flycast.log in $out"
+	$failed = $true
+} else {
+	foreach ($re in $Expect) {
+		if (Select-String -LiteralPath $log -Pattern $re -CaseSensitive -Quiet) { Write-Output "PASS expect $re" }
+		else { Write-Output "FAIL expect $re"; $failed = $true }
+	}
+	foreach ($re in $Reject) {
+		$hit = Select-String -LiteralPath $log -Pattern $re -CaseSensitive | Select-Object -First 1
+		if ($hit) { Write-Output "FAIL reject $re (line $($hit.LineNumber))"; $failed = $true }
+	}
 }
 if ($null -ne $early) {
 	Write-Output ('Flycast exited early, at {0:0.0} s (code {1})' -f $early, $p.ExitCode)

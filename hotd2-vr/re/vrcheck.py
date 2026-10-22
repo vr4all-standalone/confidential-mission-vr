@@ -7,8 +7,8 @@ flycast.log (vr-test.ps1 writes both under build-win\\vrtest\\<name>).
     python -I vrcheck.py find-float <ram.bin> <value> [--tol 0.01]
     python -I vrcheck.py find-u16 <ram.bin> <v1,v2,...>
     python -I vrcheck.py whist <ripdir> <n> [--max-w 3]
-    python -I vrcheck.py border <ripdir> <n> <stockFocal> <liveFocal> [--min-ratio 0.5]
-    python -I vrcheck.py shots <flycast.log> [--tex t1,t2] [--max-off N]
+    python -I vrcheck.py border <ripdir> <n> <stockFocal> <liveFocal> [--min-ratio 0.5] [--max-w 3]
+    python -I vrcheck.py shots <flycast.log> [--tex t1,t2] [--max-off N] [--each-gun N] [--from S] [--to S]
     python -I vrcheck.py focal <flycast.log> [--expect F --tol 0.02] [--from S] [--to S]
     python -I vrcheck.py selftest
 
@@ -132,14 +132,18 @@ BANDS = ((0.0, 0.8), (0.8, 1.0), (1.0, 1.2), (1.2, 1.5))
 
 def border(args):
     """Where the game stops drawing in a widened view: 3D polygon centres by r, the distance
-    from the centre in units of the stock frame's half width (r 1 = its edge)."""
+    from the centre in units of the stock frame's half width (r 1 = its edge). The 2D layers
+    (one W up to --max-w, as whist lists them) don't count; a 3D sprite at one W does."""
     from riplib import Pass
     ps = Pass(args.ripdir, args.n)
     edge = ps.fbw * 0.5 * args.live_focal / args.stock_focal
     count = [0] * len(BANDS)
     for p in ps.polys:
         w = _corners_w(p)
-        if w is None or _flat_w(w) is not None:
+        if w is None:
+            continue
+        flat = _flat_w(w)
+        if flat is not None and flat <= args.max_w:
             continue
         r = abs((p.v['x'].min() + p.v['x'].max()) * 0.5 - ps.fbw * 0.5) / edge
         for k, (lo, hi) in enumerate(BANDS):
@@ -168,39 +172,56 @@ def _log_ms(line):
 
 SHOT = re.compile(r'VR: shot \+(-?\d+) ms gun (-?\d+),(-?\d+)(?: \(2D\))?: (\w+) (\d+) \(\d+ verts\) \d+x\d+, '
                   r'(\d+) px off, W (\S+?)\.\.(\S+?)(?: all-2D)?, tex ([0-9a-f]+) ')
+SHOT_FRAME = re.compile(r'VR diag: shot \+(-?\d+) ms gun (-?\d+),(-?\d+)(?: \(2D\))?, fb ')
+MARKER_MAX_OFFSET = 120  # px: Flycast logs a shot's small polygons only this close to the gun (vr_reproject.cpp)
 
 
 def shots(args):
-    """The game's shot markers: per shot (trigger pull), the nearest polygon logged for it."""
+    """The game's shot markers: per shot (trigger pull), the first frame after it with a marker
+    (a polygon within 120 px of the gun, of --tex if given), its nearest one. Shots come from
+    the `VR diag: shot` frame lines, so a shot that drew no marker shows as none."""
     tex = {int(t, 16) for t in args.tex.split(',')} if args.tex else None
-    groups = []  # [start ms, gun, best match]
+    groups = []  # [start ms, gun, marker (+ms, px off, list, n, W from, W to, tex)]
     for line in open(args.log, errors='replace'):
-        m = SHOT.search(line)
-        if not m or _log_ms(line) is None:
+        m = SHOT.search(line) or SHOT_FRAME.search(line)
+        t = _log_ms(line)
+        if not m or t is None:
             continue
-        start = _log_ms(line) - int(m[1])
+        start = t - int(m[1])
+        if (args.start is not None and start < args.start * 1000) or (args.end is not None and start > args.end * 1000):
+            continue
         gun = (int(m[2]), int(m[3]))
         g = next((g for g in groups if g[1] == gun and abs(g[0] - start) <= 100), None)
         if g is None:
             g = [start, gun, None]
             groups.append(g)
-        poly = (int(m[6]), m[4], m[5], m[7], m[8], m[9])
-        if (tex is None or int(m[9], 16) in tex) and (g[2] is None or poly[0] < g[2][0]):
-            g[2] = poly
-    worst = None
-    for start, gun, best in sorted(groups):
-        head = f'shot {start / 1000:.3f} gun {gun[0]},{gun[1]}: '
-        if best is None:
-            print(head + 'none')
+        if m.re is SHOT_FRAME or int(m[6]) > MARKER_MAX_OFFSET or (tex is not None and int(m[9], 16) not in tex):
             continue
-        off, lst, n, w0, w1, t = best
-        print(head + f'{lst} {n} {off} px off, W {w0}..{w1}, tex {t}')
+        marker = (int(m[1]), int(m[6]), m[4], m[5], m[7], m[8], m[9])
+        if g[2] is None or marker[:2] < g[2][:2]:
+            g[2] = marker
+    groups.sort(key=lambda g: (g[0], g[1]))
+    worst = None
+    for start, gun, marker in groups:
+        head = f'shot {start / 1000:.3f} gun {gun[0]},{gun[1]}: '
+        if marker is None:
+            print(head + f'none (nothing within {MARKER_MAX_OFFSET} px)')
+            continue
+        since, off, lst, n, w0, w1, t = marker
+        print(head + f'+{since} ms {lst} {n} {off} px off, W {w0}..{w1}, tex {t}')
         worst = off if worst is None else max(worst, off)
     matched = sum(g[2] is not None for g in groups)
     print(f'shots {len(groups)} matched {matched}' + (f' worst {worst} px off' if matched else ''))
-    if not matched:
-        return 1
-    return 1 if args.max_off is not None and worst > args.max_off else 0
+    failed = matched == 0
+    if args.max_off is not None:
+        failed = failed or matched < len(groups) or worst > args.max_off
+    if args.each_gun is not None:
+        for gun in sorted({g[1] for g in groups}):
+            offs = [g[2][1] for g in groups if g[1] == gun and g[2] is not None]
+            n = sum(g[1] == gun for g in groups)
+            print(f'gun {gun[0]},{gun[1]} shots {n} best ' + (f'{min(offs)} px off' if offs else 'none'))
+            failed = failed or not offs or min(offs) > args.each_gun
+    return 1 if failed else 0
 
 
 FOCAL = re.compile(r'VR: focal (\S+) x (\S+)  verts (\d+) overlay \d+  W near (\S+) ')
@@ -264,11 +285,15 @@ def main(argv):
     s.add_argument('stock_focal', type=float)
     s.add_argument('live_focal', type=float)
     s.add_argument('--min-ratio', type=float, default=0.5)
+    s.add_argument('--max-w', type=float, default=3.0, help='flat layers up to this W are 2D')
     s.set_defaults(run=border)
     s = sub.add_parser('shots')
     s.add_argument('log')
     s.add_argument('--tex', help='t1,t2 (hex): only these textures')
-    s.add_argument('--max-off', type=float)
+    s.add_argument('--max-off', type=float, help='every shot needs a marker this close')
+    s.add_argument('--each-gun', type=float, help='every gun position needs a marker this close')
+    s.add_argument('--from', dest='start', type=float, help='shots from this second of the run on')
+    s.add_argument('--to', dest='end', type=float)
     s.set_defaults(run=shots)
     s = sub.add_parser('focal')
     s.add_argument('log')
@@ -338,20 +363,31 @@ def _synthetic_rip(ripdir):
 
 
 def _synthetic_log():
-    pre = 'rend\\vr_reproject.cpp:1613 N[RENDERER]: '
+    pre = 'rend\\vr_reproject.cpp:1616 N[RENDERER]: '
     shot = 'VR: shot +{} ms gun {}: {} {} (4 verts) 40x40, {} px off, W {}, tex {} tsp 00000000 col ffffffff{}'
+    frame = ('rend\\vr_reproject.cpp:1550 N[RENDERER]: VR diag: shot +{} ms gun {}, fb 640x480, '
+             'polygons op 1 pt 2 tr 3, background 00000000')
     focal = 'VR: focal {} x {}  verts {} overlay 10  W near {} p10 2.000 median 10.000 p90 50.000 far 100.000'
+    sky = ('OP', 2, 250, '3984.620..11820.980', 'd5a000', '')  # big: logged however far from the gun
     lines = [
         '00:00:864 hw\\naomi\\naomi_cart.cpp:667 N[NAOMI]: NAOMI GAME ID [THE MAZE OF THE KINGS] region ff players 0',
-        # shot 1 at 31.484 s, centre: the starburst 3 px off, then the red stars 1 px off, a HUD sprite on it
+        # shot 1 at 31.484 s, centre: the starburst 3 px off in the first frame, then the red stars
+        # 1 px off and a HUD sprite on the gun
+        '00:31:500 ' + frame.format(16, '320,240'),
         '00:31:500 ' + pre + shot.format(16, '320,240', 'TR', 5, 3, '1.500..1.500', '50b800', ''),
+        '00:31:517 ' + frame.format(33, '320,240'),
         '00:31:517 ' + pre + shot.format(33, '320,240', 'TR', 6, 1, '1.500..1.500', '4f6800', ''),
         '00:31:517 ' + pre + shot.format(33, '320,240', 'TR', 7, 0, '1.082..1.082 all-2D', '123400', ''),
-        '00:31:517 rend\\vr_reproject.cpp:1550 N[RENDERER]: VR diag: shot +33 ms gun 320,240, fb 640x480, polygons op 1 pt 2 tr 3, background 00000000',
-        # shot 2 at 34.500 s, centre again: 5 px off
-        '00:34:516 ' + pre + shot.format(16, '320,240', 'TR', 8, 5, '1.500..1.500', '50b800', ''),
-        # shot 3 at 34.480 s elsewhere, into the 2D plane, dropped
+        # shot 2 at 34.480 s elsewhere, into the 2D plane, dropped
+        '00:34:500 ' + frame.format(20, '100,200 (2D)'),
         '00:34:500 ' + pre + shot.format(20, '100,200 (2D)', 'PT', 9, 0, '1.082..1.082 all-2D', '50b800', ' DROPPED'),
+        # shot 3 at 34.500 s, centre again: 5 px off
+        '00:34:516 ' + frame.format(16, '320,240'),
+        '00:34:516 ' + pre + shot.format(16, '320,240', 'TR', 8, 5, '1.500..1.500', '50b800', ''),
+        '00:34:516 ' + pre + shot.format(16, '320,240', *sky),
+        # shot 4 at 37.000 s, bottom right: no marker, only the sky far off
+        '00:37:017 ' + frame.format(17, '600,400'),
+        '00:37:017 ' + pre + shot.format(17, '600,400', *sky),
     ]
     for t, (fx, verts, wnear) in enumerate([('415.7', 1000, '1.000'), ('415.7', 2000, '1.000'), ('277.1', 3000, '1.082'),
                                             ('277.1', 4000, '1.000'), ('415.7', 5000, '1.000')]):
@@ -401,26 +437,36 @@ def selftest():
         check(['whist', ripdir, '0', '--max-w', '4'], 0, ['W 1.082 polys 2 list tr tex 4f6800,50b800 box 12,20..630,470',
                                                           'W 1.090 polys 1 list op tex none box 0,0..640,40',
                                                           'W 3.500 polys 1 list op tex none box 200,200..300,300'])
-        border = ['band 0.0-0.8 polys 8 density 10.0', 'band 0.8-1.0 polys 4 density 20.0',
+        # the flat quad at W 3.5 is past --max-w: a 3D sprite, in the first band
+        border = ['band 0.0-0.8 polys 9 density 11.2', 'band 0.8-1.0 polys 4 density 20.0',
                   'band 1.0-1.2 polys 1 density 5.0', 'band 1.2-1.5 polys 0 density 0.0', 'cliff ratio 0.25']
         check(['border', ripdir, '0', '415.7', '277.1'], 1, border)
         check(['border', ripdir, '0', '415.7', '277.1', '--min-ratio', '0.2'], 0, border)
-        check(['shots', log], 0, ['shot 31.484 gun 320,240: TR 7 0 px off, W 1.082..1.082, tex 123400',
-                                  'shot 34.480 gun 100,200: PT 9 0 px off, W 1.082..1.082, tex 50b800',
-                                  'shot 34.500 gun 320,240: TR 8 5 px off, W 1.500..1.500, tex 50b800',
-                                  'shots 3 matched 3 worst 5 px off'])
-        check(['shots', log, '--tex', '50b800,4f6800', '--max-off', '2'], 1,
-              ['shot 31.484 gun 320,240: TR 6 1 px off, W 1.500..1.500, tex 4f6800',
-               'shot 34.480 gun 100,200: PT 9 0 px off, W 1.082..1.082, tex 50b800',
-               'shot 34.500 gun 320,240: TR 8 5 px off, W 1.500..1.500, tex 50b800',
-               'shots 3 matched 3 worst 5 px off'])
-        check(['shots', log, '--tex', '4f6800', '--max-off', '2'], 0,
-              ['shot 31.484 gun 320,240: TR 6 1 px off, W 1.500..1.500, tex 4f6800',
-               'shot 34.480 gun 100,200: none',
-               'shot 34.500 gun 320,240: none',
-               'shots 3 matched 1 worst 1 px off'])
-        check(['shots', log, '--tex', '777777'], 1, ['shot 31.484 gun 320,240: none', 'shot 34.480 gun 100,200: none',
-                                                    'shot 34.500 gun 320,240: none', 'shots 3 matched 0'])
+        check(['border', ripdir, '0', '415.7', '277.1', '--min-ratio', '0.2', '--max-w', '4'], 0,
+              ['band 0.0-0.8 polys 8 density 10.0'] + border[1:])
+        none = ': none (nothing within 120 px)'
+        first3 = ['shot 31.484 gun 320,240: +16 ms TR 5 3 px off, W 1.500..1.500, tex 50b800',
+                  'shot 34.480 gun 100,200: +20 ms PT 9 0 px off, W 1.082..1.082, tex 50b800',
+                  'shot 34.500 gun 320,240: +16 ms TR 8 5 px off, W 1.500..1.500, tex 50b800']
+        all4 = first3 + ['shot 37.000 gun 600,400' + none, 'shots 4 matched 3 worst 5 px off']
+        check(['shots', log], 0, all4)
+        check(['shots', log, '--tex', '50b800,4f6800', '--max-off', '5'], 1, all4)
+        check(['shots', log, '--tex', '50b800,4f6800', '--max-off', '5', '--to', '35'], 0,
+              first3 + ['shots 3 matched 3 worst 5 px off'])
+        check(['shots', log, '--tex', '50b800,4f6800', '--max-off', '2', '--to', '35'], 1,
+              first3 + ['shots 3 matched 3 worst 5 px off'])
+        stars = ['shot 31.484 gun 320,240: +33 ms TR 6 1 px off, W 1.500..1.500, tex 4f6800']
+        check(['shots', log, '--tex', '4f6800', '--max-off', '2', '--to', '35'], 1,
+              stars + ['shot 34.480 gun 100,200' + none, 'shot 34.500 gun 320,240' + none, 'shots 3 matched 1 worst 1 px off'])
+        check(['shots', log, '--tex', '4f6800', '--max-off', '2', '--to', '32'], 0, stars + ['shots 1 matched 1 worst 1 px off'])
+        check(['shots', log, '--from', '36'], 1, ['shot 37.000 gun 600,400' + none, 'shots 1 matched 0'])
+        guns = ['gun 100,200 shots 1 best 0 px off', 'gun 320,240 shots 2 best 3 px off']
+        check(['shots', log, '--each-gun', '3', '--to', '35'], 0, first3 + ['shots 3 matched 3 worst 5 px off'] + guns)
+        check(['shots', log, '--each-gun', '2', '--to', '35'], 1, first3 + ['shots 3 matched 3 worst 5 px off'] + guns)
+        check(['shots', log, '--each-gun', '3'], 1, all4 + guns + ['gun 600,400 shots 1 best none'])
+        check(['shots', log, '--tex', '777777'], 1, ['shot 31.484 gun 320,240' + none, 'shot 34.480 gun 100,200' + none,
+                                                    'shot 34.500 gun 320,240' + none, 'shot 37.000 gun 600,400' + none,
+                                                    'shots 4 matched 0'])
         focal = ['count 5', 'focal min 277.1 median 415.7 max 415.7', 'verts p50 3000 p95 5000 max 5000',
                  'wnear 1.000 x4, 1.082 x1']
         check(['focal', log], 0, focal)

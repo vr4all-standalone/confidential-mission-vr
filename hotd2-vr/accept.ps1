@@ -23,7 +23,8 @@ function Invoke-VrTest([hashtable]$params) {
 	$code = $LASTEXITCODE
 	$out | ForEach-Object { Write-Host "  $_" }
 	if ($code -eq 0) { return $null }
-	return ($out | Where-Object { $_ -match '^FAIL|exited early' }) -join '; '
+	$why = ($out | Where-Object { $_ -match '^FAIL|exited early' }) -join '; '
+	return $(if ($why) { $why } else { "vr-test.ps1 exit $code" })
 }
 
 # vrcheck.py with these arguments: $null when it passed (exit 0 and every -Want regex on a line), else why not.
@@ -46,35 +47,40 @@ function Test-Hotd2 {
 	$at = @(for ($t = 44; $t -le 62; $t += 2) { "$t=start 0" }) + '60=shot', '75=shot', '92=shot'
 	$why = Invoke-VrTest @{ Game = $env:VRLGH_HOTD2; Name = 'accept-hotd2'; Seconds = 100; At = $at
 		Config = 'config:vr.FovScale=3,config:vr.WidenFov=yes'
-		Expect = 'VR: camera profile for MK-51002',
+		Expect = 'VR: camera profile for MK-51002$',
 			'VR: field of view 41\.1 -> 96\.7 degrees at 8c02998e', 'VR: field of view 41\.1 -> 96\.7 degrees at 8c02b0ec' }
 	if ($why) { return $why }
 	# the live focal of the widened view: 240 / tan(96.7 / 2) (stock 640)
 	return Invoke-VrCheck 'focal', (Get-RunLog 'accept-hotd2'), '--expect', '213.4'
 }
 
-# The Maze of the Kings: its widening patch, and its shot flash (starburst 0x50b800, red stars
-# 0x4f6800) where the gun points. Start to the rod calibration (~35 s); shots at the centre
-# from 50 s decide both item screens at once (else their timers put the story ~15 s later),
-# the story runs to ~88 s, then the maze, where the rod is reloaded every few shots. The rip
-# in the maze is checked for the profile's matrices.
+# The Maze of the Kings: its widening patch, and what it draws where the gun points (a miss:
+# starburst 0x50b800 and red stars 0x4f6800; a hit: spark 0x4e9000). Start to the rod
+# calibration (~35 s); shots at the centre decide both item screens (else their timers put
+# the story ~20 s later); the story runs to ~86-88 s, then the maze: its first seconds take no
+# shot, then the camera walks to the first fight (~100 s). The effects stay where they hit,
+# on a wall or an enemy, so they drift off the gun while the camera walks (2-3 px in their
+# first frame) or the enemy moves (up to 5 px seen at ~113 s); from 101.5 to 111 s the camera
+# stands and the enemies are still far, and every centre shot must draw at the gun. The rip
+# in the maze must hold the profile's matrices, widened (focal 240).
 function Test-Mok {
-	$at = @(for ($t = 30; $t -le 46; $t += 2) { "$t=start 0" })
-	$at += @(for ($t = 50; $t -le 110; $t += 3) { "$t=fire 0 5000 5000" }) + '96.5=reload 0', '105.5=reload 0'
-	$at += '35=shot', '60=shot', '90=shot', '100=rip 1 1 1', '101=shot', '110=shot'
+	$at = @(for ($t = 30; $t -le 46; $t += 2) { "$t=start 0" }) + '50=fire 0 5000 5000', '53=fire 0 5000 5000', '56=fire 0 5000 5000'
+	$at += @(foreach ($t in 102.5, 105, 107.5, 110.5) { "$t=fire 0 5000 5000" })
+	$at += '100=reload 0', '109=reload 0', '35=shot', '60=shot', '90=shot', '100=rip 1 1 1', '101=shot', '111=shot'
 	$why = Invoke-VrTest @{ Game = 'mok'; Name = 'accept-mok'; Seconds = 112; At = $at
 		Config = 'config:vr.FovScale=2,config:vr.WidenFov=yes'
-		Expect = 'VR: camera profile for THE MAZE OF THE KINGS', 'VR: the game''s field of view widened \(code at 8c08d8ee\)' }
+		Expect = 'VR: camera profile for THE MAZE OF THE KINGS$', 'VR: the game''s field of view widened \(code at 8c08d8ee\)' }
 	if ($why) { return $why }
-	$why = Invoke-VrCheck 'shots', (Get-RunLog 'accept-mok'), '--tex', '50b800,4f6800', '--max-off', '2'
+	$why = Invoke-VrCheck 'shots', (Get-RunLog 'accept-mok'), '--tex', '50b800,4f6800,4e9000', '--max-off', '2', '--from', '101.5', '--to', '111'
 	if ($why) { return $why }
 	$ram = Join-Path $repo 'build-win\vrtest\accept-mok\rip\ram0000.bin'
 	if (-not (Test-Path $ram)) { return 'no rip of the maze (rip\ram0000.bin)' }
-	return Invoke-VrCheck 'matrices', $ram -Want '^viewport 0x0F24D0 320\.0 -240\.0$', '^proj 0x0E7A60 focal '
+	return Invoke-VrCheck 'matrices', $ram -Want '^viewport 0x0F24D0 320\.0 -240\.0$', '^proj 0x0E7A60 focal 240\.0 240\.0$'
 }
 
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok' }
-$names = if ($Only) { $Only } else { @($scenarios.Keys) }
+# "hotd2,mok" arrives as one string through powershell -File
+$names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }
 $failed = 0
 foreach ($name in $names) {
 	if (-not $scenarios.Contains($name)) {
