@@ -274,8 +274,8 @@ and the NAOMI BIOS in it or as `naomi.zip` next to it) and the folder `confmiss`
   gun adjustment screen before each game needs nothing from you.
 - **On the panel.** The HUD, the subtitles, the briefing and the menus sit on the 2D plane; the
   game's own shot marker is hidden, and so is player 2's start prompt in a one-player game.
-- **Two guns.** The left controller's ≡ lets player 2 join with a gun in your left hand, as in
-  HOTD2; when player 2 is out, it's one gun again.
+- **Two guns.** X (the left controller's Start) lets player 2 join with a gun in your left
+  hand; when player 2 is out, it's one gun again.
 - **Free play.** No coins: Start (A) begins a game.
 
 Checked on the PC: the profile, the widened view in the attract scenes, the story and stage 1,
@@ -311,7 +311,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.SlideReload` | yes | rack the slide with the other hand to reload |
 | `vr.StaffHand` | no | the hero's glove around his staff (The Maze of the Kings) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
-| `vr.DualWield` | yes | the left controller's ≡ lets player 2 join with a gun in your left hand |
+| `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |
 | `vr.DropShotFlash` | yes | hide a bright full-screen flash right after a shot, should the game draw one |
 | `vr.ComfortStart` / `vr.ComfortMin` | 0.8 / 0.4 | comfort zone, metres (0: off) |

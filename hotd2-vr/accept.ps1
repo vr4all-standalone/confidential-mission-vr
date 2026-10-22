@@ -212,9 +212,14 @@ function Test-RunShots([string]$name, [string[]]$files) {
 	return $(if ($missing) { "no window shot $($missing -join ', ') in $name" } else { $null })
 }
 
-# How many lines of a run's log match a regex (case-sensitive).
-function Get-LogCount([string]$run, [string]$regex) {
-	return @(Select-String -LiteralPath (Get-RunLog $run) -Pattern $regex -CaseSensitive).Count
+# How many lines of a run's log match a regex (case-sensitive). -From / -To: only the lines
+# logged in that window, in seconds of the log's clock (the mm:ss:mmm a line starts with, from
+# Flycast's start: about 0.2 s behind vr-test's -At times).
+function Get-LogCount([string]$run, [string]$regex, [double]$From = -1, [double]$To = 1e9) {
+	$hits = @(Select-String -LiteralPath (Get-RunLog $run) -Pattern $regex -CaseSensitive)
+	if ($From -lt 0 -and $To -ge 1e9) { return $hits.Count }
+	return @($hits | Where-Object { $_.Line -match '^(\d+):(\d\d):(\d{3}) ' -and
+		($t = [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000) -ge $From -and $t -lt $To }).Count
 }
 
 # Lines matching a regex in a run's log, at most $max: $null when so.
@@ -387,21 +392,31 @@ function Test-CmSim {
 # player 2 join at 60 s (stage 1's first room), Y is then player 2's B, the left menu button
 # (the settings menu, for now its log line), the left stick click recenters, the right one
 # turns the laser off (on by default). The controllers' profile is logged when the runtime
-# names it.
+# names it. X is player 2's Start, never player 1's: A's starts (30-52 s) show as player 1
+# Start lines before 53 s on the log's clock (so the count sees them), and none come after.
 function Test-CmButtons {
-	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-buttons'; Seconds = 72; XrSim = $true; Config = $cmWiden
+	$name = 'accept-cm-buttons'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 72; XrSim = $true; Config = $cmWiden
 		At = @(Get-CmStartsXr) + '56=xr right/b 1 200', '60=xr left/x 1 200', '62=xr left/y 1 200', '64=xr left/menu 1 200',
 			'66=xr left/thumbstick 1 200', '68=xr right/thumbstick 1 200'
 		Expect = 'Light gun P1 at .*start 1', 'Light gun P1 at .* B 1', 'XR: player 2 joins: a gun in each hand',
 			'Light gun P2 at .* B 1', 'XR: menu button', 'XR: recenter \(button\)', 'XR: laser off',
 			'XR: controllers: /interaction_profiles/oculus/touch_controller'
 		Reject = 'XR: initialisation failed' }
+	if ($why) { return $why }
+	$a = Get-LogCount $name 'Light gun P1 at .*start 1' -To 53
+	$x = Get-LogCount $name 'Light gun P1 at .*start 1' -From 53
+	Write-Host "  player 1 Start lines: $a before 53 s (A, want some), $x from 53 s on (want 0: X is player 2's)"
+	if ($a -lt 1) { return 'no player 1 Start line before 53 s: the timed count sees nothing' }
+	if ($x -ne 0) { return "$x player 1 Start lines from 53 s on: X (60 s) gave player 1 a Start" }
+	return $null
 }
 
 # The PC controllers' settings menu, in attract (no starts). Index: the left pad squeezed hard
 # (trackpad/force) is the menu button, once. Vive wands (and Windows Mixed Reality): the left
 # menu button is Start; held 0.8 s it is the menu instead. A short press (33 s) acts as the left
-# Start when let go (player 2 joins), a 1.2 s hold (36 s) opens the menu: one menu line.
+# Start when let go (player 2 joins, Start for player 2 by 35 s on the log's clock), a 1.2 s
+# hold (36 s) opens the menu: one menu line, no second join and no player 2 Start from 35 s on.
 function Test-CmButtonsPc {
 	foreach ($pc in @(
 			@{ Name = 'accept-cm-buttons-index'; Profile = 'valve/index_controller'; At = @('35=xr left/trackpad/force 1 300'); Expect = @() },
@@ -414,6 +429,15 @@ function Test-CmButtonsPc {
 		$n = Get-LogCount $pc.Name 'XR: menu button'
 		Write-Host "  $n lines 'XR: menu button' in $($pc.Name) (want 1)"
 		if ($n -ne 1) { return "$($pc.Profile): $n lines 'XR: menu button', want 1" }
+		if ($pc.Profile -eq 'htc/vive_controller') {
+			$tap = Get-LogCount $pc.Name 'Light gun P2 at .*start 1' -From 33 -To 35
+			$hold = Get-LogCount $pc.Name 'Light gun P2 at .*start 1' -From 35
+			$joins = Get-LogCount $pc.Name 'XR: player 2 joins'
+			Write-Host "  player 2 Start lines: $tap at 33-35 s (the short press, want some), $hold from 35 s on (the hold, want 0); $joins joins (want 1)"
+			if ($tap -lt 1) { return "$($pc.Profile): no player 2 Start from the short press (33-35 s)" }
+			if ($hold -ne 0) { return "$($pc.Profile): $hold player 2 Start lines from 35 s on: the menu hold was a Start too" }
+			if ($joins -ne 1) { return "$($pc.Profile): $joins lines 'XR: player 2 joins', want 1" }
+		}
 	}
 	return $null
 }

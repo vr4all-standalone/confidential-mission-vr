@@ -1585,9 +1585,9 @@ void updateLightgun(XrTime time)
 	}
 	const bool rightStart = boolAction(startAction, Right);
 	// Joining takes both controllers (with one, the left Start does nothing) and a game
-	// that shows when player 2 is out again (its profile knows the prompt). Not online:
-	// player 2 is the other player there, and only this side's player 1 is sent (both Start
-	// buttons are then that player's).
+	// that shows when player 2 is out again (its profile knows the prompt). Not online
+	// (GGPO): player 2 is the other player there and only this side's player 1 is sent, so
+	// there the left Start does nothing.
 	const bool canJoin = config::VrDualWield && !config::GGPOEnable && player2PromptKnown() && tracked[Left] && tracked[Right];
 	if (canJoin && leftStart && !leftStartWas && !dualWield)
 	{

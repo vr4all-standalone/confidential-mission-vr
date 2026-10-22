@@ -36,7 +36,8 @@ const Eye *currentEye();
 void term();
 // The controllers in use: the runtime's interaction profile for the right hand (the left's
 // when the right has none), e.g. "/interaction_profiles/oculus/touch_controller"; "" before
-// the runtime names one.
+// the runtime names one. Render thread only (the string changes there when the runtime names
+// other controllers): copy the result if you keep it.
 const char *controllerProfile();
 #else
 inline bool enabled() { return false; }
