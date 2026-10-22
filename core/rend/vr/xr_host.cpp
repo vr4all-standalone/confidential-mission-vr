@@ -45,6 +45,7 @@
 #include "cfg/cfg.h"
 #include "stdclass.h"
 #include "emulator.h"
+#include "network/ggpo.h"
 #include "log/Log.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -2069,6 +2070,13 @@ void applyPause()
 	pauseRequest = -1;
 	if (request == 1 && !menuOpen && emu.running())
 	{
+		if (ggpo::active())
+		{
+			// Online (GGPO), a stop ends the session: Flycast's own menu doesn't pause there either
+			// (gui_open_settings).
+			NOTICE_LOG(RENDERER, "XR: no pause in an online game");
+			return;
+		}
 		// As Flycast's own menu does it from this thread (gui_open_settings): the emulator's
 		// thread is let go of any wait for the renderer (rend_cancel_emu_wait), then waited for.
 		// Its sound stops with it.
@@ -2079,9 +2087,10 @@ void applyPause()
 	}
 	else if (request == 0 && menuOpen)
 	{
-		menuOpen = false;
 		NOTICE_LOG(RENDERER, "XR: menu closed (resumed)");
 		emu.start();
+		// (after the start: if it throws, the menu still holds the stopped emulator)
+		menuOpen = false;
 	}
 }
 
@@ -2243,8 +2252,10 @@ bool frame()
 					: "Reload: grab the back of the pistol with your other hand and pull.", 0.047f, grey },
 		};
 	const bool showPanel = !panel.lines.empty();
-	// the panel alone in a dark room, or over the paused game (the VR menu)
-	const bool darkRoom = showPanel && !menuOpen;
+	// The panel alone in a dark room, or over the paused game (the VR menu). Paused with no game
+	// frame kept, it's the dark room too: the GL context went away (Android: the app's surface,
+	// Quest home) and the renderer's Term let go of the frame; it comes back with the game.
+	const bool darkRoom = showPanel && (!menuOpen || !gles_vr_have_frame());
 
 	XrViewState viewState { XR_TYPE_VIEW_STATE };
 	XrViewLocateInfo locateInfo { XR_TYPE_VIEW_LOCATE_INFO };
@@ -2359,7 +2370,7 @@ bool frame()
 				}
 			}
 		}
-		if (menuOpen)
+		if (menuOpen && !darkRoom)
 		{
 			// the VR menu over the paused game, the guns over it
 			glBindFramebuffer(GL_FRAMEBUFFER, c.fbos[index]);

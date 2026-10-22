@@ -482,8 +482,9 @@ function Test-CmPause {
 	$why = Invoke-VrCheck 'blank', $p1, $p2, $p3, '--region', 'full', '--max', '0.5'
 	if ($why) { return "a paused shot mostly black: $why" }
 	# (g and f1 are 2D screens: a picture in the middle of the view, black around it by design.
-	# Its strip left of the panel, measured 0.15 and 0.00)
-	$why = Invoke-VrCheck 'blank', $g, $f1, '--region', '0.25,0.36,0.34,0.64', '--max', '0.5'
+	# The strip between the picture's left edge, x ~0.24 in g, and the panel, from x ~0.37:
+	# measured 0.15 and 0.00)
+	$why = Invoke-VrCheck 'blank', $g, $f1, '--region', '0.28,0.36,0.35,0.64', '--max', '0.5'
 	if ($why) { return "a paused 2D screen black: $why" }
 	$why = Invoke-VrCheck 'same', $p1, $p2, '--max-diff', '1.5'
 	if ($why) { return "the paused picture moved: $why" }

@@ -107,7 +107,11 @@ public:
 				}
 				if (dupe)
 				{
-					if (type == Stop)
+					// hotd2-vr: and while the emulator stops (Emulator::stop sets its state before
+					// rend_cancel_emu_wait), a second render is dropped, not waited for:
+					// cancelEnqueue keeps the queued one and wakes this wait only once, and the
+					// stopping thread waits for this one to end.
+					if (type == Stop || !emu.running())
 						return;
 					dequeueEvent.Wait();
 				}
