@@ -41,7 +41,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 # the run's folder gets emptied: nothing that could reach out of build-win\vrtest
-if (-not $Name -or $Name -match '\.\.|[\\/:]') { throw "-Name '$Name': want a plain folder name" }
+if (-not $Name -or $Name -match '^\.+$|\.\.|[\\/:*?\[\]]') { throw "-Name '$Name': want a plain folder name" }
 $repo = Split-Path -Parent $PSScriptRoot
 $exe = Join-Path $repo 'build-win\flycast.exe'
 if (-not (Test-Path $exe)) { throw "Build the Windows version first: hotd2-vr\build-win.cmd" }
@@ -78,7 +78,7 @@ foreach ($a in $At) {
 	$time, $action = $a -split '=', 2
 	$text = (-split $action) -join ' '
 	$t = 0.0
-	if (-not [double]::TryParse($time, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$t) -or
+	if ($time -notmatch '^\d+(\.\d+)?$' -or -not [double]::TryParse($time,[Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$t) -or
 			-not $forms.ContainsKey(($text -split ' ')[0]) -or $text -notmatch $forms[($text -split ' ')[0]]) {
 		throw "-At '$a': want <seconds>=<action>, action one of start [p], aim p x y, fire p x y, reload [p], button p bits ms, shot [label], rip count interval ram [texhex polys], mark <text>"
 	}
@@ -123,8 +123,8 @@ function Save-WindowShot($proc, $file) {
 
 $old = @(Get-Process flycast -ErrorAction SilentlyContinue)
 if ($old) { $old | Stop-Process -Force; Start-Sleep -Milliseconds 500 }
-if (Test-Path $out) { Remove-Item -Recurse -Force $out }
-New-Item -ItemType Directory -Force $out | Out-Null
+if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $out | Out-Null
 if ($DebugShots -gt 0) { Get-ChildItem $dataDir -Filter 'shot_*.png' -ErrorAction SilentlyContinue | Remove-Item }
 $actions = Join-Path $out 'actions.log'
 Set-Content $actions "game $content`r`nconfig $cfg"
