@@ -1,7 +1,8 @@
 """
 Checks for adding a game to hotd2-vr on the PC: finds the game's camera matrices and values
 in a RAM dump (rip\\ram0000.bin), sums up a rip pass, and reads the VR lines of a run's
-flycast.log (vr-test.ps1 writes both under build-win\\vrtest\\<name>).
+flycast.log (vr-test.ps1 writes both under build-win\\vrtest\\<name>), and measures what its
+window shots leave undrawn.
 
     python -I vrcheck.py matrices <ram.bin>
     python -I vrcheck.py find-float <ram.bin> <value> [--tol 0.01]
@@ -10,6 +11,8 @@ flycast.log (vr-test.ps1 writes both under build-win\\vrtest\\<name>).
     python -I vrcheck.py border <ripdir> <n> <stockFocal> <liveFocal> [--min-ratio 0.5] [--max-w 3]
     python -I vrcheck.py shots <flycast.log> [--tex t1,t2] [--max-off N] [--each-gun N] [--from S] [--to S] [--union]
     python -I vrcheck.py focal <flycast.log> [--expect F --tol 0.02] [--from S] [--to S]
+    python -I vrcheck.py blank <png> [<png> ...] [--region lower|full|x0,y0,x1,y1] [--black N] [--patch K]
+                                                [--max F] [--max-jump F]
     python -I vrcheck.py selftest
 
 RAM offsets are printed as the profile takes them (address & 0x01FFFFFF: the dump starts at
@@ -382,6 +385,115 @@ def focal(args):
     return code
 
 
+#
+# Window shots (vr-test.ps1's t<seconds>[-label].png)
+#
+
+def _read_png(path):
+    """An 8-bit RGB or RGBA PNG, not interlaced (what vr-test.ps1 saves), as h x w x 3 uint8."""
+    import zlib
+    data = open(path, 'rb').read()
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        raise ValueError(f'{path}: not a PNG')
+    pos, idat, hdr = 8, [], None
+    while pos + 8 <= len(data):
+        n, kind = struct.unpack('>I4s', data[pos:pos + 8])
+        if kind == b'IHDR':
+            hdr = struct.unpack('>IIBBBBB', data[pos + 8:pos + 21])
+        elif kind == b'IDAT':
+            idat.append(data[pos + 8:pos + 8 + n])
+        elif kind == b'IEND':
+            break
+        pos += 12 + n
+    if hdr is None or hdr[2] != 8 or hdr[3] not in (2, 6) or hdr[6] != 0:
+        raise ValueError(f'{path}: want an 8-bit RGB or RGBA PNG, not interlaced')
+    w, h, bpp = hdr[0], hdr[1], 3 if hdr[3] == 2 else 4
+    stride = w * bpp
+    raw = np.frombuffer(zlib.decompress(b''.join(idat)), np.uint8).reshape(h, stride + 1)
+    out = np.zeros((h, stride), np.uint8)
+    prev = np.zeros(stride, np.int64)
+    for y in range(h):
+        kind, line = raw[y, 0], raw[y, 1:].astype(np.int64)
+        if kind == 1:		# Sub: a running sum along each channel
+            line = np.cumsum(line.reshape(w, bpp), axis=0).reshape(-1) & 255
+        elif kind == 2:		# Up
+            line = (line + prev) & 255
+        elif kind in (3, 4):	# Average, Paeth: byte by byte
+            cur = [0] * stride
+            for i in range(stride):
+                a = cur[i - bpp] if i >= bpp else 0
+                b = int(prev[i])
+                if kind == 3:
+                    pred = (a + b) // 2
+                else:
+                    c = int(prev[i - bpp]) if i >= bpp else 0
+                    pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                    pred = a if pa <= pb and pa <= pc else b if pb <= pc else c
+                cur[i] = (int(line[i]) + pred) & 255
+            line = np.array(cur, np.int64)
+        elif kind != 0:
+            raise ValueError(f'{path}: row {y} has filter {kind}')
+        out[y] = line
+        prev = line
+    return out.reshape(h, w, bpp)[..., :3]
+
+
+# Near-black: every channel below this (the headset round 1 investigation's). Nothing drawn shows
+# the clear colour, black; so does what the game itself lights black (some of CM's scenery),
+# which the limits leave room for.
+BLACK = 14
+
+
+def _region(spec, h, w):
+    """lower (half), full, or x0,y0,x1,y1 as fractions of the width and height."""
+    if spec == 'full':
+        return slice(0, h), slice(0, w)
+    if spec == 'lower':
+        return slice(h // 2, h), slice(0, w)
+    try:
+        x0, y0, x1, y1 = (float(v) for v in spec.split(','))
+    except ValueError:
+        raise SystemExit(f'--region {spec}: want lower, full or x0,y0,x1,y1 (fractions)')
+    if not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):
+        raise SystemExit(f'--region {spec}: want 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1')
+    return slice(round(y0 * h), round(y1 * h)), slice(round(x0 * w), round(x1 * w))
+
+
+def blank(args):
+    """What window shots leave near-black in a region (nothing drawn there): per shot the
+    fraction; with several, in the order given, the largest and the largest change from one to
+    the next (a piece coming and going while the camera moves). --black 1: only the clear colour
+    itself; --patch K: only what fills K x K squares (a shadow's dark texels between lighter ones
+    left out)."""
+    if args.patch < 1 or args.patch % 2 == 0:
+        raise SystemExit(f'--patch {args.patch}: want an odd size >= 1')
+    fracs = []
+    for path in args.png:
+        img = _read_png(path)
+        dark = img.max(-1) < args.black
+        if args.patch > 1:
+            # an opening: the squares wholly dark, then every pixel of them
+            r = args.patch // 2
+            core = np.zeros_like(dark)
+            if dark.shape[0] > 2 * r and dark.shape[1] > 2 * r:
+                core[r:-r, r:-r] = np.lib.stride_tricks.sliding_window_view(dark, (args.patch,) * 2).all(axis=(2, 3))
+            dark = np.lib.stride_tricks.sliding_window_view(np.pad(core, r), (args.patch,) * 2).any(axis=(2, 3))
+        ys, xs = _region(args.region, *img.shape[:2])
+        part = dark[ys, xs]
+        fracs.append(float(part.mean()) if part.size else 0.0)
+        print(f'{os.path.basename(path)} blank {fracs[-1]:.3f}')
+    code = 1 if args.max is not None and max(fracs) > args.max else 0
+    if len(fracs) > 1:
+        top = int(np.argmax(fracs))
+        steps = np.abs(np.diff(fracs))
+        j = int(np.argmax(steps))
+        print(f'shots {len(fracs)} blank max {fracs[top]:.3f} ({os.path.basename(args.png[top])}) '
+              f'jump max {steps[j]:.3f} ({os.path.basename(args.png[j])} -> {os.path.basename(args.png[j + 1])})')
+        if args.max_jump is not None and steps[j] > args.max_jump:
+            code = 1
+    return code
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog='vrcheck.py', description=__doc__.split('\n\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -437,6 +549,14 @@ def main(argv):
     s.add_argument('--to', dest='end', type=float)
     s.add_argument('--wnear-allow', help='W,lo-hi,...: every frame\'s nearest W one of these')
     s.set_defaults(run=focal)
+    s = sub.add_parser('blank')
+    s.add_argument('png', nargs='+')
+    s.add_argument('--region', default='lower', help='lower (half), full, or x0,y0,x1,y1 as fractions')
+    s.add_argument('--black', type=int, default=BLACK, help=f'blank: every channel below this (default {BLACK}; 1: exactly black)')
+    s.add_argument('--patch', type=int, default=1, help='count only blank filling K x K squares (odd; default 1: every pixel)')
+    s.add_argument('--max', type=float, help='every shot at most this blank')
+    s.add_argument('--max-jump', type=float, help='consecutive shots at most this far apart')
+    s.set_defaults(run=blank)
     s = sub.add_parser('selftest')
     s.set_defaults(run=lambda args: selftest())
     args = ap.parse_args(argv)
@@ -569,6 +689,32 @@ def _synthetic_log_union():
     ]) + '\n'
 
 
+def _write_png(path, rgb, filters=(0,)):
+    """rgb (h x w x 3 uint8) as a PNG, row y with filter filters[y % len(filters)]."""
+    import zlib
+    h, w, _ = rgb.shape
+    rows, prev = [], [0] * (w * 3)
+    for y in range(h):
+        line = [int(v) for v in rgb[y].reshape(-1)]
+        kind = filters[y % len(filters)]
+        out = []
+        for i, v in enumerate(line):
+            a = line[i - 3] if i >= 3 else 0
+            b = prev[i]
+            c = prev[i - 3] if i >= 3 else 0
+            pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+            pred = (0, a, b, (a + b) // 2, a if pa <= pb and pa <= pc else b if pb <= pc else c)[kind]
+            out.append((v - pred) & 255)
+        rows.append(bytes([kind] + out))
+        prev = line
+
+    def chunk(kind, body):
+        return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+    with open(path, 'wb') as f:
+        f.write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+                + chunk(b'IDAT', zlib.compress(b''.join(rows))) + chunk(b'IEND', b''))
+
+
 def selftest():
     failures = []
 
@@ -699,6 +845,47 @@ def selftest():
         check(['stock', log2, '--min-s', '0'], 0, [scene1, scene2, scene3, 'lines 7 runs 3'])
         check(['stock', log2, '--min-s', '0', '--from', '55'], 0, [scene2, scene3, 'lines 3 runs 2'])
         check(['stock', log2, '--from', '60'], 1, ['lines 0 runs 0'])
+
+        # window shots: 8 x 6, the lower half (24 px) with 6 near-black (13: every channel < 14;
+        # one channel at 14 is not), 4 of them in its left half; the same picture through every
+        # PNG row filter; one with nothing near-black
+        rgb = np.full((6, 8, 3), 200, np.uint8)
+        rgb[3:, :4][[0, 0, 1, 2], [0, 1, 2, 3]] = 13
+        rgb[5, 6] = rgb[4, 7] = 13
+        rgb[4, 5] = (13, 14, 13)
+        shot_a, shot_f, shot_b = (os.path.join(tmp, n) for n in ('a.png', 'f.png', 'b.png'))
+        _write_png(shot_a, rgb)
+        _write_png(shot_f, rgb, filters=(0, 1, 2, 3, 4))
+        _write_png(shot_b, np.full((6, 8, 3), 90, np.uint8))
+        if not np.array_equal(_read_png(shot_f), rgb):
+            failures.append('png: the picture through filters 0-4 reads back different\n')
+        check(['blank', shot_a], 0, ['a.png blank 0.250'])
+        check(['blank', shot_f, '--max', '0.25'], 0, ['f.png blank 0.250'])
+        check(['blank', shot_a, '--max', '0.2'], 1, ['a.png blank 0.250'])
+        check(['blank', shot_a, '--region', 'full'], 0, ['a.png blank 0.125'])
+        check(['blank', shot_a, '--region', '0,0.5,0.5,1'], 0, ['a.png blank 0.333'])
+        check(['blank', shot_a, '--region', '0.5,0,1,0.5'], 0, ['a.png blank 0.000'])
+        series = ['a.png blank 0.250', 'b.png blank 0.000', 'a.png blank 0.250',
+                  'shots 3 blank max 0.250 (a.png) jump max 0.250 (a.png -> b.png)']
+        check(['blank', shot_a, shot_b, shot_a, '--max', '0.3'], 0, series)
+        check(['blank', shot_a, shot_b, shot_a, '--max', '0.3', '--max-jump', '0.1'], 1, series)
+        check(['blank', shot_b, shot_b, '--max-jump', '0'], 0,
+              ['b.png blank 0.000', 'b.png blank 0.000', 'shots 2 blank max 0.000 (b.png) jump max 0.000 (b.png -> b.png)'])
+        # exactly black and its squares: 8 x 6, the lower half (24 px) a 3 x 3 black square, one black
+        # pixel apart and one at 13: near-black 11, black 10, in 3 x 3 squares 9
+        rgb = np.full((6, 8, 3), 200, np.uint8)
+        rgb[3:, :3] = 0
+        rgb[3, 5] = 0
+        rgb[4, 7] = 13
+        shot_p = os.path.join(tmp, 'p.png')
+        _write_png(shot_p, rgb)
+        check(['blank', shot_p], 0, ['p.png blank 0.458'])
+        check(['blank', shot_p, '--black', '1'], 0, ['p.png blank 0.417'])
+        check(['blank', shot_p, '--black', '1', '--patch', '3', '--max', '0.375'], 0, ['p.png blank 0.375'])
+        check(['blank', shot_p, '--patch', '3'], 0, ['p.png blank 0.375'])
+        check(['blank', shot_p, '--patch', '5'], 0, ['p.png blank 0.000'])
+        check(['blank', shot_p, '--patch', '4'], '--patch 4: want an odd size >= 1', [])
+        check(['blank', shot_a, '--region', '0.5,0,0.5,1'], '--region 0.5,0,0.5,1: want 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1', [])
 
     for f in failures:
         print('FAIL ' + f, end='' if f.endswith('\n') else '\n')

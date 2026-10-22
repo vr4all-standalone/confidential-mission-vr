@@ -11,7 +11,7 @@
   confmiss\gds-0001.chd, naomi.zip), $env:VRLGH_HOTD2 (the US disc of The House of the Dead 2,
   MK-51002) and Python with numpy. Prints PASS <name> / FAIL <name>: <reason>; exit 1 when any
   fails. Runs land in build-win\vrtest\accept-<run>\; Confidential Mission's scenarios share
-  four runs (accept-cm-tour, -off, -edges, -hall), each played once per call.
+  six runs (accept-cm-tour, -off, -edges, -hall, -floor, -floor0), each played once per call.
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
 $ErrorActionPreference = 'Stop'
@@ -117,6 +117,11 @@ $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000
 
 function Get-CmStarts { for ($t = 30; $t -le 52; $t += 2) { "$t=start 0" } }
 
+# The window as wide as a Quest 3 eye (104 x 96 degrees: the tan of its half angles), for the
+# floor's runs; their shot every 0.4 s from 52 to 72 s.
+$cmQuestEye = 'config:vr.WindowTanX=1.2799,config:vr.WindowTanY=1.1106'
+$cmFloorTimes = @(for ($i = 0; $i -le 50; $i++) { [Math]::Round(52 + 0.4 * $i, 1) })
+
 # The 9 points from $t0, $gap apart, a reload after the 3rd and 6th; -Starts 1: a reload 0.9 s
 # before and Start 0.35 s after each (a death continued at once), 2: a second Start 0.85 s
 # after (1.1 s after a reloading one); -Label: a window shot 0.1 s after each.
@@ -178,6 +183,14 @@ $cmRunDefs = [ordered]@{
 	'accept-cm-hall' = @{ Game = 'confmiss'; Name = 'accept-cm-hall'; Seconds = 147; Config = $cmWiden
 		At = @(Get-CmHallRoute) + '55=shot stage1', '62=shot', '67.5=shot cutscene', '75=shot', '85.5=shot p2out',
 			'119.3=shot fade', '125=shot hall' }
+	# widened, the window a Quest 3 eye looking 30 degrees down: the hall route to the hall's
+	# still camera, shots in stage 1's first room and in the hall
+	'accept-cm-floor' = @{ Game = 'confmiss'; Name = 'accept-cm-floor'; Seconds = 131; Config = "$cmWiden,$cmQuestEye,config:vr.Pitch=-30"
+		At = @(Get-CmHallRoute | Where-Object { [double]($_ -split '=')[0] -lt 131 }) + '54=shot room', '56.5=shot room', '127.5=shot hall', '129=shot hall' }
+	# the same eye straight ahead, the hall route through stage 1: the floor in front at 53.5 s,
+	# and a shot every 0.4 s from 52 to 72 s while the camera moves
+	'accept-cm-floor0' = @{ Game = 'confmiss'; Name = 'accept-cm-floor0'; Seconds = 73; Config = "$cmWiden,$cmQuestEye"
+		At = @(Get-CmHallRoute | Where-Object { [double]($_ -split '=')[0] -lt 73 }) + '53.5=shot wedge' + @($cmFloorTimes | ForEach-Object { (T $_) + '=shot floor' }) }
 }
 $cmRuns = @{}
 # Play a shared run once per call: $null when it ran to the end, else why not.
@@ -303,8 +316,37 @@ function Test-CmP2 {
 	return $(if ($seen -ne 'shown, gone, shown, gone') { "player 2 prompt: $seen (want shown, gone, shown, gone)" } else { $null })
 }
 
+# The floor (headset round 1, notes\confmiss-findings.md), widened, through a Quest 3 eye: what
+# is left undrawn shows near-black (vrcheck blank). Looking 30 degrees down, the lower half in
+# stage 1's first room and in the museum hall (clipFarOut cut CM's real floor 47.7 degrees
+# below the game's axis: about 3/4 and 1/2 of it missing); straight ahead at 53.5 s, the floor
+# in front, where the culled pieces of the mirrored floor strips left a wedge; a shot every
+# 0.4 s while the camera moves through stage 1: the floor in front (the lowest quarter) never
+# blank, nor jumping from one shot to the next (a wedge coming and going: the pop-in); there blank
+# is the clear colour itself in 9 x 9 squares, as the soldiers' shadows crossing it are near-black
+# and black in places.
+function Test-CmFloor {
+	foreach ($run in 'accept-cm-floor', 'accept-cm-floor0') {
+		$why = Invoke-CmRun $run
+		if ($why) { return $why }
+	}
+	$down = 't054-room.png', 't056.5-room.png', 't127.5-hall.png', 't129-hall.png'
+	$series = @($cmFloorTimes | ForEach-Object { 't{0:000.#}-floor.png' -f $_ })
+	$why = Test-RunShots 'accept-cm-floor' $down
+	if (-not $why) { $why = Test-RunShots 'accept-cm-floor0' (@('t053.5-wedge.png') + $series) }
+	if ($why) { return $why }
+	$dir, $dir0 = (Join-Path $repo 'build-win\vrtest\accept-cm-floor'), (Join-Path $repo 'build-win\vrtest\accept-cm-floor0')
+	$why = Invoke-VrCheck (@('blank') + @($down | ForEach-Object { Join-Path $dir $_ }) + '--region', 'lower', '--max', '0.05')
+	if ($why) { return "looking down: $why" }
+	$why = Invoke-VrCheck 'blank', (Join-Path $dir0 't053.5-wedge.png'), '--region', 'lower', '--max', '0.02'
+	if ($why) { return "straight ahead: $why" }
+	$why = Invoke-VrCheck (@('blank') + @($series | ForEach-Object { Join-Path $dir0 $_ }) + '--region', '0,0.75,1,1', '--black', '1', '--patch', '9', '--max', '0.03', '--max-jump', '0.03')
+	if ($why) { return "stage 1, the camera moving: $why" }
+	return $null
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
-	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2' }
+	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }
 $failed = 0

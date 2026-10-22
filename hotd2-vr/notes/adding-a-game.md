@@ -115,6 +115,7 @@ All RAM offsets are `address & 0x01FFFFFF`, accessed at `0x8C000000 + offset` (N
 | `p2HideTrailing` | while the prompt shows, flat polygons on its line just after it are hidden too (HOTD2's credit count) (default on). CM: off, nothing follows its prompt in free play. |
 | `snapMinW`, `snapMaxW`, `snapStep` | 2D layers between W `snapMinW` (default 0.75) and `snapMaxW` on multiples of `snapStep` go onto the 2D plane (`snapNear2D`). CM: 0.005 to 10 in steps of 1/16000. |
 | `offScreen2DMaxW` | 2D layers nearer than this W are snapped even partly or wholly off the screen; `cropPlaneToScreen` hides those wholly off it and cuts axis-aligned quads to it (default 0: none). Keep it below the game's near plane. CM: 0.3 (its caption ticker). |
+| `farOutBelowW` | `clipFarOut` cuts a 3D polygon reaching more than 2.5 screens out only when such a corner is nearer than this W, a pinned corner (default 0: whatever its W). CM: 0.299, just under its near plane (W 0.300). |
 | `letterboxW` | W of black letterbox bars (0: the 2D plane's) (`hideLetterbox`) |
 | `letterboxTextures[4]` | textures that make a polygon at `letterboxW` a bar whatever its colour (default none: opaque black ones only). CM: 400680 (white bars drawn black by it). |
 | `sightTextures[8]`, `sightMinW/MaxW` | the game's sights over its enemies and their W band, put on the 2D plane before the snap (`placeSights`; default none). CM: 400000 at W 0.95-1.005. |
@@ -122,6 +123,8 @@ All RAM offsets are `address & 0x01FFFFFF`, accessed at `0x8C000000 + offset` (N
 | `flatScreens` | a pass with no 3D (menus in layers of depth) goes wholly onto the 2D plane (`snapFlatScreen` :879) |
 | `unitScale` | game unit size vs HOTD2's (metres = `vr.WorldScale * unitScale`, `worldScale()` :513). HOTD2 camera ~15 units over the street. |
 | `model` | `hands::Source` (kind, file, texture addresses) |
+
+A game that clips its 3D at its own near plane (no W below it in a rip) should set `farOutBelowW` just under that plane: its corners far outside the screen are then real 3D beside the view (CM's floor reaches 88.6 degrees below the camera's axis), and cutting them leaves the floor missing in a headset. To see it on the PC, give the window a Quest 3 eye's view (`config:vr.WindowTanX=1.2799,config:vr.WindowTanY=1.1106`, 104 x 96 degrees) and measure the blank with `vrcheck.py blank` (accept.ps1's `cm-floor`).
 
 ### MOK's values (worked example) [V `vr_reproject.cpp:300-349`]
 
