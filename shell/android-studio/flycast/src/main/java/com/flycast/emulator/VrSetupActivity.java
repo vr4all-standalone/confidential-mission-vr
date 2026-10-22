@@ -54,7 +54,7 @@ public class VrSetupActivity extends Activity
         page.setPadding(dp(36), dp(28), dp(36), dp(28));
         page.setBackgroundColor(BACK);
 
-        TextView title = text("THE HOUSE OF THE DEAD 2 VR", 28, RED);
+        TextView title = text("VR LIGHT GUN HUB", 28, RED);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         page.addView(title);
         page.addView(text("Two steps before the first game.", 17, SOFT), spaced(4));
@@ -76,9 +76,11 @@ public class VrSetupActivity extends Activity
         games.setOrientation(LinearLayout.VERTICAL);
         page.addView(games, spaced(20));
 
-        page.addView(text("Your own copies of the games: The House of the Dead 2 (European or US version) and The "
-                + "Maze of the Kings (arcade, as a MAME set: mok.zip with the folder mok next to it). Nothing of the "
-                + "games comes with this app. Unofficial fan project, not affiliated with Sega.", 13, SOFT), spaced(22));
+        page.addView(text("Your own copies of the games: The House of the Dead 2 (European or US version), The "
+                + "Maze of the Kings (arcade, as a MAME set: mok.zip with the folder mok next to it) and "
+                + "Confidential Mission (arcade, as a MAME set: confmiss.zip with its key inside, naomi.zip next to "
+                + "it or the BIOS inside, and the folder confmiss with gds-0001.chd). Nothing of the games comes "
+                + "with this app. Unofficial fan project, not affiliated with Sega.", 13, SOFT), spaced(22));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(BACK);

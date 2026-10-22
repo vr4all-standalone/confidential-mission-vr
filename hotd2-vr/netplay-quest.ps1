@@ -34,7 +34,7 @@ $cfg = 'config:pvr.rend=0,config:rend.NativeDepthInterpolation=yes,config:aica.V
 	",network:GGPODelay=$Delay,network:hotd2vr.TestAnyCpu=yes" +
 	',config:Dreamcast.Region=2,config:Dreamcast.Broadcast=1,config:Dreamcast.Language=1,config:Dreamcast.Cable=3'	# (as the headset's launch: the blank flash gets them)
 Write-Output "Headset side (start this first):"
-Write-Output "  adb shell am start -S -n com.flycast.emulator.vr/com.flycast.emulator.MainActivity --es hotd2vr.config `"network:GGPO=yes,network:ActAsServer=yes,network:EnableUPnP=no,network:GGPODelay=$Delay,network:hotd2vr.TestAnyCpu=yes,config:Dreamcast.Region=2,config:Dreamcast.Broadcast=1,config:Dreamcast.Language=1,config:Dreamcast.Cable=3`""
+Write-Output "  adb shell am start -S -n com.vrlightgunhub.app/com.flycast.emulator.MainActivity --es hotd2vr.config `"network:GGPO=yes,network:ActAsServer=yes,network:EnableUPnP=no,network:GGPODelay=$Delay,network:hotd2vr.TestAnyCpu=yes,config:Dreamcast.Region=2,config:Dreamcast.Broadcast=1,config:Dreamcast.Language=1,config:Dreamcast.Cable=3`""
 $p = Start-Process -FilePath (Join-Path $dir 'flycast.exe') -ArgumentList @('-config', $cfg, "`"$GamePath`"") -WorkingDirectory $dir -PassThru
 
 # player 2 on this PC: joins with Start now and then (a press while it plays pauses, the next

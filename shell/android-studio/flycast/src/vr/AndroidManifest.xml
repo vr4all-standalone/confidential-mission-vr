@@ -29,7 +29,7 @@
     </queries>
 
     <application
-        android:label="HOTD2 VR"
+        android:label="VR Light Gun Hub"
         tools:replace="android:label">
         <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
         <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />

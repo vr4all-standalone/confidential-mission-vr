@@ -54,6 +54,7 @@ public final class VrGames
     /** The arcade sets the VR mod knows: MAME name, title, and the GD-ROM image next to it. */
     private static final String[][] ARCADE = {
         { "mok", "The Maze of the Kings", "gds-0022" },
+        { "confmiss", "Confidential Mission", "gds-0001" },
     };
 
     private static final String[] IMAGES = { ".cue", ".gdi", ".chd", ".cdi" };

@@ -109,6 +109,9 @@ static void sdl_close_joystick(SDL_JoystickID instance)
 		gamepad->close();
 }
 
+// hotd2-vr: modified in 2026, the window titles name the app.
+static const char *const AppName = "VR Light Gun Hub";
+
 static void setWindowTitleGame()
 {
 	std::string title = config::loadStr("window", "title");
@@ -119,7 +122,7 @@ static void setWindowTitleGame()
 		else
 			title = settings.content.title;
 	}
-	SDL_SetWindowTitle(window, ("Flycast - " + title).c_str());
+	SDL_SetWindowTitle(window, (std::string(AppName) + " - " + title).c_str());
 }
 
 static void captureMouse(bool capture)
@@ -142,7 +145,7 @@ static void captureMouse(bool capture)
 		{
 			if (config::UseRawInput)
 				SDL_ShowCursor(SDL_DISABLE);
-			SDL_SetWindowTitle(window, "Flycast - mouse capture");
+			SDL_SetWindowTitle(window, (std::string(AppName) + " - mouse capture").c_str());
 			mouseCaptured = true;
 		}
 	}
@@ -153,7 +156,7 @@ static void emuEventCallback(Event event, void *)
 	switch (event)
 	{
 	case Event::Terminate:
-		SDL_SetWindowTitle(window, "Flycast");
+		SDL_SetWindowTitle(window, AppName);
 		sdl_stopHaptic(0);
 		break;
 	case Event::Pause:
@@ -873,7 +876,7 @@ bool sdl_recreate_window(u32 flags)
 	flags |= SDL_WINDOW_FULLSCREEN;
 #endif
 
-	window = SDL_CreateWindow("Flycast", windowPos.x, windowPos.y,
+	window = SDL_CreateWindow(AppName, windowPos.x, windowPos.y,
 			windowPos.w * hdpiScaling, windowPos.h * hdpiScaling, flags);
 	if (window == nullptr)
 	{

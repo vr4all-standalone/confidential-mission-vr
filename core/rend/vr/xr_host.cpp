@@ -506,7 +506,7 @@ bool init()
 #endif
 	createInfo.enabledExtensionCount = (u32)extensions.size();
 	createInfo.enabledExtensionNames = extensions.data();
-	strcpy(createInfo.applicationInfo.applicationName, "HOTD2 VR");
+	strcpy(createInfo.applicationInfo.applicationName, "VR Light Gun Hub");
 	createInfo.applicationInfo.applicationVersion = 1;
 	strcpy(createInfo.applicationInfo.engineName, "Flycast");
 	createInfo.applicationInfo.engineVersion = 1;

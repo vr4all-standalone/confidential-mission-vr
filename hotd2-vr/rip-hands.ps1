@@ -82,8 +82,8 @@ if (-not $devices) {
 	Write-Host "No headset over adb: hands.bin stays in $runDir. Later: adb push it to /data/local/tmp and copy it into the app's files with run-as (see README)."
 	return
 }
-$pkg = 'com.flycast.emulator.vr'
+$pkg = 'com.vrlightgunhub.app'
 & $adb push $out /data/local/tmp/hands.bin | Out-Null
 & $adb shell "run-as $pkg sh -c 'cat /data/local/tmp/hands.bin > files/hands.bin' && rm /data/local/tmp/hands.bin"
 & $adb shell am force-stop $pkg
-Write-Host 'On the headset: start HOTD2 VR again to use them.'
+Write-Host 'On the headset: start VR Light Gun Hub again to use them.'

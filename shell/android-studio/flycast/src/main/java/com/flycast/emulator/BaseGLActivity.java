@@ -163,7 +163,7 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
                     pendingIntentUrl = gameUri.toString();
             }
         }
-        else if (getPackageName().endsWith(".vr")) {
+        else if (getPackageName().equals(VR_APPLICATION_ID)) {
             // hotd2-vr: started from the headset's app library. The Flycast menu can't be
             // shown in the headset, so boot the player's game directly, or show the setup
             // panel when it can't be found (or read) yet.
@@ -180,6 +180,9 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
         }
         Log.i("flycast", "BaseGLActivity.onCreate done");
     }
+
+    // hotd2-vr: the "vr" build type's applicationId (build.gradle.kts, androidComponents)
+    private static final String VR_APPLICATION_ID = "com.vrlightgunhub.app";
 
 	// Called from native code
     public void showAlertDialog(String message)

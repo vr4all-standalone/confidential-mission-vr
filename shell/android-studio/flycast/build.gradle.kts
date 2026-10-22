@@ -60,7 +60,8 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
         // hotd2-vr: optimised build for sideloading on the Quest, signed with the debug
-        // key and installed next to (never over) a regular Flycast.
+        // key. The app VR Light Gun Hub: its applicationId is set below (androidComponents),
+        // so it installs next to (never over) a regular Flycast.
         create("vr") {
             initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
@@ -80,7 +81,6 @@ android {
             ndk {
                 abiFilters += "arm64-v8a"
             }
-            applicationIdSuffix = ".vr"
             versionNameSuffix = "-vr"
         }
     }
@@ -107,6 +107,14 @@ android {
         resources {
             excludes += "META-INF/DEPENDENCIES"
         }
+    }
+}
+
+// hotd2-vr: the vr build type is the app VR Light Gun Hub, with an application ID of its own
+// (BaseGLActivity.VR_APPLICATION_ID matches it). ${applicationId} in the manifest follows.
+androidComponents {
+    onVariants(selector().withBuildType("vr")) {
+        it.applicationId.set("com.vrlightgunhub.app")
     }
 }
 
