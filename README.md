@@ -105,6 +105,9 @@ own reload: with one gun either reloads it, with two guns B reloads the right on
 left one. Grip + thumbstick left/right sizes the gun (kept). The gun goes to the hand you last
 fired with.
 
+The knock in the hand comes when the game fires, one for each shot it counts; a pull on an
+empty gun gives a light click instead, and a reload none. `vr.Haptics` sets how strong it is.
+
 **Two guns.** Press X and player 2 joins, as at the cabinet: the right hand holds player 1's
 gun (red aim), the left player 2's (blue aim), both lives and scores on screen. When player 2
 is out of the game (the game asks for player 2's Start again), it's one gun again. X only
@@ -177,6 +180,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.ShowGun` | yes | the gun model |
 | `vr.GunScale` | 0.68 | size of the gun, times the 25 cm arcade gun it is modelled on (also set with grip + thumbstick) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
+| `vr.Haptics` | 2 | the knock in the hand: 0 off, 1 low, 2 normal, 3 strong |
 | `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |
 | `vr.DropShotFlash` | yes | hide a bright full-screen flash right after a shot, should the game draw one |

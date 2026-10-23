@@ -35,3 +35,10 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 - [ ] With the game running, open the app from the Library again: note what you get (the game back, or the start screen). If the start screen, Play starts the game afresh.
 - [ ] Then uninstall the 0.1.0 hub (`com.vrlightgunhub.app`): `adb uninstall com.vrlightgunhub.app`, or Settings > Apps.
 - [ ] PC VR: unpack `confidential-mission-vr-pcvr.zip`, put the three files in its `roms\` folder (`confmiss.zip`, the `confmiss` folder with `gds-0001.chd`, `naomi.zip`), double-click `Play Confidential Mission.cmd`: the game boots in VR.
+
+## Task 6
+
+- [ ] The knock comes with the game's own shot (the shot sound and a bullet going from the HUD), not ahead of it or late; fire fast and every shot still gets its own knock. Shooting off the screen to reload gives no knock.
+- [ ] With the magazine empty, a pull gives a light click, clearly weaker than a shot; after a reload the knock is back.
+- [ ] Low, Normal and Strong feel different: set `vr.Haptics` to 1, 2 and 3 in emu.cfg (until the settings menu has it) and fire a few shots with each; 0 gives none at all.
+- [ ] Two guns (X): player 2's knocks are in the left hand and player 1's in the right, each only for its own shots.

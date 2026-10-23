@@ -155,6 +155,13 @@ struct Gun
 	GunView view;
 	bool visible;
 	int palmLogged = -1;	// hand * 2 + where the palm came from, as last logged
+	// The knocks (gunKnocks): the game's own gun as last read (gunKnown: read, its profile has
+	// one), when a pull on the screen went to the game that it hasn't fired for yet (0: none),
+	// and when the trigger was last held.
+	vr::GunState gunWas;
+	bool gunKnown;
+	XrTime pullAt;
+	XrTime heldAt;
 };
 Gun guns[2] { { 0 }, { 1, Left } };
 bool dualWield;
@@ -1088,8 +1095,17 @@ float floatAction(XrAction action, int hand)
 	return XR_SUCCEEDED(XR(xrGetActionStateFloat)(session, &info, &state)) && state.isActive ? state.currentState : 0.f;
 }
 
+// A buzz in a hand, at vr.Haptics' strength (read on each call: the menu changes it live): 0
+// off, 1 low (0.45 of the amplitude), 2 normal, 3 strong (1.6 times as long).
 void haptic(int hand, float seconds, float amplitude)
 {
+	static constexpr float amplitudes[4] { 0.f, 0.45f, 1.f, 1.f };
+	static constexpr float durations[4] { 0.f, 1.f, 1.f, 1.6f };
+	const int strength = std::clamp((int)config::VrHaptics, 0, 3);
+	if (strength == 0)
+		return;
+	seconds *= durations[strength];
+	amplitude *= amplitudes[strength];
 	XrHapticActionInfo info { XR_TYPE_HAPTIC_ACTION_INFO };
 	info.action = hapticAction;
 	info.subactionPath = handPaths[hand];
@@ -1100,9 +1116,16 @@ void haptic(int hand, float seconds, float amplitude)
 	XR(xrApplyHapticFeedback)(session, &info, (const XrHapticBaseHeader *)&vibration);
 }
 
+// A shot: a sharp knock.
 void recoil(int hand)
 {
-	haptic(hand, 0.03f, 1.f);	// a sharp knock
+	haptic(hand, 0.03f, 1.f);
+}
+
+// A pull on an empty gun: a light click.
+void emptyClick(int hand)
+{
+	haptic(hand, 0.012f, 0.35f);
 }
 
 glm::vec2 stickAction2()
@@ -1282,6 +1305,48 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 	gunView.slide = slide.back;
 }
 
+// The knocks from the game's own gun (vr::gunState), each frame: each shot it fires (its shot
+// counter goes up) is a Shot when a round went, else (a pull on an empty gun counted) a click;
+// several in one read are several knocks (an automatic). A pull on the screen it hasn't fired
+// for within 0.1 s (an empty gun) is a click. Only shots of this hand's trigger knock: held, or
+// let go under 0.25 s ago (the counter also moves when the game clears its RAM at boot, and its
+// attract demo's players shoot). Without a GunRam in the game's profile (gunKnown false) the
+// knock comes on the pull instead, as in v1 (updateGun).
+void gunKnocks(Gun& g, XrTime time, bool trigger)
+{
+	if (trigger)
+		g.heldAt = time;
+	vr::GunState now;
+	if (!vr::gunState(g.player, now))
+	{
+		g.gunKnown = false;
+		g.pullAt = 0;
+		return;
+	}
+	const int rises = g.gunKnown ? (s16)(u16)(now.shots - g.gunWas.shots) : 0;
+	const bool pulled = g.heldAt != 0 && time - g.heldAt < 250'000'000LL;
+	if (rises != 0)
+	{
+		// (a drop, or more than 8 in one read: the counter reset, a new game; no knock)
+		const bool fired = now.ammo < g.gunWas.ammo;
+		for (int i = 0; pulled && rises <= 8 && i < rises; i++)
+		{
+			if (fired)
+				recoil(g.hand);
+			else
+				emptyClick(g.hand);
+		}
+		g.pullAt = 0;
+	}
+	else if (g.pullAt != 0 && time - g.pullAt > 100'000'000LL)
+	{
+		emptyClick(g.hand);
+		g.pullAt = 0;
+	}
+	g.gunWas = now;
+	g.gunKnown = true;
+}
+
 // One gun for a headset frame: where it points (handed to the game's hit test at its stock
 // framing), how it's drawn, and the buttons that go to its player's light gun. `extra` are
 // the buttons that aren't the trigger's (Start, B, the D-pad). With `slide`, the other hand
@@ -1401,8 +1466,10 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		// held when the game goes on again waits to be let go.
 		g.triggerWas = true;
 		g.triggerWait = true;
+		g.pullAt = 0;
 		return;
 	}
+	gunKnocks(g, time, trigger);
 
 	// Seen but outside the game's view: the trigger does nothing (no shot, no reload).
 	const bool outside = !onScreen && aimOutside;
@@ -1453,7 +1520,12 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		NOTICE_LOG(INPUT, "XR: player %d's trigger outside the game's view (no shot)", g.player + 1);
 	else if (trigger && !g.triggerWas)
 	{
-		recoil(g.hand);
+		// The knock: when the game fires (gunKnocks), for a pull that reached it on the screen
+		// (a reload off it is none); without the game's gun state, on the pull as in v1.
+		if (!g.gunKnown)
+			recoil(g.hand);
+		else if (buttons & 1)
+			g.pullAt = time;
 		lastShotScreen = onScreen ? glm::vec2(screen.x * 640.f, screen.y * 480.f) : glm::vec2(-1.f);
 		shotSerial++;
 		// diagnostics: where shots go, to compare with what the game makes of them

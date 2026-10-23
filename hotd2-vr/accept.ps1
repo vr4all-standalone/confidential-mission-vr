@@ -14,6 +14,7 @@
   six runs (accept-cm-tour, -off, -edges, -hall, -floor, -floor0), each played once per call;
   cm-sim and cm-buttons play their own (accept-cm-sim, accept-cm-buttons) through the OpenXR
   simulator, cm-buttons-pc two more (accept-cm-buttons-index, -vive) with the PC controllers.
+  cm-haptics, -low, -off, -mag and -reload play one each (accept-cm-haptics...) the same way.
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -537,6 +538,69 @@ function Test-CmPause {
 	return $null
 }
 
+# The haptics (the knock from the game's own shot counter, vr.Haptics) through the simulator,
+# widened, in stage 1's first room: 8 right pulls 0.6 s apart from 54 s (6 shots, then 2 on an
+# empty gun), B (the game's reload) at 59.5 s, 3 more shots from 61 s, X (player 2 joins) at 64 s
+# and 2 left pulls from 66 s. The simulator logs each knock: "XRSIM: haptic right 0.030 1.000".
+function Get-CmHapticsActions {
+	@(Get-CmStartsXr)
+	for ($i = 0; $i -lt 8; $i++) { "$(T (54 + 0.6 * $i))=xr right/trigger 1 100" }
+	'59.5=xr right/b 1 200'
+	for ($i = 0; $i -lt 3; $i++) { "$(T (61 + 0.6 * $i))=xr right/trigger 1 100" }
+	'64=xr left/x 1 200'
+	for ($i = 0; $i -lt 2; $i++) { "$(T (66 + 0.6 * $i))=xr left/trigger 1 100" }
+}
+
+# Normal strength: a Shot knock (0.030 s, 1.0) for each of the 9 shots, a light click (0.012 s,
+# 0.35) for each of the 2 empty pulls, player 2's shots in the left hand; the magazine stays 6
+# (its earlier changes: the game clearing its RAM at ~11 s, 16 -> 255 -> 0, and the reload
+# lesson's 0 -> 6 at ~30 s).
+function Test-CmHaptics {
+	$name = 'accept-cm-haptics'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmHapticsActions); Expect = 'XR: player 2 joins: a gun in each hand'
+		Reject = 'XR: initialisation failed', 'VR: P1 magazine 6 -> ' }
+	if ($why) { return $why }
+	$shot = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000'
+	$empty = Get-LogCount $name 'XRSIM: haptic right 0\.012 0\.350'
+	$left = Get-LogCount $name 'XRSIM: haptic left 0\.030 1\.000'
+	Write-Host "  right: $shot shot knocks (want 9), $empty empty clicks (want 2); left: $left shot knocks (want 1 or more)"
+	if ($shot -ne 9) { return "$shot right shot knocks, want 9" }
+	if ($empty -ne 2) { return "$empty right empty clicks, want 2" }
+	if ($left -lt 1) { return 'no left shot knock (player 2)' }
+	return $null
+}
+
+# vr.Haptics=1 (low): the same pulls, every knock at 0.45 of its amplitude, none at 1.0.
+function Test-CmHapticsLow {
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-low'; Seconds = 75; XrSim = $true
+		Config = "$cmWiden,config:vr.Haptics=1"; At = @(Get-CmHapticsActions)
+		Expect = 'XR: player 1 shot at', 'XRSIM: haptic right 0\.030 0\.450'
+		Reject = 'XR: initialisation failed', 'XRSIM: haptic .* 1\.000$' }
+}
+
+# vr.Haptics=0 (off): the same pulls, no haptics at all.
+function Test-CmHapticsOff {
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-off'; Seconds = 75; XrSim = $true
+		Config = "$cmWiden,config:vr.Haptics=0"; At = @(Get-CmHapticsActions)
+		Expect = 'XR: player 1 shot at'; Reject = 'XR: initialisation failed', 'XRSIM: haptic' }
+}
+
+# Player 1's magazine (+0x50) poked to the rifle's 45 at 60 s: the change is logged.
+function Test-CmHapticsMag {
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-mag'; Seconds = 75; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + '60=poke 0c155808 1 2d'
+		Expect = 'VR: poke 0c155808 = 2d', 'VR: P1 magazine 6 -> 45'; Reject = 'XR: initialisation failed' }
+}
+
+# Reloads: the right controller points at the floor from 53.5 s and pulls 4 times from 54 s
+# (off the screen: the game's reload). No Shot knock.
+function Test-CmHapticsReload {
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-reload'; Seconds = 75; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + '53.5=pose right 0.18 1.3 -0.35 0 -80' + @(for ($i = 0; $i -lt 4; $i++) { "$(T (54 + 0.6 * $i))=xr right/trigger 1 100" })
+		Expect = 'XR: player 1 shot off screen \(reload\)'; Reject = 'XR: initialisation failed', 'XRSIM: haptic right 0\.030' }
+}
+
 # Task 4's scene keys (vr-test.ps1 -On, the poke action, vr.WatchRam): player 1's ammo
 # (+0x4C) and +0x64 watched (the game research's "state", which only changes at boot: 01 -> ff
 # -> 00 at ~11 s), the ammo poked to 3 at 56 s (stage 1's first room), a window shot keyed to the
@@ -558,6 +622,8 @@ function Test-SpikeKeys {
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
+	'cm-haptics' = 'Test-CmHaptics'; 'cm-haptics-low' = 'Test-CmHapticsLow'; 'cm-haptics-off' = 'Test-CmHapticsOff'
+	'cm-haptics-mag' = 'Test-CmHapticsMag'; 'cm-haptics-reload' = 'Test-CmHapticsReload'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

@@ -14,6 +14,7 @@
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
 #pragma once
+#include "types.h"
 #include "vr/hands_rip.h"
 #include <glm/glm.hpp>
 
@@ -98,6 +99,12 @@ GameCamera gameCamera(const rend_context& ctx);
 // What the game being played makes its own model from (hands_rip.h: the agent's hands and
 // pistol, the hero's staff), or nullptr when its profile has none.
 const hands::Source *gameModelSource();
+
+// A player's gun as the game being played keeps it (its profile's GunRam): the rounds left,
+// the magazine's size, and the shots it has fired (+1 per shot, through reloads).
+struct GunState { bool valid; u8 ammo, magazine; u16 shots; };
+// Read now from the running profile's gun RAM; false without one (or with the emulator stopped).
+bool gunState(int player, GunState& out);
 
 // The game asks for player 2 in its corner (its start prompt): player 2 isn't playing.
 // Seen in the last half second (when the game's profile knows the picture).

@@ -264,6 +264,10 @@ struct GameProfile
 	// The player's own model from the game, in a file of its own (hands_rip.h): the agent's
 	// hands and pistol, the hero's staff, or none (the arcade gun).
 	hands::Source model {};
+	// Each player's gun in RAM, for the knocks in the hand (gunState): the first player's
+	// block, the step to the next player's, and the offsets in it of the rounds left, the
+	// magazine's size (a byte each) and the shots fired (16 bits). base 0: none.
+	struct GunRam { u32 base = 0, stride = 0; u8 ammo = 0, magazine = 0, shots = 0; } gunRam;
 };
 
 static std::vector<GameProfile> makeProfiles()
@@ -482,6 +486,13 @@ static std::vector<GameProfile> makeProfiles()
 	// (Its units are HOTD2's size: a guard stands about 17.5 units tall, and the camera rides
 	// 15.1 units over the floor in the attract demo's corridor, HOTD2's 15 over the street;
 	// 12.0 in stage 1's first room, looking 10 degrees down.)
+	// Each player's gun state (the game research's B2: 61 RAM rips set against the HUD's
+	// bullets; the findings' Rifle, from the game's code): player 1's block at 0x0C1557B8,
+	// player 2's 276 bytes on (0x0C1558CC). +0x4C the rounds left (the pistol's 6 down to 0, a
+	// reload fills it again), +0x50 the magazine's size (6 for the pistol, 45 for the rifle),
+	// both u32 whose low byte is read; +0x60 the shots fired, a u16 that goes up once per shot
+	// the game fires, through reloads, but not for a pull on an empty gun.
+	p.gunRam = { 0x0C1557B8, 276, 0x4C, 0x50, 0x60 };
 	list.push_back(p);
 	return list;
 }
@@ -498,12 +509,14 @@ const hands::Source *gameModelSource()
 
 static u32 markerTextures[4];	// the active profile's GameProfile::markerTextures
 static u32 p2PromptTextures[4];	// ...and GameProfile::p2PromptTextures
+static int gunMagazines[2] { -1, -1 };	// each player's magazine size as last logged (-1: not read yet)
 
 static void applyGameProfile(Event, void *)
 {
 	std::fill(std::begin(fovLiterals), std::end(fovLiterals), 0u);
 	std::fill(std::begin(markerTextures), std::end(markerTextures), 0u);
 	std::fill(std::begin(p2PromptTextures), std::end(p2PromptTextures), 0u);
+	gunMagazines[0] = gunMagazines[1] = -1;
 	activeProfile = nullptr;
 	// Online (GGPO), what the VR mod writes into a game it has a profile for must be the
 	// same on both sides, whatever each player's settings or machine (a Quest, PCVR, a PC
@@ -646,6 +659,52 @@ static struct ProfileWritesRegistration
 		EventManager::listen(Event::VBlank, applyProfileWrites);
 	}
 } profileWritesRegistration;
+
+// A player's gun block in RAM (GameProfile::gunRam), or 0 when the profile has none.
+static u32 gunBlock(const GameProfile *prof, int player)
+{
+	if (prof == nullptr || prof->gunRam.base == 0 || player < 0 || player > 1)
+		return 0;
+	return 0x8C000000u | ((prof->gunRam.base + player * prof->gunRam.stride) & 0x01FFFFFFu);
+}
+
+bool gunState(int player, GunState& out)
+{
+	out = GunState {};
+	const GameProfile *prof = activeProfile;
+	const u32 block = gunBlock(prof, player);
+	if (block == 0 || !emu.running())
+		return false;
+	out.ammo = ReadMem8_nommu(block + prof->gunRam.ammo);
+	out.magazine = ReadMem8_nommu(block + prof->gunRam.magazine);
+	out.shots = ReadMem16_nommu(block + prof->gunRam.shots);
+	out.valid = true;
+	return true;
+}
+
+// Each VBlank: a player's magazine size changing is logged ("VR: P1 magazine 6 -> 45": a
+// pickup, a scripted sequence's own gun). The first read after the game starts only notes it.
+static void logGunMagazines(Event, void *)
+{
+	const GameProfile *prof = activeProfile;
+	for (int player = 0; player < 2; player++)
+	{
+		const u32 block = gunBlock(prof, player);
+		if (block == 0)
+			continue;
+		const int now = ReadMem8_nommu(block + prof->gunRam.magazine);
+		if (gunMagazines[player] >= 0 && now != gunMagazines[player])
+			NOTICE_LOG(RENDERER, "VR: P%d magazine %d -> %d", player + 1, gunMagazines[player], now);
+		gunMagazines[player] = now;
+	}
+}
+
+static struct GunMagazineRegistration
+{
+	GunMagazineRegistration() {
+		EventManager::listen(Event::VBlank, logGunMagazines);
+	}
+} gunMagazineRegistration;
 
 #ifndef __ANDROID__
 //
