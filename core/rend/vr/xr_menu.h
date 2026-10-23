@@ -4,7 +4,8 @@
 	and a panel of rows (xr_panel.h) stands in front of them. Either hand points at a row and its
 	trigger chooses (on a row with - and +, the left half is -, the right half +); the stick moves
 	the selection (up and down, wrapping) and is - and + (left and right); A chooses (+ on a value
-	row); the menu button or B closes it. Each change is saved in emu.cfg at once.
+	row); the menu button or B closes it. Each change is saved in emu.cfg at once. Quit asks to be
+	chosen again within 3 s; once it quits, the menu takes nothing more.
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -37,6 +38,9 @@ void open(const glm::mat4& head);
 void place(const glm::mat4& head);
 // Asks for the game to go on (requestPause(false)).
 void close();
+// The emulator was started again elsewhere (a new game) and the menu let go of: Quit's
+// confirmation and its latch are cleared.
+void reset();
 // A headset frame's input, render thread.
 void update(const Input& input);
 // Where a hand's ray meets the panel, as of the last update. False: it doesn't (or no menu).

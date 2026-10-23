@@ -286,6 +286,7 @@ $tailDecoder = [Text.Encoding]::UTF8.GetDecoder()	# one across reads: a characte
 $partial = ''
 try {
 	$p = Start-Process -FilePath $exe -ArgumentList @('-config', "`"$cfg`"", "`"$content`"") -WorkingDirectory $out -PassThru
+	$null = $p.Handle	# (held from the start: without it ExitCode can be empty once it has exited)
 	$clock = [Diagnostics.Stopwatch]::StartNew()
 	$udp = New-Object System.Net.Sockets.UdpClient
 	while ($true) {
@@ -383,7 +384,8 @@ if (-not (Test-Path $log)) {
 	}
 }
 if ($null -ne $early) {
-	Write-Output ('Flycast exited early, at {0:0.0} s (code {1})' -f $early, $p.ExitCode)
+	$p.WaitForExit(5000) | Out-Null
+	Write-Output ('Flycast exited early, at {0:0.0} s (code {1})' -f $early, $(if ($null -ne $p.ExitCode) { $p.ExitCode } else { 'unknown' }))
 	exit 2
 }
 exit $(if ($failed) { 1 } else { 0 })

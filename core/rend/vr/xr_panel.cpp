@@ -53,6 +53,7 @@ struct Picture
 {
 	GLuint texture = 0;
 	std::string shown;
+	int width = 0, height = 0;	// its storage's size (0: none yet)
 };
 Picture linesPicture, rowsPicture;
 // the picture being painted
@@ -288,7 +289,15 @@ void bindPicture(Picture& picture, const std::string& says, Paint paintIt)
 	{
 		picture.shown = says;
 		paintIt();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasWidth, canvasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		// the storage once (again only at another size), after that only new pixels into it
+		if (picture.width == canvasWidth && picture.height == canvasHeight)
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, canvasWidth, canvasHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		else
+		{
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasWidth, canvasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+			picture.width = canvasWidth;
+			picture.height = canvasHeight;
+		}
 	}
 }
 

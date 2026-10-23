@@ -602,8 +602,8 @@ function Test-CmMenu {
 function Test-CmMenuQuit {
 	$name = 'accept-cm-menu-quit'
 	$params = @{ Game = 'confmiss'; Name = $name; Seconds = 70; XrSim = $true; Config = $cmWiden
-		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150', '58.5=stick right 0 1 150', '59=xr right/a 1 150'
-		Expect = 'XR: menu open \(paused\)', 'XR: menu quit'; Reject = 'XR: initialisation failed' }
+		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150', '58.5=stick right 0 1 150', '59=xr right/a 1 150', '59.5=xr right/a 1 150'
+		Expect = 'XR: menu open \(paused\)', 'XR: menu quit armed', 'XR: menu quit$', 'XR: quitting'; Reject = 'XR: initialisation failed' }
 	if ($Reuse -and (Test-Path -LiteralPath (Get-RunLog $name))) { return Invoke-VrTest $params }
 	$out = @(& $vrTest @params)
 	$code = $LASTEXITCODE
@@ -611,6 +611,16 @@ function Test-CmMenuQuit {
 	$fails = @($out | Where-Object { $_ -match '^FAIL' })
 	if ($fails) { return $fails -join '; ' }
 	if ($code -ne 2) { return "vr-test.ps1 exit $code, want 2 (Flycast left early)" }
+	# left on its own: Flycast's exit code 0 (a crash leaves early too, with another code)
+	if (-not ($out -match '^Flycast exited early, at .* \(code 0\)$')) { return "Flycast did not exit with code 0: $(($out -match 'exited early') -join '; ')" }
+	# one choose only arms Quit: "quit armed" at the first A (59 s), "quit" at the second (59.5 s)
+	$log = Get-RunLog $name
+	$armed = Select-String -LiteralPath $log -Pattern 'XR: menu quit armed' -CaseSensitive | Select-Object -First 1
+	$quit = Select-String -LiteralPath $log -Pattern 'XR: menu quit$' -CaseSensitive | Select-Object -First 1
+	$at = { param($hit) $m = [regex]::Match($hit.Line, '^(\d+):(\d+):(\d+)'); [int]$m.Groups[1].Value * 60 + [int]$m.Groups[2].Value + [int]$m.Groups[3].Value / 1000 }
+	$gap = (& $at $quit) - (& $at $armed)
+	if ($quit.LineNumber -lt $armed.LineNumber -or $gap -lt 0.3) { return ("quit at the first choose: armed at line {0}, quit at line {1}, {2:0.00} s later" -f $armed.LineNumber, $quit.LineNumber, $gap) }
+	Write-Host ("  'XR: menu quit armed' then 'XR: menu quit' {0:0.00} s later (the second A)" -f $gap)
 	return $null
 }
 

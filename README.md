@@ -150,14 +150,14 @@ even with the laser off.
 |---|---|
 | Resume | closes the menu |
 | Recenter | the view goes where you face; the menu stays open, in front of you |
-| Gun | the gun drawn: Agents' pistol, Cabinet gun, Arcade gun (`vr.Gun`; for now each draws the arcade gun) |
+| Gun | the gun drawn: Auto, Agents' pistol, Cabinet gun or Arcade gun (`vr.Gun`; for now each draws the arcade gun) |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
 | Panel distance | the 2D plane's distance, 15 to 120 game units, 5 a step (`vr.HudDepth`) |
 | Wider view | the game's wider view, On or Off (`vr.Widen`); it changes at the next start, and says "(next start)" until then |
 | Show controls | the controllers and their labels (not in this build yet) |
-| Quit | back to the start screen (PC: Flycast quits) |
+| Quit | back to the start screen (PC: Flycast quits). It asks first: the row says "Quit? Choose again", and a second choose within 3 s quits |
 
 Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
 

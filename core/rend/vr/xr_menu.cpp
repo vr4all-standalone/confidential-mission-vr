@@ -13,6 +13,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -27,7 +28,8 @@ constexpr int Left = 0, Right = 1;
 
 const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Laser", "Haptics", "World size", "Panel distance",
 		"Wider view", "Show controls", "Quit" };
-// vr.Gun's choices (0 is auto)
+// vr.Gun's choices, round and round. (Task 13 decides Auto, and draws the chosen gun; until then
+// every choice draws the arcade gun.)
 const char *const GunNames[4] { "Auto", "Agents' pistol", "Cabinet gun", "Arcade gun" };
 const char *const HapticsNames[4] { "Off", "Low", "Normal", "Strong" };
 
@@ -39,6 +41,18 @@ int hovered[2];
 bool fresh;
 bool pointing[2];
 glm::vec3 pointAt[2];
+// Quit is chosen twice (S16): the first choose arms it for 3 s ("Quit? Choose again"); another
+// selection, a stick move or closing takes that back. Once it quits, the menu is latched and takes
+// nothing more: no second quit, no Resume starting the emulator again (reset clears it).
+constexpr double QuitConfirmSeconds = 3.0;
+bool quitArmed;
+double quitArmedAt;
+bool quitting;
+
+double seconds()
+{
+	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 // vr.Widen as the game started with it: it widens at the start only, so a change says "(next start)"
 bool widenAtStart = true;
@@ -48,14 +62,6 @@ struct WidenRegistration
 		EventManager::listen(Event::Start, [](Event, void *) { widenAtStart = config::VrWiden; });
 	}
 } widenRegistration;
-
-// The gun shown: what vr.Gun is, auto as what it comes to. (Task 13 decides auto, and draws the
-// chosen gun; until then every choice draws the arcade gun, and auto is the arcade gun.)
-int shownGun()
-{
-	const int gun = config::VrGun;
-	return gun >= 1 && gun <= 3 ? gun : 3;
-}
 
 bool stepper(int row) {
 	return row == Gun || row == Haptics || row == WorldSize || row == PanelDistance;
@@ -70,7 +76,7 @@ std::string value(int row)
 	switch (row)
 	{
 	case Gun:
-		return GunNames[shownGun()];
+		return GunNames[std::clamp((int)config::VrGun, 0, 3)];
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
 	case Haptics:
@@ -95,7 +101,7 @@ RowsPanel panel()
 	for (int row = 0; row < Rows; row++)
 	{
 		PanelRow r;
-		r.label = Labels[row];
+		r.label = row == Quit && quitArmed ? "Quit? Choose again" : Labels[row];
 		r.value = value(row);
 		r.selected = row == selected;
 		r.stepper = stepper(row);
@@ -114,7 +120,7 @@ void change(int row, int dir, int hand)
 	{
 	case Gun:
 	{
-		const int gun = (shownGun() - 1 + dir + 3) % 3 + 1;
+		const int gun = (std::clamp((int)config::VrGun, 0, 3) + dir + 4) % 4;
 		config::VrGun.set(gun);
 		config::saveInt("config", "vr.Gun", gun);
 		break;
@@ -184,8 +190,19 @@ void choose(int row, int hand)
 		close();
 		break;
 	case Quit:
-		NOTICE_LOG(INPUT, "XR: menu quit");
-		quitToStart();
+		if (quitArmed && seconds() - quitArmedAt <= QuitConfirmSeconds)
+		{
+			quitArmed = false;
+			quitting = true;
+			NOTICE_LOG(INPUT, "XR: menu quit");
+			quitToStart();
+		}
+		else
+		{
+			quitArmed = true;
+			quitArmedAt = seconds();
+			NOTICE_LOG(INPUT, "XR: menu quit armed");
+		}
 		break;
 	default:
 		change(row, +1, hand);
@@ -218,6 +235,7 @@ void open(const glm::mat4& head)
 	hovered[Left] = hovered[Right] = -1;
 	pointing[Left] = pointing[Right] = false;
 	fresh = true;
+	quitArmed = quitting = false;
 	const RowsLayout layout = rowsLayout(panel());
 	NOTICE_LOG(INPUT, "XR: menu at %.2f m, %d rows, row pitch %.3f m, top row %+.3f m, %.2f m wide",
 			Distance, (int)Rows, layout.rowPitch, layout.topRow, layout.width);
@@ -226,19 +244,31 @@ void open(const glm::mat4& head)
 
 void close()
 {
+	quitArmed = false;
 	requestPause(false);
+}
+
+void reset()
+{
+	quitArmed = quitting = false;
 }
 
 void update(const Input& input)
 {
-	if (!isOpen())
+	// (quitting: nothing more, whatever is pressed)
+	if (!isOpen() || quitting)
 		return;
+	if (quitArmed && seconds() - quitArmedAt > QuitConfirmSeconds)
+		quitArmed = false;
 	if (input.toggle || input.back)
 	{
 		close();
 		return;
 	}
+	const int before = selected;
 	const RowsPanel rows = panel();
+	int clicked[2] { -1, -1 };
+	float clickedAt[2] { 0.5f, 0.5f };
 	for (int hand : { Left, Right })
 	{
 		const Input::Ray& ray = input.ray[hand];
@@ -248,22 +278,38 @@ void update(const Input& input)
 		if (!fresh && row >= 0 && row != hovered[hand])
 			selected = row;
 		hovered[hand] = row;
-		if (fresh || !ray.click || row < 0)
-			continue;
-		selected = row;
-		NOTICE_LOG(INPUT, "XR: menu pointer click on %s at %.2f (%s hand)", Labels[row], u, hand == Right ? "right" : "left");
-		if (stepper(row))
-			change(row, u < 0.5f ? -1 : +1, hand);
-		else if (onOff(row))
-			change(row, +1, hand);
-		else
-			choose(row, hand);
+		if (!fresh && ray.click && row >= 0)
+		{
+			clicked[hand] = row;
+			clickedAt[hand] = u;
+		}
 	}
 	fresh = false;
 	if (input.up)
 		selected = (selected + Rows - 1) % Rows;
 	if (input.down)
 		selected = (selected + 1) % Rows;
+	// another selection or a stick move takes Quit's confirmation back
+	if (selected != before || input.up || input.down || input.left || input.right)
+		quitArmed = false;
+	for (int hand : { Left, Right })
+	{
+		const int row = clicked[hand];
+		if (row < 0 || quitting)
+			continue;
+		if (row != selected)
+			quitArmed = false;
+		selected = row;
+		NOTICE_LOG(INPUT, "XR: menu pointer click on %s at %.2f (%s hand)", Labels[row], clickedAt[hand], hand == Right ? "right" : "left");
+		if (stepper(row))
+			change(row, clickedAt[hand] < 0.5f ? -1 : +1, hand);
+		else if (onOff(row))
+			change(row, +1, hand);
+		else
+			choose(row, hand);
+	}
+	if (quitting)
+		return;
 	if ((input.left || input.right) && (stepper(selected) || onOff(selected)))
 		change(selected, input.left ? -1 : +1, Right);
 	if (input.select)

@@ -179,7 +179,9 @@ std::atomic<bool> menuOpen;		// (read by the app's resume on Android's main thre
 int pauseRequest = -1;
 bool menuFresh, redrawLogged;
 bool skipWas, skipSwallow, startSwallow;
+#ifndef __ANDROID__
 bool quitPending;
+#endif
 // The menu's pointers from hands with no gun drawn (the guns' own aim lines point at it otherwise)
 GunView pointers[2];
 bool pointerShown[2];
@@ -2263,6 +2265,8 @@ void requestPause(bool on)
 
 void applyPause()
 {
+#ifndef __ANDROID__
+	// The menu's Quit on the PC: Flycast exits (on Android quitToStart goes to the activity instead)
 	if (quitPending)
 	{
 		quitPending = false;
@@ -2272,10 +2276,13 @@ void applyPause()
 		dc_exit();
 		return;
 	}
+#endif
 	if (menuOpen && emu.running())
 	{
-		// started again from elsewhere (a new game): the menu holds nothing any more
+		// started again from elsewhere (a new game): the menu holds nothing any more, and a
+		// Quit chosen in it (Android: on the way to the start screen) is over
 		menuOpen = false;
+		menu::reset();
 		NOTICE_LOG(RENDERER, "XR: menu closed (the emulator was started elsewhere)");
 	}
 	const int request = pauseRequest;

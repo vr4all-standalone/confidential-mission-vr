@@ -49,6 +49,6 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 - [ ] Laser pointing with both hands: each hand's line and dot land on the row it points at (with the laser off too), the selection follows, and the trigger of either hand chooses.
 - [ ] Stick plus A: the right and the left thumbstick move the selection up and down (round from Quit to Resume and back) and left/right change a value; A chooses, and on a value row is +.
 - [ ] The - and + halves: a click on the left half of Haptics, World size, Panel distance and Gun steps down, on the right half up; a click anywhere on Laser or Wider view flips it. Each Haptics change gives a sample knock in that hand.
-- [ ] Quit returns to the start screen ("CONFIDENTIAL MISSION VR"), and Play starts the game again.
+- [ ] Choose Quit twice: the first choose turns its row into "Quit? Choose again" (moving off it, a stick move or 3 s turns it back); the second, within 3 s, returns to the start screen ("CONFIDENTIAL MISSION VR"), and Play starts the game again.
 - [ ] Settings are kept after restarting the app: change Laser, Haptics, World size and Panel distance, quit, close the app, open it and play: all four are as you left them (and Wider view, changed, applies now).
 - [ ] The menu button or B closes the menu and the game goes on; the closing B does not reload, and the A that chose Resume does not press Start.
