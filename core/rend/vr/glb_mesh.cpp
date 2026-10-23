@@ -110,15 +110,20 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& r
 		return;
 	// positions and indices read from a buffer view, not sparse (else left out)
 	const cgltf_accessor *position = attribute(prim, cgltf_attribute_type_position);
+	// (an offset past its view is refused here: cgltf_validate's own sum can wrap)
 	if (position == nullptr || position->type != cgltf_type_vec3 || position->count == 0
-			|| position->buffer_view == nullptr || position->is_sparse)
+			|| position->buffer_view == nullptr || position->is_sparse || position->offset > position->buffer_view->size)
 		return;
-	if (prim.indices != nullptr && (prim.indices->buffer_view == nullptr || prim.indices->is_sparse))
+	if (prim.indices != nullptr && (prim.indices->buffer_view == nullptr || prim.indices->is_sparse
+			|| prim.indices->offset > prim.indices->buffer_view->size))
 		return;
 	const size_t vertexCount = position->count;
 	const size_t count = prim.indices != nullptr ? prim.indices->count : vertexCount;
 	const size_t triangles = prim.type == cgltf_primitive_type_triangles ? count / 3 : count >= 3 ? count - 2 : 0;
-	if (out.positions.size() / 3 + vertexCount > MaxVertices || out.indices.size() + triangles * 3 > MaxIndices)
+	// compared without adding or multiplying, so a huge count (e.g. "count": -1) can't wrap past the
+	// caps; the totals so far never exceed them
+	if (vertexCount > MaxVertices - out.positions.size() / 3 || count > MaxIndices
+			|| triangles > (MaxIndices - out.indices.size()) / 3)
 	{
 		reader.tooBig = true;
 		return;
