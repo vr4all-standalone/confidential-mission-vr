@@ -26,10 +26,21 @@ enum Button { A, B, X, Y, Menu, Stick, Trigger, Grip, Buttons };
 // Once a session, at its first FOCUSED state, on the render thread: asks the runtime for the
 // controllers' models (/model_fb/controller/left and /right, glTF subset 1) when it has
 // XR_FB_render_model (enabled at xrCreateInstance whenever listed; its functions are looked
-// up here), else, or if any load fails, takes the built-in shape for both. Logs which:
-// "XR: controller models from the runtime (left <n> triangles, right <n>)" or
-// "XR: controller models built in (<why>)".
+// up here), each hand on its own; a hand whose model doesn't come takes the built-in shape
+// (retry() asks again while that may pass). Logs a model's arrival, "XR: controller models
+// from the runtime (left <n> triangles, right <n>)" ("built in" for a hand's count that has
+// none yet), and, when it changes, "XR: controller models built in (<why>)".
 void init(XrInstance instance, XrSession session);
+// After init, on the render thread: asks again for each hand still built in whose last
+// failure may pass (its model unavailable: hand tracking on, the controller asleep, no
+// interaction profile bound yet; its path not listed; a load that failed). Nothing when every
+// hand has the runtime's model or the runtime has no XR_FB_render_model. A hand that has the
+// runtime's model keeps it. An unavailable model costs one call. xr_host.cpp calls it at each
+// interaction profile change and regained focus, and every 2 s while focused (15 times a
+// focus at most) while retryWanted().
+void retry();
+// Whether retry() may still bring a model.
+bool retryWanted();
 // One hand's controller into the bound eye framebuffer, at `grip` (grip space -> room space),
 // with the depth test on and the depth buffer as it is (xr_host.cpp clears it first, or a
 // gun's model does). viewProj: room space -> this eye's clip space; eyePos: the eye in room

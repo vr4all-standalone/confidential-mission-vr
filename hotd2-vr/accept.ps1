@@ -717,7 +717,7 @@ $cmControllerBox = '0.32,0.62,0.5,0.88'
 function Get-CmControllersParams([string]$name, [string]$config) {
 	@{ Game = 'confmiss'; Name = $name; Seconds = 62; XrSim = $true; Config = $config
 		At = @(Get-CmStartsXr) + '56=pose left -0.1 1.45 -0.3 0 0', '57=shot in', '57.5=pose left -0.1 0.2 0.5 0 0', '58=shot out'
-		Reject = 'XR: initialisation failed' }
+		Reject = @('XR: initialisation failed') }
 }
 function Test-CmControllers {
 	$name = 'accept-cm-controllers'
@@ -736,7 +736,10 @@ function Test-CmControllers {
 
 # The same with vr.XrSimRenderModel: the simulator lists XR_FB_render_model and serves the test
 # GLB (re\make-test-glb.py: an 8 cm box and a 12 cm cylinder, 140 triangles, a 2x2 PNG) as both
-# controllers' model; the hand in front of the eye then looks unlike the built-in shape.
+# controllers' model; the hand in front of the eye then looks unlike the built-in shape. As a
+# Quest, the simulator has no model until the interaction profile is bound (at the first
+# xrSyncActions while focused, with its event): the models are unavailable at the first FOCUSED
+# state and come with the retry at that event.
 function Test-CmControllersRt {
 	$name = 'accept-cm-controllers-rt'
 	$glb = Join-Path $repo 'build-win\vrtest\test-controller.glb'
@@ -745,10 +748,19 @@ function Test-CmControllersRt {
 		if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $glb)) { return "make-test-glb.py could not write $glb" }
 	}
 	$params = Get-CmControllersParams $name "$cmWiden,config:vr.XrSimRenderModel=$glb"
-	$params.Expect = 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime \(left 140 triangles, right 140\)'
-	$params.Reject += 'XR: controller models built in'
+	$params.Expect = 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models built in \(left and right models unavailable\)',
+		'XR: controller models from the runtime \(left 140 triangles, right 140\)'
+	$params.Reject += 'XR: controller models built in \(the runtime has no XR_FB_render_model'
 	$why = Invoke-VrTest $params
 	if ($why) { return $why }
+	# unavailable first, then from the runtime: the retry
+	$log = Get-RunLog $name
+	$first = Select-String -LiteralPath $log -Pattern 'XR: controller models built in \(.*unavailable' -CaseSensitive | Select-Object -First 1
+	$loaded = Select-String -LiteralPath $log -Pattern 'XR: controller models from the runtime' -CaseSensitive | Select-Object -First 1
+	if (-not $first -or -not $loaded -or $first.LineNumber -ge $loaded.LineNumber) {
+		return 'want the models unavailable first and then from the runtime (the retry)'
+	}
+	Write-Host "  PASS retry: unavailable (line $($first.LineNumber)), then from the runtime (line $($loaded.LineNumber))"
 	$why = Test-RunShots $name 't057-in.png', 't058-out.png'
 	if ($why) { return $why }
 	$builtIn = Join-Path $repo 'build-win\vrtest\accept-cm-controllers\t057-in.png'

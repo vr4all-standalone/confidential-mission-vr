@@ -144,6 +144,7 @@ struct Swapchain
 struct State
 {
 	bool instance = false;
+	bool renderModelEnabled = false;	// the app enabled XR_FB_render_model (its functions handed out)
 	std::vector<std::string> paths;		// XrPath n is paths[n - 1]
 	std::map<XrPath, std::vector<XrActionSuggestedBinding>> suggested;		// by interaction profile
 	std::vector<ActionSet> actionSets;
@@ -161,6 +162,9 @@ struct State
 	std::vector<std::pair<size_t, std::string>> bindings;		// (action, input path) of the current profile
 	std::map<std::string, float> inputs, lastInputs;		// as of the last xrSyncActions and the one before
 	bool syncFocused = false;
+	// the interaction profile bound: as a runtime does, at the first xrSyncActions while focused
+	// (XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED sent then); no render model before
+	bool profileBound = false;
 	XrTime syncTime = 0;
 	std::chrono::steady_clock::time_point nextFrame;
 	GLuint showFbo = 0;
@@ -252,7 +256,7 @@ void deleteSession()
 	st.swapchains.clear();
 	st.spaces.clear();
 	st.events.clear();
-	st.session = st.running = st.exitRequested = st.attached = st.syncFocused = false;
+	st.session = st.running = st.exitRequested = st.attached = st.syncFocused = st.profileBound = false;
 	st.sessionState = XR_SESSION_STATE_UNKNOWN;
 	st.bindings.clear();
 	st.inputs.clear();
@@ -398,6 +402,9 @@ SIM_FN(CreateInstance)(const XrInstanceCreateInfo *info, XrInstance *instance)
 	deleteSession();
 	st = State();
 	st.instance = true;
+	// XR_FB_render_model's functions only for an instance that enabled it, as a loader hands them out
+	for (uint32_t i = 0; i < info->enabledExtensionCount; i++)
+		st.renderModelEnabled = st.renderModelEnabled || !strcmp(info->enabledExtensionNames[i], XR_FB_RENDER_MODEL_EXTENSION_NAME);
 	*instance = toHandle<XrInstance>(0);
 	NOTICE_LOG(RENDERER, "XRSIM: runtime up for \"%s\" (%dx%d per eye, %d Hz, %s)", info->applicationInfo.applicationName,
 			EyeWidth, EyeHeight, RefreshRate, profilePath().c_str());
@@ -944,9 +951,7 @@ SIM_FN(AttachSessionActionSets)(XrSession session, const XrSessionActionSetsAtta
 		WARN_LOG(RENDERER, "XRSIM: no bindings suggested for %s: no input", profile.c_str());
 	else
 		NOTICE_LOG(RENDERER, "XRSIM: %d bindings for %s", (int)st.bindings.size(), profile.c_str());
-	XrEventDataInteractionProfileChanged event { XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED };
-	event.session = session;
-	pushEvent(&event, sizeof(event));
+	// (the profile is bound at the first xrSyncActions while focused, not here)
 	return XR_SUCCESS;
 }
 
@@ -959,7 +964,8 @@ SIM_FN(GetCurrentInteractionProfile)(XrSession session, XrPath topLevelUserPath,
 	const std::string& user = pathString(topLevelUserPath);
 	if (user.empty())
 		return XR_ERROR_PATH_INVALID;
-	state->interactionProfile = user == "/user/hand/left" || user == "/user/hand/right" ? toPath(profilePath()) : XR_NULL_PATH;
+	state->interactionProfile = st.profileBound && (user == "/user/hand/left" || user == "/user/hand/right")
+			? toPath(profilePath()) : XR_NULL_PATH;
 	return XR_SUCCESS;
 }
 
@@ -980,6 +986,15 @@ SIM_FN(SyncActions)(XrSession session, const XrActionsSyncInfo *)
 	}
 	st.syncTime = xrTime(std::chrono::steady_clock::now());
 	st.syncFocused = st.sessionState == XR_SESSION_STATE_FOCUSED;
+	if (st.syncFocused && !st.profileBound)
+	{
+		// the interaction profile bound now, as a runtime binds it
+		st.profileBound = true;
+		XrEventDataInteractionProfileChanged event { XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED };
+		event.session = session;
+		pushEvent(&event, sizeof(event));
+		NOTICE_LOG(RENDERER, "XRSIM: interaction profile bound (%s)", profilePath().c_str());
+	}
 	return st.syncFocused ? XR_SUCCESS : XR_SESSION_NOT_FOCUSED;
 }
 
@@ -1114,7 +1129,9 @@ SIM_FN(RequestDisplayRefreshRateFB)(XrSession session, float rate)
 }
 
 // XR_FB_render_model (vr.XrSimRenderModel): that GLB file as both controllers' model, handed out
-// as a Quest runtime hands out its controllers' (xr_controllers.h)
+// as a Quest runtime hands out its controllers' (xr_controllers.h): its functions only to an
+// instance that enabled the extension, an XrRenderModelCapabilitiesRequestFB wanted, and no
+// model (XR_RENDER_MODEL_UNAVAILABLE_FB) until the interaction profile is bound
 const char *const RenderModelPaths[] { "/model_fb/controller/left", "/model_fb/controller/right" };
 
 SIM_FN(EnumerateRenderModelPathsFB)(XrSession session, uint32_t capacity, uint32_t *count, XrRenderModelPathInfoFB *paths)
@@ -1132,9 +1149,23 @@ SIM_FN(GetRenderModelPropertiesFB)(XrSession session, XrPath path, XrRenderModel
 		return XR_ERROR_HANDLE_INVALID;
 	if (properties == nullptr || properties->type != XR_TYPE_RENDER_MODEL_PROPERTIES_FB)
 		return XR_ERROR_VALIDATION_FAILURE;
+	bool request = false;
+	for (const XrBaseInStructure *s = (const XrBaseInStructure *)properties->next; s != nullptr; s = s->next)
+		request = request || s->type == XR_TYPE_RENDER_MODEL_CAPABILITIES_REQUEST_FB;
+	if (!request)
+	{
+		ERROR_LOG(RENDERER, "XRSIM: xrGetRenderModelPropertiesFB with no XrRenderModelCapabilitiesRequestFB chained");
+		return XR_ERROR_VALIDATION_FAILURE;
+	}
 	for (uint32_t i = 0; i < std::size(RenderModelPaths); i++)
 		if (pathString(path) == RenderModelPaths[i])
 		{
+			if (!st.profileBound)
+			{
+				// no controllers bound yet: no model, as on a Quest
+				properties->modelKey = XR_NULL_RENDER_MODEL_KEY_FB;
+				return XR_RENDER_MODEL_UNAVAILABLE_FB;
+			}
 			properties->vendorId = 0;
 			strncpy(properties->modelName, "XRSIM test model", XR_MAX_RENDER_MODEL_NAME_SIZE_FB - 1);
 			properties->modelKey = i + 1;
@@ -1189,6 +1220,7 @@ const struct { const char *name; PFN_xrVoidFunction function; } Functions[] {
 	ENTRY(RequestDisplayRefreshRateFB),
 };
 // only with vr.XrSimRenderModel (a runtime has no functions for an extension it doesn't list)
+// and to an instance that enabled XR_FB_render_model
 const struct { const char *name; PFN_xrVoidFunction function; } RenderModelFunctions[] {
 	ENTRY(EnumerateRenderModelPathsFB), ENTRY(GetRenderModelPropertiesFB), ENTRY(LoadRenderModelFB),
 };
@@ -1215,7 +1247,7 @@ PFN_xrVoidFunction proc(const char *name)
 	for (const auto& f : Functions)
 		if (!strcmp(f.name, name))
 			return f.function;
-	if (renderModels())
+	if (renderModels() && st.renderModelEnabled)
 		for (const auto& f : RenderModelFunctions)
 			if (!strcmp(f.name, name))
 				return f.function;

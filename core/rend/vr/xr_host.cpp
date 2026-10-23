@@ -191,6 +191,10 @@ bool ringDumpRequested;		// the left stick click held: the frame ring (debug aid
 // state; drawn this frame in the hands that show no gun or game hand, at their grip poses (room
 // space).
 bool controllersReady;
+// A model the runtime didn't have yet (controllers::retryWanted) is asked for again at each
+// interaction profile change and regained focus, and every 2 s while focused, 15 times a focus.
+int modelRetries;
+std::chrono::steady_clock::time_point nextModelRetry;
 bool controllerShown[2];
 glm::mat4 controllerGrip[2];
 
@@ -795,7 +799,8 @@ void pollEvents()
 			else if (change.state == XR_SESSION_STATE_EXITING)
 				exiting = true;
 			const bool nowFocused = change.state == XR_SESSION_STATE_FOCUSED;
-			if (nowFocused && !focused && originSet
+			const bool regained = nowFocused && !focused;
+			if (regained && originSet
 					&& std::chrono::steady_clock::now() - focusLost > std::chrono::seconds(3))
 				// back after a while (headset put on again, long menu visit): the player
 				// may face elsewhere now
@@ -803,12 +808,20 @@ void pollEvents()
 			if (focused && !nowFocused)
 				focusLost = std::chrono::steady_clock::now();
 			focused = nowFocused;
-			if (nowFocused && !controllersReady)
+			if (nowFocused)
 			{
 				// the controllers' models, now that the session has its input (a Quest names its
-				// controllers' models once it's focused)
-				controllers::init(instance, session);
-				controllersReady = true;
+				// controllers' models once it's focused and they are bound); the ones it didn't
+				// have asked for again at each regained focus, then on the timer
+				if (!controllersReady)
+				{
+					controllers::init(instance, session);
+					controllersReady = true;
+				}
+				else if (regained)
+					controllers::retry();
+				modelRetries = 0;
+				nextModelRetry = std::chrono::steady_clock::now() + std::chrono::seconds(2);
 			}
 		}
 		else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING)
@@ -822,6 +835,9 @@ void pollEvents()
 		else if (event.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED)
 		{
 			readProfiles();
+			// controllers bound (or changed): their models may be there now
+			if (controllersReady)
+				controllers::retry();
 		}
 		event = { XR_TYPE_EVENT_DATA_BUFFER };
 	}
@@ -1623,6 +1639,20 @@ Gun *gunInHand(int hand)
 		if (guns[i].visible && guns[i].hand == hand)
 			return &guns[i];
 	return nullptr;
+}
+
+// The controllers' models the runtime didn't have at the last ask (a controller asleep, hand
+// tracking on, nothing bound yet): asked for again every 2 s while focused, 15 times a focus.
+void retryControllerModels()
+{
+	if (!controllersReady || !focused || modelRetries >= 15 || !controllers::retryWanted())
+		return;
+	const auto now = std::chrono::steady_clock::now();
+	if (now < nextModelRetry)
+		return;
+	modelRetries++;
+	nextModelRetry = now + std::chrono::seconds(2);
+	controllers::retry();
 }
 
 // The controllers drawn this frame (xr_controllers.h): in each tracked hand that shows no gun (nor
@@ -2435,6 +2465,7 @@ void term()
 		termPanel();
 		controllers::term();
 		controllersReady = controllerShown[Left] = controllerShown[Right] = false;
+		modelRetries = 0;
 		for (EyeChain& c : chains)
 		{
 			if (!c.fbos.empty())
@@ -2638,6 +2669,7 @@ bool frame()
 				chains[0].width, chains[0].height, worldScale(), (float)config::ExtraDepthScale);
 	}
 	updateLightgun(frameState.predictedDisplayTime);
+	retryControllerModels();
 	updateControllers(frameState.predictedDisplayTime);
 
 	XrCompositionLayerProjectionView projViews[2] { { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW }, { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW } };

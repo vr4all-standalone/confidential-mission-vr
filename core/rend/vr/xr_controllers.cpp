@@ -49,9 +49,10 @@ const PartMaterial Materials[] = {
 	{ "trigger", { { 0.40f, 0.41f, 0.43f }, 0.35f, 40.f } },
 	{ "grip", { { 0.40f, 0.41f, 0.43f }, 0.35f, 40.f } },
 };
-// the runtime's model: its own texture times white; untextured, the body's grey
+// the runtime's model: its own texture times white; untextured (a Quest's textures are KTX2,
+// not decoded here), a light grey close to a Quest 3 controller's
 const Material Textured { { 1.f, 1.f, 1.f }, 0.25f, 30.f };
-const Material Untextured { { 0.55f, 0.56f, 0.58f }, 0.30f, 30.f };
+const Material Untextured { { 0.80f, 0.80f, 0.82f }, 0.25f, 30.f };
 
 // A model: interleaved position, normal, uv (8 floats a vertex), 16- or 32-bit indices, parts
 // (ranges of the indices, each with its material), an optional base colour texture. Kept on
@@ -74,7 +75,23 @@ struct Model
 
 Model builtIn;
 Model runtime[2];
-bool runtimeModels;		// both hands' models from the runtime
+
+// Asking the runtime for its models: init, then retry() for each hand still built in.
+struct Ask
+{
+	XrSession session = XR_NULL_HANDLE;
+	// XR_FB_render_model's functions (null: the runtime has none)
+	PFN_xrEnumerateRenderModelPathsFB enumeratePaths = nullptr;
+	PFN_xrGetRenderModelPropertiesFB getProperties = nullptr;
+	PFN_xrLoadRenderModelFB loadModel = nullptr;
+	XrPath path[2] { XR_NULL_PATH, XR_NULL_PATH };
+	bool listed[2] {};		// the runtime lists that hand's path
+	bool loaded[2] {};		// that hand's model is the runtime's (runtime[hand])
+	bool transient[2] {};	// that hand's last failure may pass: worth asking again
+	std::string why[2];		// why that hand is built in
+	std::string loggedWhy;	// the "built in" reason last logged
+};
+Ask ask;
 
 GLuint program;
 GLint uMvp = -1, uModel = -1, uEye = -1, uColor = -1, uSpecular = -1, uShininess = -1, uTextured = -1, uTex = -1;
@@ -225,13 +242,15 @@ bool upload(Model& m)
 		glActiveTexture(GL_TEXTURE0);
 		glGenTextures(1, &m.texture);
 		glcache.BindTexture(GL_TEXTURE_2D, m.texture);
-		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		// mipmapped: the model is small in the view, its texture often large (GLES 3: any size)
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m.texWidth, m.texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, m.rgba.data());
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glGenerateMipmap(GL_TEXTURE_2D);
 		glcache.BindTexture(GL_TEXTURE_2D, 0);
 	}
 	// on the GPU now
@@ -253,48 +272,119 @@ void release(Model& m)
 	m = Model();
 }
 
-// The runtime's model of one hand: its GLB, or why not (empty: loaded).
-std::string loadRuntimeModel(XrInstance instance, XrSession session, int hand, PFN_xrGetInstanceProcAddr getProc)
+// One hand's model from the runtime (its path listed) into runtime[hand]: true; else false, with
+// why not in ask.why[hand] and whether that may pass in ask.transient[hand]. A model the runtime
+// doesn't have now (hand tracking on, the controller asleep, no interaction profile bound yet)
+// costs one call.
+bool loadRuntimeModel(int hand)
 {
-	PFN_xrStringToPath stringToPath = nullptr;
-	PFN_xrGetRenderModelPropertiesFB getProperties = nullptr;
-	PFN_xrLoadRenderModelFB loadModel = nullptr;
-	if (XR_FAILED(getProc(instance, "xrStringToPath", (PFN_xrVoidFunction *)&stringToPath))
-			|| XR_FAILED(getProc(instance, "xrGetRenderModelPropertiesFB", (PFN_xrVoidFunction *)&getProperties))
-			|| XR_FAILED(getProc(instance, "xrLoadRenderModelFB", (PFN_xrVoidFunction *)&loadModel))
-			|| stringToPath == nullptr || getProperties == nullptr || loadModel == nullptr)
-		return "the runtime has no XR_FB_render_model functions";
-	XrPath path = XR_NULL_PATH;
-	if (XR_FAILED(stringToPath(instance, ModelPath[hand], &path)))
-		return std::string("no path ") + ModelPath[hand];
-	// glTF with PNG or JPEG images, not KTX2
+	auto fail = [hand](const std::string& why, bool transient) {
+		ask.why[hand] = why;
+		ask.transient[hand] = transient;
+		return false;
+	};
+	// glTF 2.0 subset 1: its textures are KTX2 (Basis Universal), which glb_mesh doesn't decode
+	// (the model is then drawn untextured); a runtime may send plain glTF (PNG, JPEG) instead
 	XrRenderModelCapabilitiesRequestFB capabilities { XR_TYPE_RENDER_MODEL_CAPABILITIES_REQUEST_FB };
 	capabilities.flags = XR_RENDER_MODEL_SUPPORTS_GLTF_2_0_SUBSET_1_BIT_FB;
 	XrRenderModelPropertiesFB properties { XR_TYPE_RENDER_MODEL_PROPERTIES_FB };
 	properties.next = &capabilities;
-	XrResult r = getProperties(session, path, &properties);
-	if (XR_FAILED(r) || r == XR_RENDER_MODEL_UNAVAILABLE_FB || properties.modelKey == XR_NULL_RENDER_MODEL_KEY_FB)
-		return std::string(HandName[hand]) + " model unavailable (" + std::to_string((int)r) + ")";
+	XrResult r = ask.getProperties(ask.session, ask.path[hand], &properties);
+	if (XR_FAILED(r))
+		return fail("unavailable (" + std::to_string((int)r) + ")", true);
+	if (r == XR_RENDER_MODEL_UNAVAILABLE_FB || properties.modelKey == XR_NULL_RENDER_MODEL_KEY_FB)
+		return fail("unavailable", true);
 	XrRenderModelLoadInfoFB loadInfo { XR_TYPE_RENDER_MODEL_LOAD_INFO_FB };
 	loadInfo.modelKey = properties.modelKey;
 	XrRenderModelBufferFB buffer { XR_TYPE_RENDER_MODEL_BUFFER_FB };
-	r = loadModel(session, &loadInfo, &buffer);
+	r = ask.loadModel(ask.session, &loadInfo, &buffer);
 	if (XR_FAILED(r) || buffer.bufferCountOutput == 0 || buffer.bufferCountOutput > 64u * 1024 * 1024)
-		return std::string(HandName[hand]) + " model not loaded (" + std::to_string((int)r) + ")";
+		return fail("not loaded (" + std::to_string((int)r) + ")", true);
 	std::vector<u8> glb(buffer.bufferCountOutput);
 	buffer.bufferCapacityInput = (u32)glb.size();
 	buffer.buffer = glb.data();
-	r = loadModel(session, &loadInfo, &buffer);
+	r = ask.loadModel(ask.session, &loadInfo, &buffer);
 	if (XR_FAILED(r))
-		return std::string(HandName[hand]) + " model not loaded (" + std::to_string((int)r) + ")";
-	NOTICE_LOG(RENDERER, "XR: render model %s: \"%s\" version %u, %u bytes", ModelPath[hand], properties.modelName,
-			properties.modelVersion, buffer.bufferCountOutput);
+		return fail("not loaded (" + std::to_string((int)r) + ")", true);
 	GlbMesh mesh;
 	std::string error;
-	if (!loadGlb(glb.data(), std::min<size_t>(glb.size(), buffer.bufferCountOutput), mesh, error))
-		return std::string(HandName[hand]) + " model unreadable: " + error;
+	const bool read = loadGlb(glb.data(), std::min<size_t>(glb.size(), buffer.bufferCountOutput), mesh, error);
+	const std::string texture = !read ? "unreadable (" + error + ")"
+			: mesh.texWidth != 0 ? "texture " + std::to_string(mesh.texWidth) + "x" + std::to_string(mesh.texHeight)
+			: "untextured (" + mesh.untextured + ")";
+	NOTICE_LOG(RENDERER, "XR: render model %s: \"%s\" version %u, %u bytes, %s", ModelPath[hand], properties.modelName,
+			properties.modelVersion, buffer.bufferCountOutput, texture.c_str());
+	if (!read)
+		return fail("unreadable: " + error, false);		// (the same model again would be too)
 	fromGlb(runtime[hand], std::move(mesh));
-	return "";
+	ask.loaded[hand] = true;
+	ask.transient[hand] = false;
+	ask.why[hand].clear();
+	return true;
+}
+
+// Why the hands not from the runtime are built in ("": none is).
+std::string builtInWhy()
+{
+	if (ask.getProperties == nullptr)
+		return ask.why[Left];		// the runtime's lack: the same for both
+	if (!ask.loaded[Left] && !ask.loaded[Right] && ask.why[Left] == ask.why[Right])
+		return "left and right models " + ask.why[Left];
+	std::string why;
+	for (int hand : { Left, Right })
+		if (!ask.loaded[hand])
+			why += (why.empty() ? "" : ", ") + std::string(HandName[hand]) + " model " + ask.why[hand];
+	return why;
+}
+
+// Asks the runtime again for each hand still built in whose last failure may pass; logs the
+// models that arrive and a change in why hands are built in.
+void askRuntime()
+{
+	bool arrived = false;
+	if (ask.getProperties != nullptr)
+	{
+		// the paths the runtime lists, while a wanted one isn't (yet)
+		bool unlisted = false;
+		for (int hand : { Left, Right })
+			unlisted = unlisted || (!ask.loaded[hand] && ask.transient[hand] && !ask.listed[hand]);
+		if (unlisted)
+		{
+			u32 count = 0;
+			std::vector<XrRenderModelPathInfoFB> paths;
+			if (XR_SUCCEEDED(ask.enumeratePaths(ask.session, 0, &count, nullptr)) && count > 0 && count < 1024)
+			{
+				paths.resize(count, { XR_TYPE_RENDER_MODEL_PATH_INFO_FB });
+				if (XR_FAILED(ask.enumeratePaths(ask.session, count, &count, paths.data())))
+					paths.clear();
+				paths.resize(std::min<size_t>(paths.size(), count));
+			}
+			for (const XrRenderModelPathInfoFB& p : paths)
+				for (int hand : { Left, Right })
+					ask.listed[hand] = ask.listed[hand] || p.path == ask.path[hand];
+		}
+		for (int hand : { Left, Right })
+		{
+			if (ask.loaded[hand] || !ask.transient[hand])
+				continue;
+			if (!ask.listed[hand])
+				ask.why[hand] = std::string("not listed (") + ModelPath[hand] + ")";
+			else if (loadRuntimeModel(hand))
+				arrived = true;
+		}
+	}
+	if (arrived)
+	{
+		// the brief's form, "triangles" after the first count; "built in" for a hand with none
+		std::string left = ask.loaded[Left] ? std::to_string(runtime[Left].triangles) : "built in";
+		std::string right = ask.loaded[Right] ? std::to_string(runtime[Right].triangles) : "built in";
+		(ask.loaded[Left] ? left : right) += " triangles";
+		NOTICE_LOG(RENDERER, "XR: controller models from the runtime (left %s, right %s)", left.c_str(), right.c_str());
+	}
+	const std::string why = builtInWhy();
+	if (!why.empty() && why != ask.loggedWhy)
+		NOTICE_LOG(RENDERER, "XR: controller models built in (%s)", why.c_str());
+	ask.loggedWhy = why;
 }
 
 }	// namespace
@@ -303,65 +393,63 @@ void init(XrInstance instance, XrSession session)
 {
 	for (Model& m : runtime)
 		release(m);
-	runtimeModels = false;
+	ask = Ask();
+	ask.session = session;
 	if (!builtIn.uploaded && builtIn.indices.empty())
 		makeBuiltIn(builtIn);
 
 	PFN_xrGetInstanceProcAddr getProc = sim::active() ? (PFN_xrGetInstanceProcAddr)sim::proc("xrGetInstanceProcAddr")
 			: ::xrGetInstanceProcAddr;
-	std::string why;
+	auto find = [&](const char *name, auto& function) {
+		function = nullptr;
+		return getProc != nullptr && XR_SUCCEEDED(getProc(instance, name, (PFN_xrVoidFunction *)&function)) && function != nullptr;
+	};
+	PFN_xrStringToPath stringToPath = nullptr;
 	PFN_xrEnumerateRenderModelPathsFB enumeratePaths = nullptr;
-	if (getProc == nullptr || XR_FAILED(getProc(instance, "xrEnumerateRenderModelPathsFB", (PFN_xrVoidFunction *)&enumeratePaths))
-			|| enumeratePaths == nullptr)
-		why = "the runtime has no XR_FB_render_model";
+	PFN_xrGetRenderModelPropertiesFB getProperties = nullptr;
+	PFN_xrLoadRenderModelFB loadModel = nullptr;
+	std::string lack;
+	if (!find("xrEnumerateRenderModelPathsFB", enumeratePaths))
+		lack = "the runtime has no XR_FB_render_model";
+	else if (!find("xrGetRenderModelPropertiesFB", getProperties) || !find("xrLoadRenderModelFB", loadModel)
+			|| !find("xrStringToPath", stringToPath))
+		lack = "the runtime has no XR_FB_render_model functions";
+	if (!lack.empty())
+		// for good: built in, both
+		ask.why[Left] = ask.why[Right] = lack;
 	else
 	{
-		// the paths the runtime has models for: both controllers' wanted
-		u32 count = 0;
-		std::vector<XrRenderModelPathInfoFB> paths;
-		if (XR_SUCCEEDED(enumeratePaths(session, 0, &count, nullptr)) && count > 0 && count < 1024)
-		{
-			paths.resize(count, { XR_TYPE_RENDER_MODEL_PATH_INFO_FB });
-			if (XR_FAILED(enumeratePaths(session, count, &count, paths.data())))
-				paths.clear();
-			paths.resize(std::min<size_t>(paths.size(), count));
-		}
-		PFN_xrStringToPath stringToPath = nullptr;
-		getProc(instance, "xrStringToPath", (PFN_xrVoidFunction *)&stringToPath);
+		ask.enumeratePaths = enumeratePaths;
+		ask.getProperties = getProperties;
+		ask.loadModel = loadModel;
 		for (int hand : { Left, Right })
 		{
-			XrPath want = XR_NULL_PATH;
-			bool listed = false;
-			if (stringToPath != nullptr && XR_SUCCEEDED(stringToPath(instance, ModelPath[hand], &want)))
-				for (const XrRenderModelPathInfoFB& p : paths)
-					listed = listed || p.path == want;
-			if (!listed)
-			{
-				why = std::string("the runtime lists no ") + ModelPath[hand];
-				break;
-			}
-			why = loadRuntimeModel(instance, session, hand, getProc);
-			if (!why.empty())
-				break;
+			if (XR_SUCCEEDED(stringToPath(instance, ModelPath[hand], &ask.path[hand])))
+				ask.transient[hand] = true;		// (to be asked)
+			else
+				ask.why[hand] = std::string("has no path ") + ModelPath[hand];
 		}
 	}
-	if (why.empty())
-	{
-		runtimeModels = true;
-		NOTICE_LOG(RENDERER, "XR: controller models from the runtime (left %u triangles, right %u)",
-				runtime[Left].triangles, runtime[Right].triangles);
-	}
-	else
-	{
-		for (Model& m : runtime)
-			release(m);
-		NOTICE_LOG(RENDERER, "XR: controller models built in (%s)", why.c_str());
-	}
+	askRuntime();
+}
+
+bool retryWanted()
+{
+	for (int hand : { Left, Right })
+		if (!ask.loaded[hand] && ask.transient[hand])
+			return true;
+	return false;
+}
+
+void retry()
+{
+	if (ask.session != XR_NULL_HANDLE && retryWanted())
+		askRuntime();
 }
 
 bool fromRuntime(int hand)
 {
-	return runtimeModels && (hand == Left || hand == Right) && !runtime[hand].failed;
+	return (hand == Left || hand == Right) && ask.loaded[hand] && !runtime[hand].failed;
 }
 
 void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const glm::mat4& grip)
@@ -444,7 +532,7 @@ void term()
 	release(builtIn);
 	for (Model& m : runtime)
 		release(m);
-	runtimeModels = false;
+	ask = Ask();
 	if (program != 0)
 		glcache.DeleteProgram(program);
 	program = 0;

@@ -2,8 +2,10 @@
 	A glTF 2.0 binary (GLB) read into one triangle mesh (hotd2-vr). See glb_mesh.h.
 
 	The data comes from the OpenXR runtime, so it is checked as untrusted: cgltf_validate (every
-	accessor within its buffer), indices within their primitive's vertices, and images decoded
-	only from the GLB's own buffer.
+	accessor within its buffer), positions and indices only from buffer views (not sparse),
+	indices within their primitive's vertices, at most 1,000,000 vertices and 3,000,000 indices,
+	and images decoded only from the GLB's own buffer, at most 4096 pixels a side (asked before
+	decoding).
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -43,29 +45,53 @@ const char *resultName(cgltf_result r)
 	}
 }
 
-// The base colour image, decoded: from a buffer view of the GLB (or a data: URI cgltf loaded
-// into a buffer), PNG or JPEG.
-bool loadImage(const cgltf_image *image, GlbMesh& out)
+constexpr size_t MaxVertices = 1000000, MaxIndices = 3000000;
+constexpr int MaxImageSide = 4096;
+
+// What a walk through the nodes has so far besides the mesh.
+struct Reader
 {
-	if (image == nullptr || image->buffer_view == nullptr || image->buffer_view->buffer->data == nullptr)
-		return false;
+	GlbMesh& out;
+	const cgltf_image *textureImage = nullptr;	// the image the mesh's texture is from
+	const cgltf_image *triedImage = nullptr;	// the last image that couldn't be used
+	bool tooBig = false;		// over MaxVertices or MaxIndices: nothing is drawn
+};
+
+// The base colour image, decoded into out: from a buffer view of the GLB (or a data: URI cgltf
+// loaded into a buffer), PNG or JPEG. Else why not: its MIME type, or what was wrong.
+std::string loadImage(const cgltf_image *image, GlbMesh& out)
+{
+	const std::string mime = image->mime_type != nullptr ? image->mime_type : "no MIME type";
 	if (image->mime_type != nullptr && strcmp(image->mime_type, "image/png") && strcmp(image->mime_type, "image/jpeg"))
-		return false;
+		return mime;
+	if (image->buffer_view == nullptr || image->buffer_view->buffer->data == nullptr)
+		return mime + ", not in the GLB";
 	const cgltf_buffer_view *view = image->buffer_view;
 	if (view->offset + view->size > view->buffer->size || view->size > 0x7fffffff)
-		return false;
+		return mime + ", past its buffer";
+	const stbi_uc *data = (const stbi_uc *)cgltf_buffer_view_data(view);
 	int w = 0, h = 0, channels = 0;
-	u8 *pixels = stbi_load_from_memory((const stbi_uc *)cgltf_buffer_view_data(view), (int)view->size, &w, &h, &channels, 4);
+	// its size first: nothing big is decoded
+	if (data == nullptr || !stbi_info_from_memory(data, (int)view->size, &w, &h, &channels))
+		return mime + ", not decodable";
+	if (w <= 0 || h <= 0 || w > MaxImageSide || h > MaxImageSide)
+		return mime + " " + std::to_string(w) + "x" + std::to_string(h) + ", over 4096";
+	// top row first (stb_image's flip is per thread, and other Flycast callers turn it on)
+	stbi_set_flip_vertically_on_load_thread(0);
+	u8 *pixels = stbi_load_from_memory(data, (int)view->size, &w, &h, &channels, 4);
 	if (pixels == nullptr)
-		return false;
-	if (w > 0 && h > 0 && w <= 4096 && h <= 4096)
+		return mime + ", not decodable";
+	std::string why;
+	if (w > 0 && h > 0 && w <= MaxImageSide && h <= MaxImageSide)
 	{
 		out.texWidth = w;
 		out.texHeight = h;
 		out.rgba.assign(pixels, pixels + (size_t)w * h * 4);
 	}
+	else
+		why = mime + ", not decodable";
 	stbi_image_free(pixels);
-	return out.texWidth != 0;
+	return why;
 }
 
 const cgltf_accessor *attribute(const cgltf_primitive& prim, cgltf_attribute_type type, int index = 0)
@@ -76,35 +102,58 @@ const cgltf_accessor *attribute(const cgltf_primitive& prim, cgltf_attribute_typ
 	return nullptr;
 }
 
-void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, GlbMesh& out, const cgltf_image *& textureImage)
+void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& reader)
 {
+	GlbMesh& out = reader.out;
 	if (prim.type != cgltf_primitive_type_triangles && prim.type != cgltf_primitive_type_triangle_strip
 			&& prim.type != cgltf_primitive_type_triangle_fan)
 		return;
+	// positions and indices read from a buffer view, not sparse (else left out)
 	const cgltf_accessor *position = attribute(prim, cgltf_attribute_type_position);
-	if (position == nullptr || position->type != cgltf_type_vec3 || position->count == 0)
+	if (position == nullptr || position->type != cgltf_type_vec3 || position->count == 0
+			|| position->buffer_view == nullptr || position->is_sparse)
 		return;
+	if (prim.indices != nullptr && (prim.indices->buffer_view == nullptr || prim.indices->is_sparse))
+		return;
+	const size_t vertexCount = position->count;
+	const size_t count = prim.indices != nullptr ? prim.indices->count : vertexCount;
+	const size_t triangles = prim.type == cgltf_primitive_type_triangles ? count / 3 : count >= 3 ? count - 2 : 0;
+	if (out.positions.size() / 3 + vertexCount > MaxVertices || out.indices.size() + triangles * 3 > MaxIndices)
+	{
+		reader.tooBig = true;
+		return;
+	}
 	const cgltf_accessor *normal = attribute(prim, cgltf_attribute_type_normal);
 	if (normal != nullptr && (normal->type != cgltf_type_vec3 || normal->count != position->count))
 		normal = nullptr;
 	const cgltf_accessor *uv = attribute(prim, cgltf_attribute_type_texcoord);
 	if (uv != nullptr && (uv->type != cgltf_type_vec2 || uv->count != position->count))
 		uv = nullptr;
-	// this primitive's base colour image: the mesh's texture if it is the first one
+	// this primitive's base colour image (KHR_texture_basisu's when it has no other): the mesh's
+	// texture if it is the first one that decodes
 	const cgltf_image *image = nullptr;
 	if (prim.material != nullptr && prim.material->has_pbr_metallic_roughness)
 	{
 		const cgltf_texture_view& view = prim.material->pbr_metallic_roughness.base_color_texture;
 		if (view.texture != nullptr && view.texcoord == 0)
-			image = view.texture->image;
+			image = view.texture->image != nullptr ? view.texture->image : view.texture->basisu_image;
+		else if (view.texture != nullptr && out.untextured.empty())
+			out.untextured = "a texture on TEXCOORD_" + std::to_string(view.texcoord);
 	}
-	if (textureImage == nullptr && image != nullptr && loadImage(image, out))
-		textureImage = image;
-	const bool textured = image != nullptr && image == textureImage;
+	if (reader.textureImage == nullptr && image != nullptr && image != reader.triedImage)
+	{
+		const std::string why = loadImage(image, out);
+		if (why.empty())
+			reader.textureImage = image;
+		else
+		{
+			reader.triedImage = image;
+			if (out.untextured.empty())
+				out.untextured = why;
+		}
+	}
+	const bool textured = image != nullptr && image == reader.textureImage;
 
-	const size_t vertexCount = position->count;
-	if (out.positions.size() / 3 + vertexCount > 0x7fffffff)
-		return;
 	const u32 base = (u32)(out.positions.size() / 3);
 	const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(world)));
 	for (size_t i = 0; i < vertexCount; i++)
@@ -127,7 +176,6 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, GlbMesh& 
 	}
 
 	// the primitive's vertex order (indexed or not), as triangles
-	const size_t count = prim.indices != nullptr ? prim.indices->count : vertexCount;
 	auto vertex = [&](size_t k) -> size_t {
 		return prim.indices != nullptr ? cgltf_accessor_read_index(prim.indices, k) : k;
 	};
@@ -172,20 +220,20 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, GlbMesh& 
 	}
 }
 
-void addNode(const cgltf_node *node, GlbMesh& out, const cgltf_image *& textureImage, int depth)
+void addNode(const cgltf_node *node, Reader& reader, int depth)
 {
-	if (depth > 64)
+	if (depth > 64 || reader.tooBig)
 		return;		// (no cycles in a valid file; cgltf_validate checks)
 	if (node->mesh != nullptr)
 	{
 		float world[16];
 		cgltf_node_transform_world(node, world);
 		const glm::mat4 m = glm::make_mat4(world);
-		for (cgltf_size i = 0; i < node->mesh->primitives_count; i++)
-			addPrimitive(node->mesh->primitives[i], m, out, textureImage);
+		for (cgltf_size i = 0; i < node->mesh->primitives_count && !reader.tooBig; i++)
+			addPrimitive(node->mesh->primitives[i], m, reader);
 	}
 	for (cgltf_size i = 0; i < node->children_count; i++)
-		addNode(node->children[i], out, textureImage, depth + 1);
+		addNode(node->children[i], reader, depth + 1);
 }
 
 }	// namespace
@@ -213,27 +261,31 @@ bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error)
 		cgltf_free(gltf);
 		return false;
 	}
-	const cgltf_image *textureImage = nullptr;
+	Reader reader { out };
 	const cgltf_scene *scene = gltf->scene != nullptr ? gltf->scene : gltf->scenes_count > 0 ? &gltf->scenes[0] : nullptr;
 	if (scene != nullptr)
 	{
 		for (cgltf_size i = 0; i < scene->nodes_count; i++)
-			addNode(scene->nodes[i], out, textureImage, 0);
+			addNode(scene->nodes[i], reader, 0);
 	}
 	else
 	{
 		// no scene: every root node
 		for (cgltf_size i = 0; i < gltf->nodes_count; i++)
 			if (gltf->nodes[i].parent == nullptr)
-				addNode(&gltf->nodes[i], out, textureImage, 0);
+				addNode(&gltf->nodes[i], reader, 0);
 	}
 	cgltf_free(gltf);
-	if (out.indices.empty())
+	if (reader.tooBig || out.indices.empty())
 	{
-		error = "no triangles";
+		error = reader.tooBig ? "over 1000000 vertices or 3000000 indices" : "no triangles";
 		out = GlbMesh();
 		return false;
 	}
+	if (out.texWidth != 0)
+		out.untextured.clear();
+	else if (out.untextured.empty())
+		out.untextured = "no base colour texture";
 	return true;
 }
 

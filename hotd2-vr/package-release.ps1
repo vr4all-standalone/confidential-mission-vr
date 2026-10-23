@@ -293,6 +293,9 @@ is published with every release, on the same page as this zip.
 # Flycast's "or later" allows it). Its text: the copy that comes with Flycast's picoTCP.
 $gpl3 = Get-Content -Raw (Join-Path $repo 'core\deps\picotcp\LICENSE.GPLv3')
 if ($gpl3 -notmatch 'GNU GENERAL PUBLIC LICENSE\s+Version 3, 29 June 2007') { throw 'GPL-3.0 text not found' }
+# cgltf (core\deps\cgltf, it reads the controllers' models) is MIT: its notice goes with the build
+$cgltf = ((Get-Content -Raw (Join-Path $repo 'core\deps\cgltf\LICENSE')) -replace "`r?`n", "`r`n").Trim()
+if ($cgltf -notmatch '^Copyright \(c\) 2018-2021 Johannes Kuhlmann\s+Permission is hereby granted') { throw 'cgltf MIT notice not found' }
 Set-Content -Path (Join-Path $stage 'LICENSE.txt') -Encoding ascii -NoNewline -Value (@'
 Confidential Mission VR, PC version: licence
 
@@ -302,7 +305,10 @@ Martoscar (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). CC BY 4.0 g
 with GPL-3.0 but not GPL-2.0, so this build is distributed under the GNU General Public License
 version 3, below. Its source code is published with every release, on the same page as this zip.
 
-'@ + $gpl3)
+flycast.exe also contains cgltf by Johannes Kuhlmann (https://github.com/jkuhlmann/cgltf), which
+reads the controllers' models, under the MIT licence:
+
+'@ + "`r`n" + $cgltf + "`r`n`r`n" + $gpl3)
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
 
 # the zip: exactly its five files, and a README.txt about this game alone

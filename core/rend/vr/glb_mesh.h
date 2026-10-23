@@ -17,13 +17,17 @@ namespace vr::xr
 // metres, y up) with the node transforms applied: positions and normals x, y, z, texture
 // coordinates u, v (v down the image, as glTF has it), indices into them. The base colour
 // image of the first primitive that has one, when it is a PNG or a JPEG, as RGBA rows
-// (top row first): texWidth x texHeight; else none (texWidth 0) and the mesh is untextured.
-struct GlbMesh { std::vector<float> positions, normals, uvs; std::vector<u32> indices; int texWidth = 0, texHeight = 0; std::vector<u8> rgba; };
+// (top row first): texWidth x texHeight; else none (texWidth 0) and the mesh is untextured,
+// with why in `untextured`: the image's MIME type (image/ktx2: glTF subset 1's Basis
+// Universal, not decoded here) or what was wrong with it (empty when textured).
+struct GlbMesh { std::vector<float> positions, normals, uvs; std::vector<u32> indices; int texWidth = 0, texHeight = 0; std::vector<u8> rgba;
+	std::string untextured; };
 
 // All primitives (triangle lists, strips and fans), node transforms applied; base colour
 // PNG/JPEG via stb_image; other images: untextured. Primitives with no normals get face
 // normals. External files (a buffer or image by file name) are not read. False, with why in
-// `error`, when the data isn't a GLB this can draw (no triangles).
+// `error`, when the data isn't a GLB this can draw (no triangles, or over 1,000,000 vertices or
+// 3,000,000 indices).
 bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error);
 
 }
