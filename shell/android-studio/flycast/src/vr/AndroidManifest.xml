@@ -14,6 +14,9 @@
 
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
+    <!-- the controllers' own models in the hands (XR_FB_render_model, rend/vr/xr_controllers.h) -->
+    <uses-permission android:name="com.oculus.permission.RENDER_MODEL" />
+    <uses-feature android:name="com.oculus.feature.RENDER_MODEL" android:required="false" />
     <!-- the player's game in the Download folder (or anywhere on the shared storage) -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />

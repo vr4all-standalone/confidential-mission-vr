@@ -87,4 +87,13 @@ void drawGunGlow(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunVi
 // The GL context is going away.
 void termGun();
 
+// The gun model's lighting, GLSL for a fragment shader (after PixelCompatShader): a fixed key
+// light and a dim fill from below, a plastic highlight and a rim, so a model in the hand reads
+// as a solid object in the game's dark scenes. Also the controllers' (xr_controllers.h).
+//   mediump vec3 modelLighting(highp vec3 n, highp vec3 v, mediump vec3 base, mediump float spec,
+//           mediump float shine, mediump vec3 glow)
+// n: the unit normal, turned to face the eye; v: the unit vector to the eye, both in room
+// space; base: the colour; spec, shine: the highlight's strength and tightness; glow: added.
+extern const char *const ModelLightingSource;
+
 }

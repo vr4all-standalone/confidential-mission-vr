@@ -472,6 +472,7 @@ extern Option<bool> VrXr;
 #ifndef __ANDROID__
 extern Option<bool> VrXrSim;
 extern Option<std::string> VrXrSimProfile;
+extern Option<std::string> VrXrSimRenderModel;
 extern Option<std::string> VrWatchRam;
 extern Option<std::string> VrWatchTex;
 #endif
@@ -483,6 +484,7 @@ extern Option<int> VrMsaa;
 extern Option<int> VrXrRefreshRate;
 extern Option<bool> VrLaser;
 extern Option<bool> VrShowGun;
+extern Option<bool> VrShowControllers;
 extern Option<float> VrGunScale;
 extern Option<bool> VrGameHands;
 extern Option<float> VrHandScale;

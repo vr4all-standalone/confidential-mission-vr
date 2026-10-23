@@ -26,6 +26,26 @@
 
 namespace vr::xr
 {
+
+const char *const ModelLightingSource = R"(
+mediump vec3 modelLighting(highp vec3 n, highp vec3 v, mediump vec3 base, mediump float spec, mediump float shine, mediump vec3 glow)
+{
+	const highp vec3 key = vec3(0.32, 0.86, 0.40);		// normalised: up, front, a bit right
+	const highp vec3 fill = vec3(-0.45, -0.75, -0.48);
+	mediump float diffuse = max(dot(n, key), 0.0);
+	mediump float back = max(dot(n, fill), 0.0);
+	highp vec3 h = normalize(key + v);
+	mediump float highlight = pow(max(dot(n, h), 0.0), shine) * spec;
+	// (clamped: a dot a hair over 1 would make the base negative, and pow() NaN)
+	highp float edge = 1.0 - clamp(dot(n, v), 0.0, 1.0);
+	mediump float rim = edge * edge * edge;
+	return base * (0.30 + 0.80 * diffuse + 0.25 * back)
+			+ vec3(highlight)
+			+ rim * (0.18 * base + 0.10 * spec)
+			+ glow;
+}
+)";
+
 namespace
 {
 
@@ -116,7 +136,7 @@ void main()
 }
 )");
 	OpenGlSource fragment;
-	fragment.addSource(PixelCompatShader).addSource(R"(
+	fragment.addSource(PixelCompatShader).addSource(ModelLightingSource).addSource(R"(
 uniform highp vec3 eyePos;
 uniform mediump vec3 baseColor;
 uniform mediump float specular;
@@ -131,19 +151,7 @@ void main()
 	highp vec3 v = normalize(eyePos - vtx_pos);
 	if (dot(n, v) < 0.0)
 		n = -n;		// inside faces seen through gaps
-	const highp vec3 key = vec3(0.32, 0.86, 0.40);		// normalised: up, front, a bit right
-	const highp vec3 fill = vec3(-0.45, -0.75, -0.48);
-	mediump float diffuse = max(dot(n, key), 0.0);
-	mediump float back = max(dot(n, fill), 0.0);
-	highp vec3 h = normalize(key + v);
-	mediump float highlight = pow(max(dot(n, h), 0.0), shininess) * specular;
-	// (clamped: a dot a hair over 1 would make the base negative, and pow() NaN)
-	highp float edge = 1.0 - clamp(dot(n, v), 0.0, 1.0);
-	mediump float rim = edge * edge * edge;
-	mediump vec3 color = baseColor * (0.30 + 0.80 * diffuse + 0.25 * back)
-			+ vec3(highlight)
-			+ rim * (0.18 * baseColor + 0.10 * specular)
-			+ emissive;
+	mediump vec3 color = modelLighting(n, v, baseColor, specular, shininess, emissive);
 	// the muzzle flash lights up the front of the gun
 	if (muzzleLight.w > 0.0)
 	{

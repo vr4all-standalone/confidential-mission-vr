@@ -217,6 +217,9 @@ if (-not $launchers.Count -or @($launchers | Where-Object { $_ -ne $appLauncher 
 	$wrong += "the library entries (LAUNCHER) are '$($launchers -join "', '")', not $appLauncher alone"
 }
 if (@($manifestTree | Where-Object { $_ -match 'VrSetupActivity' }).Count) { $wrong += 'the manifest still has VrSetupActivity' }
+if (-not @($manifestTree | Where-Object { $_ -match '"com\.oculus\.permission\.RENDER_MODEL"' }).Count) {
+	$wrong += 'the manifest has no com.oculus.permission.RENDER_MODEL (the controllers drawn in the hands)'
+}
 if ($wrong.Count) {
 	Write-Host "The APK is not $appLabel as released:" -ForegroundColor Red
 	$wrong | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }

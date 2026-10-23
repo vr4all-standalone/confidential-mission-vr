@@ -107,6 +107,7 @@ Option<bool> VrXr("vr.Xr", false);			// PCVR (OpenXR), when asked: the PCVR zip'
 #ifndef __ANDROID__
 Option<bool> VrXrSim("vr.XrSim", false);	// PC test harness: vr.Xr against the built-in OpenXR simulator (rend/vr/xr_sim.h)
 Option<std::string> VrXrSimProfile("vr.XrSimProfile", "oculus/touch_controller");	// its controllers: /interaction_profiles/<this>
+Option<std::string> VrXrSimRenderModel("vr.XrSimRenderModel", "");	// its XR_FB_render_model: this GLB file as both controllers' model ("": none)
 Option<std::string> VrWatchRam("vr.WatchRam", "");	// PC test aid: "addr[:size],..." RAM values logged when they change (vr_reproject.cpp)
 Option<std::string> VrWatchTex("vr.WatchTex", "");	// PC test aid: "tex,..." textures logged when they come into the passes and go
 #endif
@@ -118,6 +119,7 @@ Option<int> VrMsaa("vr.Msaa", 1);		// smooth edges: multisampling, e.g. 4 (the Q
 Option<int> VrXrRefreshRate("vr.XrRefreshRate", 72);	// Hz
 Option<bool> VrLaser("vr.Laser", true);		// aim line and dot from the gun
 Option<bool> VrShowGun("vr.ShowGun", true);	// a gun in the shooting hand
+Option<bool> VrShowControllers("vr.ShowControllers", true);	// the controllers in the hands that hold no gun
 Option<float> VrGunScale("vr.GunScale", 0.68f);	// its size, times the model's (24.7 cm long); 0.68: 17 cm, a compact pistol
 Option<bool> VrGameHands("vr.GameHands", true);	// the agent's own hands and pistol from the game, when files/hands.bin is there
 Option<float> VrHandScale("vr.HandScale", 1.f);	// their size, times the ripped model's (a 20 cm pistol)

@@ -15,7 +15,9 @@
   cm-sim and cm-buttons play their own (accept-cm-sim, accept-cm-buttons) through the OpenXR
   simulator, cm-buttons-pc two more (accept-cm-buttons-index, -vive) with the PC controllers.
   cm-haptics, -low, -off, -mag and -reload play one each (accept-cm-haptics...) the same way,
-  and so do cm-menu and cm-menu-quit (accept-cm-menu, accept-cm-menu-quit).
+  and so do cm-menu and cm-menu-quit (accept-cm-menu, accept-cm-menu-quit), and cm-controllers
+  and cm-controllers-rt (accept-cm-controllers, accept-cm-controllers-rt; the latter's GLB is
+  build-win\vrtest\test-controller.glb, made by re\make-test-glb.py when it is missing).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -705,12 +707,72 @@ function Test-SpikeKeys {
 	return $null
 }
 
+# The controller models (xr_controllers.h) through the simulator, in stage 1's first room: the
+# free (left) hand moved in front of the left eye at 56 s, a window shot with it there at 57 s,
+# the hand moved away (below and behind the head) at 57.5 s and another shot at 58 s. The left
+# eye's view differs where the controller was ($cmControllerBox: around it, below the enemy's
+# feet, left of the gun's laser; without a controller the two shots differ there by ~0.3, with
+# the built-in shape by ~17). The simulator lists no XR_FB_render_model: the built-in shape.
+$cmControllerBox = '0.32,0.62,0.5,0.88'
+function Get-CmControllersParams([string]$name, [string]$config) {
+	@{ Game = 'confmiss'; Name = $name; Seconds = 62; XrSim = $true; Config = $config
+		At = @(Get-CmStartsXr) + '56=pose left -0.1 1.45 -0.3 0 0', '57=shot in', '57.5=pose left -0.1 0.2 0.5 0 0', '58=shot out'
+		Reject = 'XR: initialisation failed' }
+}
+function Test-CmControllers {
+	$name = 'accept-cm-controllers'
+	$params = Get-CmControllersParams $name $cmWiden
+	$params.Expect = 'XR: runtime extensions: ', 'XR: controller models built in \(the runtime has no XR_FB_render_model\)'
+	$params.Reject += 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime'
+	$why = Invoke-VrTest $params
+	if ($why) { return $why }
+	$why = Test-RunShots $name 't057-in.png', 't058-out.png'
+	if ($why) { return $why }
+	$dir = Join-Path $repo "build-win\vrtest\$name"
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), (Join-Path $dir 't058-out.png'), '--box', $cmControllerBox
+	if ($why) { return "no controller in the left hand: $why" }
+	return $null
+}
+
+# The same with vr.XrSimRenderModel: the simulator lists XR_FB_render_model and serves the test
+# GLB (re\make-test-glb.py: an 8 cm box and a 12 cm cylinder, 140 triangles, a 2x2 PNG) as both
+# controllers' model; the hand in front of the eye then looks unlike the built-in shape.
+function Test-CmControllersRt {
+	$name = 'accept-cm-controllers-rt'
+	$glb = Join-Path $repo 'build-win\vrtest\test-controller.glb'
+	if (-not (Test-Path -LiteralPath $glb)) {
+		& python -I (Join-Path $PSScriptRoot 're\make-test-glb.py') $glb | ForEach-Object { Write-Host "  $_" }
+		if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $glb)) { return "make-test-glb.py could not write $glb" }
+	}
+	$params = Get-CmControllersParams $name "$cmWiden,config:vr.XrSimRenderModel=$glb"
+	$params.Expect = 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime \(left 140 triangles, right 140\)'
+	$params.Reject += 'XR: controller models built in'
+	$why = Invoke-VrTest $params
+	if ($why) { return $why }
+	$why = Test-RunShots $name 't057-in.png', 't058-out.png'
+	if ($why) { return $why }
+	$builtIn = Join-Path $repo 'build-win\vrtest\accept-cm-controllers\t057-in.png'
+	if (-not (Test-Path -LiteralPath $builtIn) -and -not $Reuse) {
+		Write-Host '  (no cm-controllers shot to compare with: playing accept-cm-controllers)'
+		$why = Test-CmControllers
+		if ($why) { return "cm-controllers: $why" }
+	}
+	if (-not (Test-Path -LiteralPath $builtIn)) { return "no $builtIn to compare with" }
+	$dir = Join-Path $repo "build-win\vrtest\$name"
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), (Join-Path $dir 't058-out.png'), '--box', $cmControllerBox
+	if ($why) { return "no controller in the left hand: $why" }
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), $builtIn, '--box', $cmControllerBox
+	if ($why) { return "the runtime's model looks like the built-in one: $why" }
+	return $null
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
 	'cm-haptics' = 'Test-CmHaptics'; 'cm-haptics-low' = 'Test-CmHapticsLow'; 'cm-haptics-off' = 'Test-CmHapticsOff'
 	'cm-haptics-mag' = 'Test-CmHapticsMag'; 'cm-haptics-reload' = 'Test-CmHapticsReload'
 	'cm-menu' = 'Test-CmMenu'; 'cm-menu-quit' = 'Test-CmMenuQuit'
+	'cm-controllers' = 'Test-CmControllers'; 'cm-controllers-rt' = 'Test-CmControllersRt'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

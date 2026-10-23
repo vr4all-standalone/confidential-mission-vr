@@ -14,6 +14,7 @@
 #include "xr_host.h"
 
 #ifdef USE_OPENXR
+#include "xr_controllers.h"
 #include "xr_gun.h"
 #include "xr_hands.h"
 #include "xr_menu.h"
@@ -186,6 +187,13 @@ bool quitPending;
 GunView pointers[2];
 bool pointerShown[2];
 bool ringDumpRequested;		// the left stick click held: the frame ring (debug aid) is to be written
+// The controllers' models (xr_controllers.h): looked for once a session, at its first FOCUSED
+// state; drawn this frame in the hands that show no gun or game hand, at their grip poses (room
+// space).
+bool controllersReady;
+bool controllerShown[2];
+glm::mat4 controllerGrip[2];
+
 // The controllers on each hand as the runtime last named them (an interaction profile path;
 // empty: none, or not known yet).
 std::string profiles[2];
@@ -586,6 +594,23 @@ bool init()
 				return true;
 		return false;
 	};
+	static bool extensionsLogged;
+	if (!extensionsLogged)
+	{
+		// what this runtime offers, once a run (init is tried again after a failure); in lines of
+		// up to ~900 characters (the log's limit is 1024), each with the same start
+		extensionsLogged = true;
+		std::string names;
+		for (size_t i = 0; i < props.size(); i++)
+		{
+			names += std::string(names.empty() ? "" : " ") + props[i].extensionName;
+			if (names.size() > 900 || i + 1 == props.size())
+			{
+				NOTICE_LOG(RENDERER, "XR: runtime extensions: %s", names.c_str());
+				names.clear();
+			}
+		}
+	}
 	if (!has(graphicsExtension))
 	{
 		ERROR_LOG(RENDERER, "XR: the OpenXR runtime has no %s", graphicsExtension);
@@ -597,6 +622,9 @@ bool init()
 		extensions.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
 	if (perfSettings)
 		extensions.push_back(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME);
+	// the controllers' own models (xr_controllers.h; the Quest: with com.oculus.permission.RENDER_MODEL)
+	if (has(XR_FB_RENDER_MODEL_EXTENSION_NAME))
+		extensions.push_back(XR_FB_RENDER_MODEL_EXTENSION_NAME);
 
 	XrInstanceCreateInfo createInfo { XR_TYPE_INSTANCE_CREATE_INFO };
 #ifdef __ANDROID__
@@ -775,6 +803,13 @@ void pollEvents()
 			if (focused && !nowFocused)
 				focusLost = std::chrono::steady_clock::now();
 			focused = nowFocused;
+			if (nowFocused && !controllersReady)
+			{
+				// the controllers' models, now that the session has its input (a Quest names its
+				// controllers' models once it's focused)
+				controllers::init(instance, session);
+				controllersReady = true;
+			}
 		}
 		else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING)
 		{
@@ -1590,6 +1625,29 @@ Gun *gunInHand(int hand)
 	return nullptr;
 }
 
+// The controllers drawn this frame (xr_controllers.h): in each tracked hand that shows no gun (nor
+// the game's open hand next to it), at its grip pose, while focused and vr.ShowControllers is on.
+// With the menu open too, the pointers' lines starting from them.
+void updateControllers(XrTime time)
+{
+	const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+	for (int hand : { Left, Right })
+	{
+		controllerShown[hand] = false;
+		const bool gameHand = !dualWield && guns[0].visible && guns[0].view.otherHand && guns[0].hand != hand;
+		if (!controllersReady || !focused || !originSet || !config::VrShowControllers || gunInHand(hand) != nullptr || gameHand)
+			continue;
+		XrSpaceLocation location { XR_TYPE_SPACE_LOCATION };
+		if (XR_SUCCEEDED(XR(xrLocateSpace)(gripSpaces[hand], localSpace, time, &location))
+				&& (location.locationFlags & valid) == valid)
+		{
+			controllerGrip[hand] = glm::translate(glm::mat4(1.f), relativePosition(location.pose.position))
+					* glm::mat4_cast(relativeRotation(location.pose.orientation));
+			controllerShown[hand] = true;
+		}
+	}
+}
+
 // The settings menu, open (xr_menu.h): the game is paused (applyPause) and gets nothing; the guns
 // only follow the hands. Each hand points at the menu, from its gun's muzzle (else from the
 // controller), always with a line and, on the panel, a dot (whatever vr.Laser says); its trigger
@@ -2375,6 +2433,8 @@ void term()
 		// still on the render thread with the context current: our own GL objects first
 		termGun();
 		termPanel();
+		controllers::term();
+		controllersReady = controllerShown[Left] = controllerShown[Right] = false;
 		for (EyeChain& c : chains)
 		{
 			if (!c.fbos.empty())
@@ -2578,6 +2638,7 @@ bool frame()
 				chains[0].width, chains[0].height, worldScale(), (float)config::ExtraDepthScale);
 	}
 	updateLightgun(frameState.predictedDisplayTime);
+	updateControllers(frameState.predictedDisplayTime);
 
 	XrCompositionLayerProjectionView projViews[2] { { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW }, { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW } };
 	const bool render = frameState.shouldRender && located;
@@ -2648,10 +2709,11 @@ bool frame()
 			glcache.Disable(GL_SCISSOR_TEST);
 			menu::draw(eyeProjection(views[i].fov) * view);
 		}
-		if ((!darkRoom || menuOpen) && (guns[0].visible || guns[1].visible || pointerShown[Left] || pointerShown[Right]))
+		if ((!darkRoom || menuOpen) && (guns[0].visible || guns[1].visible || pointerShown[Left] || pointerShown[Right]
+				|| controllerShown[Left] || controllerShown[Right]))
 		{
-			// every gun's model, then every gun's glow (dots and flashes over both models), and the
-			// menu's pointers from hands with no gun
+			// every gun's model and the controllers in the other hands, then every gun's glow (dots
+			// and flashes over all models), and the menu's pointers from hands with no gun
 			glBindFramebuffer(GL_FRAMEBUFFER, c.fbos[index]);
 			glViewport(0, 0, c.width, c.height);
 			const glm::mat4 viewProj = eyeProjection(views[i].fov) * view;
@@ -2665,12 +2727,16 @@ bool frame()
 				}
 			if (first)
 			{
-				// no gun: the pointers' lines against nothing but each other, not the game's depth
+				// no gun: the controllers and the pointers' lines against nothing but each other,
+				// not the game's depth
 				glcache.Disable(GL_SCISSOR_TEST);
 				glcache.DepthMask(GL_TRUE);
 				glClearDepthf(1.f);
 				glClear(GL_DEPTH_BUFFER_BIT);
 			}
+			for (int hand : { Left, Right })
+				if (controllerShown[hand])
+					controllers::draw(viewProj, eyePos, hand, controllerGrip[hand]);
 			first = true;
 			for (const Gun& g : guns)
 				if (g.visible)

@@ -362,13 +362,19 @@ SIM_FN(GetInstanceProcAddr)(XrInstance, const char *name, PFN_xrVoidFunction *fu
 const struct { const char *name; uint32_t version; } Extensions[] {
 	{ XR_KHR_OPENGL_ENABLE_EXTENSION_NAME, XR_KHR_opengl_enable_SPEC_VERSION },
 	{ XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME, XR_FB_display_refresh_rate_SPEC_VERSION },
+	// the last one: only with vr.XrSimRenderModel
+	{ XR_FB_RENDER_MODEL_EXTENSION_NAME, XR_FB_render_model_SPEC_VERSION },
 };
+// XR_FB_render_model: listed (and its functions offered) only with a GLB file to serve as both
+// controllers' model, so without it the app finds none, as on a PC VR runtime
+bool renderModels() { return !config::VrXrSimRenderModel.get().empty(); }
+uint32_t extensionCount() { return (uint32_t)std::size(Extensions) - (renderModels() ? 0 : 1); }
 
 SIM_FN(EnumerateInstanceExtensionProperties)(const char *layerName, uint32_t capacity, uint32_t *count, XrExtensionProperties *properties)
 {
 	if (layerName != nullptr)
 		return XR_ERROR_API_LAYER_NOT_PRESENT;
-	return fill(capacity, count, properties, (uint32_t)std::size(Extensions), [](XrExtensionProperties& p, uint32_t i) {
+	return fill(capacity, count, properties, extensionCount(), [](XrExtensionProperties& p, uint32_t i) {
 		strncpy(p.extensionName, Extensions[i].name, XR_MAX_EXTENSION_NAME_SIZE - 1);
 		p.extensionVersion = Extensions[i].version;
 	});
@@ -381,8 +387,8 @@ SIM_FN(CreateInstance)(const XrInstanceCreateInfo *info, XrInstance *instance)
 	for (uint32_t i = 0; i < info->enabledExtensionCount; i++)
 	{
 		bool known = false;
-		for (const auto& e : Extensions)
-			known = known || !strcmp(e.name, info->enabledExtensionNames[i]);
+		for (uint32_t e = 0; e < extensionCount(); e++)
+			known = known || !strcmp(Extensions[e].name, info->enabledExtensionNames[i]);
 		if (!known)
 		{
 			ERROR_LOG(RENDERER, "XRSIM: no extension %s", info->enabledExtensionNames[i]);
@@ -1107,6 +1113,64 @@ SIM_FN(RequestDisplayRefreshRateFB)(XrSession session, float rate)
 	return XR_SUCCESS;
 }
 
+// XR_FB_render_model (vr.XrSimRenderModel): that GLB file as both controllers' model, handed out
+// as a Quest runtime hands out its controllers' (xr_controllers.h)
+const char *const RenderModelPaths[] { "/model_fb/controller/left", "/model_fb/controller/right" };
+
+SIM_FN(EnumerateRenderModelPathsFB)(XrSession session, uint32_t capacity, uint32_t *count, XrRenderModelPathInfoFB *paths)
+{
+	if (!validSession(session))
+		return XR_ERROR_HANDLE_INVALID;
+	return fill(capacity, count, paths, (uint32_t)std::size(RenderModelPaths), [](XrRenderModelPathInfoFB& p, uint32_t i) {
+		p.path = toPath(RenderModelPaths[i]);
+	});
+}
+
+SIM_FN(GetRenderModelPropertiesFB)(XrSession session, XrPath path, XrRenderModelPropertiesFB *properties)
+{
+	if (!validSession(session))
+		return XR_ERROR_HANDLE_INVALID;
+	if (properties == nullptr || properties->type != XR_TYPE_RENDER_MODEL_PROPERTIES_FB)
+		return XR_ERROR_VALIDATION_FAILURE;
+	for (uint32_t i = 0; i < std::size(RenderModelPaths); i++)
+		if (pathString(path) == RenderModelPaths[i])
+		{
+			properties->vendorId = 0;
+			strncpy(properties->modelName, "XRSIM test model", XR_MAX_RENDER_MODEL_NAME_SIZE_FB - 1);
+			properties->modelKey = i + 1;
+			properties->modelVersion = 1;
+			properties->flags = XR_RENDER_MODEL_SUPPORTS_GLTF_2_0_SUBSET_1_BIT_FB;
+			return XR_SUCCESS;
+		}
+	return XR_ERROR_PATH_UNSUPPORTED;
+}
+
+SIM_FN(LoadRenderModelFB)(XrSession session, const XrRenderModelLoadInfoFB *info, XrRenderModelBufferFB *buffer)
+{
+	if (!validSession(session))
+		return XR_ERROR_HANDLE_INVALID;
+	if (info == nullptr || buffer == nullptr)
+		return XR_ERROR_VALIDATION_FAILURE;
+	if (info->modelKey < 1 || info->modelKey > std::size(RenderModelPaths))
+		return XR_ERROR_RENDER_MODEL_KEY_INVALID_FB;
+	std::vector<u8> bytes;
+	if (FILE *f = fopen(config::VrXrSimRenderModel.get().c_str(), "rb"))
+	{
+		u8 chunk[4096];
+		size_t n;
+		while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0)
+			bytes.insert(bytes.end(), chunk, chunk + n);
+		fclose(f);
+	}
+	if (bytes.empty())
+	{
+		ERROR_LOG(RENDERER, "XRSIM: can't read the render model %s", config::VrXrSimRenderModel.get().c_str());
+		return XR_ERROR_RUNTIME_FAILURE;
+	}
+	return fill(buffer->bufferCapacityInput, &buffer->bufferCountOutput, buffer->buffer, (uint32_t)bytes.size(),
+			[&bytes](uint8_t& b, uint32_t i) { b = bytes[i]; });
+}
+
 #define ENTRY(name) { "xr" #name, (PFN_xrVoidFunction)sim##name }
 const struct { const char *name; PFN_xrVoidFunction function; } Functions[] {
 	ENTRY(GetInstanceProcAddr), ENTRY(EnumerateInstanceExtensionProperties), ENTRY(CreateInstance), ENTRY(DestroyInstance),
@@ -1123,6 +1187,10 @@ const struct { const char *name; PFN_xrVoidFunction function; } Functions[] {
 	ENTRY(GetActionStateFloat), ENTRY(GetActionStateVector2f), ENTRY(GetActionStatePose), ENTRY(ApplyHapticFeedback),
 	ENTRY(StopHapticFeedback), ENTRY(EnumerateDisplayRefreshRatesFB), ENTRY(GetDisplayRefreshRateFB),
 	ENTRY(RequestDisplayRefreshRateFB),
+};
+// only with vr.XrSimRenderModel (a runtime has no functions for an extension it doesn't list)
+const struct { const char *name; PFN_xrVoidFunction function; } RenderModelFunctions[] {
+	ENTRY(EnumerateRenderModelPathsFB), ENTRY(GetRenderModelPropertiesFB), ENTRY(LoadRenderModelFB),
 };
 #undef ENTRY
 
@@ -1147,6 +1215,10 @@ PFN_xrVoidFunction proc(const char *name)
 	for (const auto& f : Functions)
 		if (!strcmp(f.name, name))
 			return f.function;
+	if (renderModels())
+		for (const auto& f : RenderModelFunctions)
+			if (!strcmp(f.name, name))
+				return f.function;
 	return nullptr;
 }
 

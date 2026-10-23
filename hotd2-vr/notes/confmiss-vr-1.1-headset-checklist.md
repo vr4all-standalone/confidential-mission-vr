@@ -52,3 +52,10 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 - [ ] Choose Quit twice: the first choose turns its row into "Quit? Choose again" (moving off it, a stick move or 3 s turns it back); the second, within 3 s, returns to the start screen ("CONFIDENTIAL MISSION VR"), and Play starts the game again.
 - [ ] Settings are kept after restarting the app: change Laser, Haptics, World size and Panel distance, quit, close the app, open it and play: all four are as you left them (and Wider view, changed, applies now).
 - [ ] The menu button or B closes the menu and the game goes on; the closing B does not reload, and the A that chose Resume does not press Start.
+
+## Task 8
+
+- [ ] The Quest 3 shows its own controllers in the hands (the log says "XR: controller models from the runtime"), sitting right: the model's handle where your hand is and its buttons, stick and trigger over the real ones, moving with no lag. If not, note how far off (cm, which way) and how far turned (degrees).
+- [ ] At the first start there is no permission prompt, or an understandable one (about the controllers' models); "XR: runtime extensions:" in the log lists XR_FB_render_model.
+- [ ] On PC VR (SteamVR, Virtual Desktop: a runtime without XR_FB_render_model) the built-in shape is in the hands instead ("XR: controller models built in (...)"): it reads as a controller held the right way, buttons up under the thumb, the trigger under the index finger; the left one has the small menu button where a Quest 3's is.
+- [ ] Only free hands show a controller: the gun hand shows the gun, and with the game's hands on, the other hand shows the game's open hand. With the menu open, a free hand's pointer line starts at its controller. `vr.ShowControllers = no` in emu.cfg hides the controllers and nothing else.
