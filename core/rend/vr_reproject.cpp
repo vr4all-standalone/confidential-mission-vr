@@ -673,8 +673,10 @@ bool gunState(int player, GunState& out)
 	out = GunState {};
 	const GameProfile *prof = activeProfile;
 	const u32 block = gunBlock(prof, player);
-	if (block == 0 || !emu.running())
+	if (block == 0)
 		return false;
+	if (!emu.running())
+		return true;
 	out.ammo = ReadMem8_nommu(block + prof->gunRam.ammo);
 	out.magazine = ReadMem8_nommu(block + prof->gunRam.magazine);
 	out.shots = ReadMem16_nommu(block + prof->gunRam.shots);

@@ -155,9 +155,10 @@ struct Gun
 	GunView view;
 	bool visible;
 	int palmLogged = -1;	// hand * 2 + where the palm came from, as last logged
-	// The knocks (gunKnocks): the game's own gun as last read (gunKnown: read, its profile has
-	// one), when a pull on the screen went to the game that it hasn't fired for yet (0: none),
-	// and when the trigger was last held.
+	// The knocks (gunKnocks): whether the game's profile has its gun state (gunRam), that state
+	// as last read (gunKnown: read, the emulator running), when a pull on the screen went to the
+	// game that it hasn't fired for yet (0: none), and when the trigger was last held.
+	bool gunRam;
 	vr::GunState gunWas;
 	bool gunKnown;
 	XrTime pullAt;
@@ -1310,14 +1311,16 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 // several in one read are several knocks (an automatic). A pull on the screen it hasn't fired
 // for within 0.1 s (an empty gun) is a click. Only shots of this hand's trigger knock: held, or
 // let go under 0.25 s ago (the counter also moves when the game clears its RAM at boot, and its
-// attract demo's players shoot). Without a GunRam in the game's profile (gunKnown false) the
-// knock comes on the pull instead, as in v1 (updateGun).
+// attract demo's players shoot). Without a GunRam in the game's profile (gunRam false) the
+// knock comes on the pull instead, as in v1 (updateGun); with one but the emulator stopped
+// (loading, Flycast's own GUI), there is none.
 void gunKnocks(Gun& g, XrTime time, bool trigger)
 {
 	if (trigger)
 		g.heldAt = time;
 	vr::GunState now;
-	if (!vr::gunState(g.player, now))
+	g.gunRam = vr::gunState(g.player, now);
+	if (!now.valid)
 	{
 		g.gunKnown = false;
 		g.pullAt = 0;
@@ -1328,7 +1331,9 @@ void gunKnocks(Gun& g, XrTime time, bool trigger)
 	if (rises != 0)
 	{
 		// (a drop, or more than 8 in one read: the counter reset, a new game; no knock)
-		const bool fired = now.ammo < g.gunWas.ammo;
+		// a round went: the ammo's low byte down (signed: a shot is -1, a refill at most +45, and
+		// the scope view's 10000 rounds, 0x2710, wrap the byte at its 17th shot)
+		const bool fired = (s8)(now.ammo - g.gunWas.ammo) < 0;
 		for (int i = 0; pulled && rises <= 8 && i < rises; i++)
 		{
 			if (fired)
@@ -1521,10 +1526,11 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 	else if (trigger && !g.triggerWas)
 	{
 		// The knock: when the game fires (gunKnocks), for a pull that reached it on the screen
-		// (a reload off it is none); without the game's gun state, on the pull as in v1.
-		if (!g.gunKnown)
+		// (a reload off it is none); with no gun state in the game's profile, on the pull as in
+		// v1; none while the emulator isn't running.
+		if (!g.gunRam)
 			recoil(g.hand);
-		else if (buttons & 1)
+		else if (g.gunKnown && (buttons & 1))
 			g.pullAt = time;
 		lastShotScreen = onScreen ? glm::vec2(screen.x * 640.f, screen.y * 480.f) : glm::vec2(-1.f);
 		shotSerial++;
@@ -1582,7 +1588,10 @@ void updateLightgun(XrTime time)
 			for (const Gun& g : guns)
 				lightgunSet(g.player, OffScreen, OffScreen, 0);
 		for (Gun& g : guns)
+		{
 			g.triggerWas = false;
+			g.pullAt = 0;	// (no click for a pull just before, on the first focused frame)
+		}
 		leftHoldSince = leftTapUntil = 0;
 		leftHoldMenu = false;
 		return;
@@ -1637,6 +1646,7 @@ void updateLightgun(XrTime time)
 			// a trigger held through it doesn't fire when it's over: it waits to be let go
 			g.triggerWas = true;
 			g.triggerWait = true;
+			g.pullAt = 0;
 		}
 		return;
 	}

@@ -103,7 +103,8 @@ const hands::Source *gameModelSource();
 // A player's gun as the game being played keeps it (its profile's GunRam): the rounds left,
 // the magazine's size, and the shots it has fired (+1 per shot, through reloads).
 struct GunState { bool valid; u8 ammo, magazine; u16 shots; };
-// Read now from the running profile's gun RAM; false without one (or with the emulator stopped).
+// Read now from the running profile's gun RAM: false when the profile has none; true with
+// out.valid false when it has one but the emulator isn't running (nothing read).
 bool gunState(int player, GunState& out);
 
 // The game asks for player 2 in its corner (its start prompt): player 2 isn't playing.

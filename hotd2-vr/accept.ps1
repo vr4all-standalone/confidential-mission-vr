@@ -594,11 +594,11 @@ function Test-CmHapticsMag {
 }
 
 # Reloads: the right controller points at the floor from 53.5 s and pulls 4 times from 54 s
-# (off the screen: the game's reload). No Shot knock.
+# (off the screen: the game's reload). No knock at all, neither a Shot nor a click.
 function Test-CmHapticsReload {
 	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-reload'; Seconds = 75; XrSim = $true; Config = $cmWiden
 		At = @(Get-CmStartsXr) + '53.5=pose right 0.18 1.3 -0.35 0 -80' + @(for ($i = 0; $i -lt 4; $i++) { "$(T (54 + 0.6 * $i))=xr right/trigger 1 100" })
-		Expect = 'XR: player 1 shot off screen \(reload\)'; Reject = 'XR: initialisation failed', 'XRSIM: haptic right 0\.030' }
+		Expect = 'XR: player 1 shot off screen \(reload\)'; Reject = 'XR: initialisation failed', 'XRSIM: haptic right' }
 }
 
 # Task 4's scene keys (vr-test.ps1 -On, the poke action, vr.WatchRam): player 1's ammo
