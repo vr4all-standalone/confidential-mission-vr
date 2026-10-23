@@ -1,8 +1,9 @@
 """
-Draws the launcher icon of VR Light Gun Hub (the Quest build, "vr" build type): a gun sight
-(a ring with four ticks) around the initials VR, from plain shapes only. No font, no game or
-company art. Writes the five legacy densities into the vr source set, where they override the
-main source set's ic_launcher.png at the same sizes:
+Draws the launcher icon of Confidential Mission VR (the Quest build, "vr" build type): the
+initials CM inside the four corner brackets of a target lock, with a small VR under them, from
+plain shapes only. No font, no game or company art (nothing of Sega's logo or the game's). Writes
+the five legacy densities into the vr source set, where they override the main source set's
+ic_launcher.png at the same sizes:
 
     python hotd2-vr\\assets\\make-icon.py [preview.png]
 
@@ -21,9 +22,9 @@ RES = ROOT / "shell" / "android-studio" / "flycast" / "src" / "vr" / "res"
 SIZES = {"ldpi": 36, "mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144}
 
 BIG = 1152                    # drawn once at this size, then scaled down (a multiple of 36, 48, 72 and 144)
-BACK = (16, 26, 46, 255)      # deep navy
-EDGE = (44, 64, 98, 255)      # a lighter rim, so the tile stands out on a dark home screen
-SIGHT = (255, 128, 24, 255)   # amber
+BACK = (20, 20, 24, 255)      # charcoal
+EDGE = (120, 18, 24, 255)     # a dark red rim, so the tile stands out on a dark home screen
+LOCK = (226, 36, 42, 255)     # crimson: the brackets and the VR
 LETTERS = (255, 255, 255, 255)
 
 
@@ -44,6 +45,20 @@ def letter_v(d, x0, y0, w, h, t):
     notch = y0 + s * h
     d.polygon([(x0, y0), (x0 + a, y0), (cx, notch), (x0 + w - a, y0), (x0 + w, y0),
                (cx + c, y1), (cx - c, y1)], fill=255)
+
+
+def letter_c(d, x0, y0, w, h, t):
+    """A C in the box (x0, y0, w, h) with strokes t wide: a ring open on the right."""
+    d.ellipse([x0, y0, x0 + w, y0 + h], fill=255)
+    d.ellipse([x0 + t, y0 + t, x0 + w - t, y0 + h - t], fill=0)
+    d.pieslice([x0 - t, y0 - t, x0 + w + t, y0 + h + t], -42, 42, fill=0)
+
+
+def letter_m(d, x0, y0, w, h, t):
+    """An M in the box (x0, y0, w, h) with strokes t wide: two stems and a V between them."""
+    d.rectangle([x0, y0, x0 + t, y0 + h], fill=255)
+    d.rectangle([x0 + w - t, y0, x0 + w, y0 + h], fill=255)
+    letter_v(d, x0, y0, w, h * 0.68, t)
 
 
 def letter_r(d, x0, y0, w, h, t):
@@ -69,35 +84,42 @@ def draw():
     img = Image.new("RGBA", (BIG, BIG), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     m = u(0.03)                                 # transparent margin round the tile
-    d.rounded_rectangle([m, m, BIG - 1 - m, BIG - 1 - m], radius=u(0.2), fill=EDGE)
+    d.rounded_rectangle([m, m, BIG - 1 - m, BIG - 1 - m], radius=u(0.18), fill=EDGE)
     rim = u(0.025)
     d.rounded_rectangle([m + rim, m + rim, BIG - 1 - m - rim, BIG - 1 - m - rim],
-                        radius=u(0.2) - rim, fill=BACK)
+                        radius=u(0.18) - rim, fill=BACK)
 
-    c = BIG / 2
-    ro, ring = u(0.33), u(0.075)                # the sight's ring: outer radius, thickness
-    d.ellipse([c - ro, c - ro, c + ro, c + ro], fill=SIGHT)
-    d.ellipse([c - ro + ring, c - ro + ring, c + ro - ring, c + ro - ring], fill=BACK)
-    # four ticks through the ring, from just inside it out towards the tile's edge
-    tw, t_in, t_out = u(0.075), ro - ring - u(0.03), u(0.445)
-    for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
-        if dx == 0:
-            box = [c - tw / 2, c + dy * t_in, c + tw / 2, c + dy * t_out]
-        else:
-            box = [c + dx * t_in, c - tw / 2, c + dx * t_out, c + tw / 2]
-        d.rectangle([min(box[0], box[2]), min(box[1], box[3]), max(box[0], box[2]), max(box[1], box[3])],
-                    fill=SIGHT)
+    # the target lock: four corner brackets round the middle
+    s0, s1, arm, t = u(0.18), u(0.82), u(0.15), u(0.045)
+    for x, sx in ((s0, 1), (s1, -1)):
+        for y, sy in ((s0, 1), (s1, -1)):
+            d.rectangle(sorted_box(x, y, x + sx * arm, y + sy * t), fill=LOCK)
+            d.rectangle(sorted_box(x, y, x + sx * t, y + sy * arm), fill=LOCK)
 
-    # VR in the middle, as big as the ring's opening allows
+    # CM, as big as the brackets allow, a little above the middle
     mask = Image.new("L", (BIG, BIG), 0)
     md = ImageDraw.Draw(mask)
-    lh, lw, gap, stroke = u(0.25), u(0.17), u(0.02), u(0.06)
-    x = c - (2 * lw + gap) / 2
-    y = c - lh / 2
-    letter_v(md, x, y, lw, lh, stroke)
-    letter_r(md, x + lw + gap, y, lw, lh, stroke)
+    lh, cw, mw, gap, stroke = u(0.27), u(0.22), u(0.25), u(0.035), u(0.065)
+    x = BIG / 2 - (cw + gap + mw) / 2
+    y = u(0.30)
+    letter_c(md, x, y, cw, lh, stroke)
+    letter_m(md, x + cw + gap, y, mw, lh, stroke)
     img.paste(Image.new("RGBA", (BIG, BIG), LETTERS), (0, 0), mask)
+
+    # a small VR under it
+    mask = Image.new("L", (BIG, BIG), 0)
+    md = ImageDraw.Draw(mask)
+    vh, vw, vgap, vstroke = u(0.115), u(0.085), u(0.014), u(0.024)
+    x = BIG / 2 - (2 * vw + vgap) / 2
+    y = u(0.64)
+    letter_v(md, x, y, vw, vh, vstroke)
+    letter_r(md, x + vw + vgap, y, vw, vh, vstroke)
+    img.paste(Image.new("RGBA", (BIG, BIG), LOCK), (0, 0), mask)
     return img
+
+
+def sorted_box(x0, y0, x1, y1):
+    return [min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)]
 
 
 def main():

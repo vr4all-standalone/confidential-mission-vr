@@ -11,9 +11,9 @@ fun gitVersionName(): String {
     }.standardOutput.asText.get().trim()
 }
 
-// hotd2-vr: VR Light Gun Hub's own version. The vr build's versionName is "<hubVersion>-g<commit>"
+// hotd2-vr: Confidential Mission VR's own version. The vr build's versionName is "<hubVersion>-g<commit>"
 // (set in androidComponents below); versionCode stays defaultConfig's.
-val hubVersion = "0.1.0"
+val hubVersion = "1.1.0"
 
 fun gitShortHash(): String {
     return providers.exec {
@@ -97,7 +97,7 @@ android {
         }
         // hotd2-vr: optimised build for sideloading on the Quest, signed with the app's release
         // key ("hub" above), or the public debug key when there is none (a test build only).
-        // The app VR Light Gun Hub: its applicationId and versionName are set below
+        // The app Confidential Mission VR: its applicationId and versionName are set below
         // (androidComponents), so it installs next to (never over) a regular Flycast.
         create("vr") {
             initWith(getByName("release"))
@@ -152,12 +152,12 @@ android {
     }
 }
 
-// hotd2-vr: the vr build type is the app VR Light Gun Hub, with an application ID of its own
+// hotd2-vr: the vr build type is the app Confidential Mission VR, with an application ID of its own
 // (BaseGLActivity.VR_APPLICATION_ID matches it). ${applicationId} in the manifest follows.
 // Its versionName is the app's own (hubVersion and the commit), not Flycast's tags.
 androidComponents {
     onVariants(selector().withBuildType("vr")) { variant ->
-        variant.applicationId.set("com.vrlightgunhub.app")
+        variant.applicationId.set("com.vrlightgunhub.confmiss")
         variant.outputs.forEach { it.versionName.set("$hubVersion-g${gitShortHash()}") }
     }
 }

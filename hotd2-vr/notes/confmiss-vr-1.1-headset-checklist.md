@@ -24,3 +24,13 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 - [ ] The Quest button mid-game (no menu open) and back: the game resumes as in v1.
 - [ ] Quest home with the menu open, then back: the dark room and the menu, then resume works.
 - [ ] Opening the menu: do you notice a stutter as the picture freezes? (The pause takes about 65 ms there, 3-4 headset frames.) Note yes or no.
+
+## Task 5
+
+- [ ] The Library shows "Confidential Mission VR" with its own icon (the CM monogram in red corner brackets), under Unknown sources.
+- [ ] Opening it shows the 2D start screen ("CONFIDENTIAL MISSION VR"), not the game.
+- [ ] All files access: on a fresh install step 1 says to allow it; Allow opens the setting, and after switching it on and coming back the screen says "Done."
+- [ ] Each missing file is named with where it goes: move `naomi.zip`, then the `confmiss` folder, then `confmiss.zip` out of Download in turn (Look again after each); the row in red says which and where. With all three back, every row says "Found" and the Play button appears.
+- [ ] "Play Confidential Mission" starts the game in VR.
+- [ ] With the game running, open the app from the Library again: note what you get (the game back, or the start screen). If the start screen, Play starts the game afresh.
+- [ ] Then uninstall the 0.1.0 hub (`com.vrlightgunhub.app`): `adb uninstall com.vrlightgunhub.app`, or Settings > Apps.

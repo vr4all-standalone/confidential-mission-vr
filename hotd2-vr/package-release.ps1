@@ -1,17 +1,21 @@
 <#
-  Builds VR Light Gun Hub for the Quest and the PC and puts what goes on the Releases page in dist\:
+  Builds Confidential Mission VR for the Quest and the PC and puts what goes on the Releases page
+  in dist\:
 
-    vr-light-gun-hub-quest.apk   the Quest app (Quest 3, 3S, 2, Pro)
-    vr-light-gun-hub-pcvr.zip    the PC version with VR on (flycast.exe, emu.cfg, README.txt, LICENSE.txt)
+    confidential-mission-vr-quest.apk   the Quest app (Quest 3, 3S, 2, Pro)
+    confidential-mission-vr-pcvr.zip    the PC version with VR on (flycast.exe, emu.cfg, README.txt,
+                                        LICENSE.txt, Play Confidential Mission.cmd)
 
-  Neither holds anything of a game: the players bring their own, and the app makes the hands or
-  the staff from it on the spot. Both are checked for that (the names in their file lists: discs,
-  keys, rips, frame grabs, models made from a game), and the APK for its signer: signed with the
-  public debug key (no release key, see make-release-key.ps1) it is refused, since anyone could
-  sign an "update" of the app with that key.
+  Neither holds anything of the game: the players bring their own, and what the app makes from it
+  is made on the spot. Both are checked for that (the names in their file lists: discs, keys,
+  rips, frame grabs, models made from a game), and the APK for its signer: signed with the public
+  debug key (no release key, see make-release-key.ps1) it is refused, since anyone could sign an
+  "update" of the app with that key. The APK is also checked for being Confidential Mission VR
+  (its package, version and label, and its start screen the only entry in the headset's library),
+  and the zip for holding exactly its five files, with a README.txt that names no other game.
 
   A release is built from a commit, the one its published source is: the working tree must be
-  clean (the gamesdk submodule's local change aside), and the APK's versionName (0.1.0-g<commit>),
+  clean (the gamesdk submodule's local change aside), and the APK's versionName (1.1.0-g<commit>),
   its libflycast.so and flycast.exe must all name HEAD (a -SkipBuild after a new commit fails
   that). -AllowDebugKey test builds skip both checks.
 
@@ -30,11 +34,19 @@ $dist = Join-Path $repo 'dist'
 $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
+# The app: its application ID, label and version (shell\android-studio\flycast\build.gradle.kts and
+# src\vr\AndroidManifest.xml), its library entry, and the PC zip's start script (hotd2-vr\assets).
+$appId = 'com.vrlightgunhub.confmiss'
+$appLabel = 'Confidential Mission VR'
+$appVersion = '1.1.0'
+$appLauncher = 'com.flycast.emulator.CmStartActivity'
+$playCmd = 'Play Confidential Mission.cmd'
+
 # What must never be in a release: game discs and keys, rips (rip\), frame grabs, models made
 # from a game (the app makes those on the player's device, from the player's game), and archives
 # or disc images inside it (a ROM set, a BIOS zip): neither the APK nor the zip holds one.
 $bannedNames = '*.chd', '*.gdi', '*.cue', '*.cdi', '*.pic', 'shot_*.png', 'hands*.bin', 'staff*.bin', 'HND1*.bin',
-	'*.zip', '*.7z', '*.rar', '*.iso'
+	'gun-*.bin', '*.zip', '*.7z', '*.rar', '*.iso'
 $bannedDirs = 'rip'
 
 # The entries of a zip or APK whose names are on the lists above.
@@ -97,6 +109,26 @@ function Test-NamesCommit([string]$what, [byte[]]$bytes, [string]$hash) {
 	$false
 }
 
+# The activities and aliases whose intent filters have the LAUNCHER category (an entry in the
+# headset's library), from aapt2's dump of the APK's AndroidManifest.xml.
+function Get-LauncherOwners([string[]]$tree) {
+	$owner = $null; $ownerIndent = -1; $named = $false
+	foreach ($line in $tree) {
+		if ($line -match '^(\s*)E: (\S+)') {
+			$indent = $Matches[1].Length
+			if ($owner -ne $null -and $indent -le $ownerIndent) { $owner = $null }
+			if ($Matches[2] -eq 'activity' -or $Matches[2] -eq 'activity-alias') {
+				$owner = '(no name)'; $ownerIndent = $indent; $named = $false
+			}
+		} elseif ($owner -ne $null -and -not $named -and $line -match '^(\s*)A: \S*:name\([^)]*\)="([^"]+)"' -and
+			$Matches[1].Length -eq $ownerIndent + 2) {
+			$owner = $Matches[2]; $named = $true
+		} elseif ($line -match '="android\.intent\.category\.LAUNCHER"') {
+			if ($owner -ne $null) { $owner } else { '(outside an activity)' }
+		}
+	}
+}
+
 # the working tree as committed (the gamesdk submodule's local change aside)
 $head = Invoke-Git rev-parse HEAD
 if (-not $AllowDebugKey) {
@@ -133,9 +165,9 @@ if (-not $SkipBuild) {
 	if ($LASTEXITCODE -ne 0) { throw 'build-quest.cmd failed' }
 }
 New-Item -ItemType Directory -Force $dist | Out-Null
-$apkOut = Join-Path $dist 'vr-light-gun-hub-quest.apk'
-$zip = Join-Path $dist 'vr-light-gun-hub-pcvr.zip'
-$stage = Join-Path $dist 'vr-light-gun-hub-pcvr'
+$apkOut = Join-Path $dist 'confidential-mission-vr-quest.apk'
+$zip = Join-Path $dist 'confidential-mission-vr-pcvr.zip'
+$stage = Join-Path $dist 'confidential-mission-vr-pcvr'
 foreach ($f in $apkOut, $zip) { if (Test-Path $f) { (Get-Item $f).Delete() } }   # never leave an old one
 
 # the Quest app: who signed it
@@ -143,7 +175,10 @@ $apk = Join-Path $repo 'shell\android-studio\flycast\build\outputs\apk\vr\flycas
 $ErrorActionPreference = 'Continue'   # the tools may write warnings on stderr
 $certs = & (Join-Path $tools.FullName 'apksigner.bat') verify --print-certs $apk 2>&1 | ForEach-Object { "$_" }
 $signed = $LASTEXITCODE -eq 0
-$badging = & (Join-Path $tools.FullName 'aapt2.exe') dump badging $apk 2>&1 | Select-Object -First 1
+$badgingAll = @(& (Join-Path $tools.FullName 'aapt2.exe') dump badging $apk 2>&1 | ForEach-Object { "$_" })
+$badging = $badgingAll | Select-Object -First 1
+$manifestTree = @(& (Join-Path $tools.FullName 'aapt2.exe') dump xmltree --file AndroidManifest.xml $apk 2>&1 |
+	ForEach-Object { "$_" })
 $tmp = Join-Path $env:TEMP "vrlgh-debug-$PID.cer"
 & (Join-Path $jdk 'bin\keytool.exe') -exportcert -keystore (Join-Path $repo 'shell\android-studio\debug.keystore') `
 	-storepass android -alias androiddebugkey -file $tmp 2>&1 | Out-Null
@@ -167,6 +202,27 @@ if ($digests -contains $debugDigest) {
 	}
 	Write-Host 'Signed with the public debug key: a test build, do not publish it.' -ForegroundColor Yellow
 }
+# the app it is: Confidential Mission VR's package, version and label, with its start screen the
+# only entry in the headset's library (the VR activity is started from it) and no hub panel left
+$short = Invoke-Git rev-parse --short HEAD
+$wantVersion = [regex]::Escape("$appVersion-g") + $(if ($AllowDebugKey) { '[0-9a-f]+' } else { [regex]::Escape("$short") })
+$launchers = @(Get-LauncherOwners $manifestTree)
+$wrong = @()
+if ($badging -notmatch "^package: name='$([regex]::Escape($appId))'") { $wrong += "the package is not $appId" }
+if ($badging -notmatch "versionName='$wantVersion'") {
+	$wrong += "the versionName is not $appVersion-g$(if ($AllowDebugKey) { '<commit>' } else { $short })"
+}
+if ($badgingAll -notcontains "application-label:'$appLabel'") { $wrong += "the label is not '$appLabel'" }
+if (-not $launchers.Count -or @($launchers | Where-Object { $_ -ne $appLauncher }).Count) {
+	$wrong += "the library entries (LAUNCHER) are '$($launchers -join "', '")', not $appLauncher alone"
+}
+if (@($manifestTree | Where-Object { $_ -match 'VrSetupActivity' }).Count) { $wrong += 'the manifest still has VrSetupActivity' }
+if ($wrong.Count) {
+	Write-Host "The APK is not $appLabel as released:" -ForegroundColor Red
+	$wrong | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+	exit 1
+}
+Write-Host "app check: $appId, '$appLabel', its start screen the only library entry"
 # built from HEAD: the APK's versionName, its libflycast.so and flycast.exe
 if (-not $AllowDebugKey) {
 	$built = if ($badging -match "versionName='[^']*-g([0-9a-f]+)'") { $Matches[1] } else { $null }
@@ -187,6 +243,7 @@ Copy-Item $apk $apkOut
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item (Join-Path $repo 'build-win\flycast.exe') $stage
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "assets\$playCmd") $stage
 Set-Content -Path (Join-Path $stage 'emu.cfg') -Encoding ascii -Value @'
 [config]
 pvr.rend = 0
@@ -194,39 +251,34 @@ rend.NativeDepthInterpolation = yes
 vr.Xr = yes
 '@
 Set-Content -Path (Join-Path $stage 'README.txt') -Encoding ascii -Value @'
-VR Light Gun Hub, PC version
+Confidential Mission VR, PC version
 
-Light-gun games in VR: The House of the Dead 2 (Dreamcast), The Maze of the Kings and
-Confidential Mission (arcade, Sega NAOMI). The original games run in the Flycast emulator;
-their 3D scenes are rebuilt around you and your controller is the light gun. A fork of
-mikermak's The House of the Dead 2 VR (https://github.com/mikermak/hotd2-vr).
+Sega's light-gun game Confidential Mission (arcade, Sega NAOMI, 2000) in VR. The original game
+runs in the Flycast emulator; its 3D scenes are rebuilt around you and your controller is the
+light gun. Built on mikermak's hotd2-vr (https://github.com/mikermak/hotd2-vr).
 
-1. Connect your VR headset: start SteamVR, Quest Link / Air Link or Virtual Desktop, so it
+1. Make a folder named roms next to flycast.exe and put your own copy of the game in it, the
+   MAME set confmiss:
+     roms\confmiss.zip            the game, with its key inside
+     roms\confmiss\gds-0001.chd   the disc, in a folder named confmiss
+     roms\naomi.zip               the NAOMI BIOS (or have the BIOS inside confmiss.zip)
+2. Connect your VR headset: start SteamVR, Quest Link / Air Link or Virtual Desktop, so it
    is the active OpenXR runtime.
-2. Start flycast.exe. In its window, add the folder with your own copies of the games and
-   start one. It plays in the headset.
-   - The House of the Dead 2: the European or US version, a .chd, .gdi, .cue or .cdi.
-   - The Maze of the Kings: the MAME set, mok.zip (its key inside) and the folder mok with
-     gds-0022.chd next to it.
-   - Confidential Mission: the MAME set, confmiss.zip (its key inside) and the folder
-     confmiss with gds-0001.chd next to it.
-   The NAOMI BIOS for both: inside the game's zip, or naomi.zip next to flycast.exe or in
-   the data folder next to it.
-3. The first time The House of the Dead 2 or The Maze of the Kings starts, the app makes the
-   agent's hands (or the hero's staff) from your game: it plays itself for a short while,
-   fast, behind a panel that says so. Once only; B skips it.
+3. Double-click "Play Confidential Mission.cmd". The game plays in the headset.
 
-The controller is the light gun: the trigger shoots, shooting away from the game's view
-reloads, A is Start, the left controller's menu button lets player 2 join (a gun in each
-hand), X or a click on the left thumbstick recenters. The project's readme has the rest.
-Without a headset the game plays in the window. Settings are in emu.cfg (vr.Xr = yes is VR).
+The controller is the light gun (Quest Touch): the trigger shoots, A is Start and B reloads.
+X is player 2's Start: player 2 joins with a gun in your left hand, and Y reloads that one.
+Shooting away from the game's view reloads too. The left menu button opens the settings menu;
+a click on the left thumbstick recenters, one on the right thumbstick turns the laser off or
+on. The project's readme has the other controllers and the rest. Without a headset the game
+plays in the window. Settings are in emu.cfg (vr.Xr = yes is VR).
 
-No game is included: you need your own copies. Unofficial fan project, not affiliated with
+No game is included: you need your own copy. Unofficial fan project, not affiliated with
 Sega.
 
 Credits: Flycast by flyinghead and contributors (https://github.com/flyinghead/flycast,
-GPL-2.0-or-later). The House of the Dead 2 VR by mikermak, which this app is a fork of
-(GPL-2.0-or-later). The gun: "Namco Arcade Gun" by Martoscar
+GPL-2.0-or-later). hotd2-vr by mikermak, which this app is built on (GPL-2.0-or-later).
+The gun: "Namco Arcade Gun" by Martoscar
 (https://sketchfab.com/3d-models/namco-arcade-gun-15fbd5b9add94a34b5c21746e3dd32be), CC BY 4.0
 (https://creativecommons.org/licenses/by/4.0/); changed: re-oriented, quantised, textures and
 materials dropped, recoloured, converted to C++. The OpenXR loader by Khronos, Apache-2.0.
@@ -239,10 +291,10 @@ is published with every release, on the same page as this zip.
 $gpl3 = Get-Content -Raw (Join-Path $repo 'core\deps\picotcp\LICENSE.GPLv3')
 if ($gpl3 -notmatch 'GNU GENERAL PUBLIC LICENSE\s+Version 3, 29 June 2007') { throw 'GPL-3.0 text not found' }
 Set-Content -Path (Join-Path $stage 'LICENSE.txt') -Encoding ascii -NoNewline -Value (@'
-VR Light Gun Hub, PC version: licence
+Confidential Mission VR, PC version: licence
 
-flycast.exe is built from Flycast (GPL-2.0-or-later), mikermak's The House of the Dead 2 VR and
-VR Light Gun Hub's changes to it (GPL-2.0-or-later too), and the gun model "Namco Arcade Gun" by
+flycast.exe is built from Flycast (GPL-2.0-or-later), mikermak's hotd2-vr and Confidential
+Mission VR's changes to it (GPL-2.0-or-later too), and the gun model "Namco Arcade Gun" by
 Martoscar (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). CC BY 4.0 goes together
 with GPL-3.0 but not GPL-2.0, so this build is distributed under the GNU General Public License
 version 3, below. Its source code is published with every release, on the same page as this zip.
@@ -250,7 +302,27 @@ version 3, below. Its source code is published with every release, on the same p
 '@ + $gpl3)
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
 
-if (-not (Test-Archives $apkOut, $zip)) {
+# the zip: exactly its five files, and a README.txt about this game alone
+$zipFiles = 'flycast.exe', 'emu.cfg', 'README.txt', 'LICENSE.txt', $playCmd
+$z = [IO.Compression.ZipFile]::OpenRead($zip)
+try { $inZip = @($z.Entries | ForEach-Object { $_.FullName }) } finally { $z.Dispose() }
+$extra = @($inZip | Where-Object { $zipFiles -notcontains $_ })
+$lacking = @($zipFiles | Where-Object { $inZip -notcontains $_ })
+$readmeText = if ($lacking -notcontains 'README.txt') { [Text.Encoding]::ASCII.GetString((Read-ZipEntry $zip 'README.txt')) } else { '' }
+$otherNames = @('Light Gun Hub', 'House of the Dead', 'Maze of the Kings' | Where-Object { $readmeText -match [regex]::Escape($_) })
+$zipGood = $true
+if ($extra.Count -or $lacking.Count) {
+	Write-Host ("$(Split-Path -Leaf $zip) must hold exactly $($zipFiles -join ', '); also has: $($extra -join ', '); " +
+		"lacks: $($lacking -join ', ')") -ForegroundColor Red
+	$zipGood = $false
+} elseif ($otherNames.Count) {
+	Write-Host "README.txt names $($otherNames -join ', '): it is about $appLabel alone" -ForegroundColor Red
+	$zipGood = $false
+} else {
+	Write-Host "zip check: $(Split-Path -Leaf $zip) holds exactly $($zipFiles -join ', '); README.txt names no other game"
+}
+
+if (-not (Test-Archives $apkOut, $zip) -or -not $zipGood) {
 	foreach ($f in $apkOut, $zip) { if (Test-Path $f) { (Get-Item $f).Delete() } }
 	exit 1
 }

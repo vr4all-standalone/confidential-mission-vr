@@ -164,9 +164,9 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
             }
         }
         else if (getPackageName().equals(VR_APPLICATION_ID)) {
-            // hotd2-vr: started from the headset's app library. The Flycast menu can't be
-            // shown in the headset, so boot the player's game directly, or show the setup
-            // panel when it can't be found (or read) yet.
+            // hotd2-vr: Confidential Mission VR, started by its start screen with the game (or by
+            // adb). The Flycast menu can't be shown in the headset, so boot the game directly, or
+            // show the start screen when it can't be found (or read) yet.
             String game = findVrGame();
             Log.i("flycast", "VR build started without a game, booting " + game);
             if (game == null) {
@@ -182,7 +182,7 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
     }
 
     // hotd2-vr: the "vr" build type's applicationId (build.gradle.kts, androidComponents)
-    private static final String VR_APPLICATION_ID = "com.vrlightgunhub.app";
+    private static final String VR_APPLICATION_ID = "com.vrlightgunhub.confmiss";
 
 	// Called from native code
     public void showAlertDialog(String message)
@@ -207,37 +207,49 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
         });
     }
 
-    // hotd2-vr: the game to start: the one picked on the setup panel, or the only one there is
-    // (null: the setup panel, to find one or to pick one)
+    // hotd2-vr: the game to start: the one the start screen passed, else Confidential Mission when
+    // all its files are there (adb, netplay-quest.ps1); null: the start screen, to find them
     private String findVrGame()
     {
         Intent intent = getIntent();
-        String picked = intent != null ? intent.getStringExtra(VrSetupActivity.EXTRA_GAME) : null;
+        String picked = intent != null ? intent.getStringExtra(CmStartActivity.EXTRA_GAME) : null;
         if (picked != null && new File(picked).isFile())
             return picked;
-        VrGames.Scan scan = VrGames.scan(this);
-        return scan.games.size() == 1 ? scan.game.getAbsolutePath() : null;
+        CmFiles.Result cm = CmFiles.find(CmStartActivity.roots(this));
+        return cm.missing.isEmpty() ? cm.zip.getAbsolutePath() : null;
     }
 
-    // hotd2-vr: the setup panel, in the headset's home (an immersive app opens a panel that way)
+    // hotd2-vr: the start screen, when the game can't start yet
     private void showVrSetup()
     {
-        Intent panel = new Intent(getApplicationContext(), VrSetupActivity.class);
-        panel.setAction(Intent.ACTION_MAIN);
-        panel.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            android.app.PendingIntent pending = android.app.PendingIntent.getActivity(getApplicationContext(), 0, panel,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
-            Intent home = new Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra("extra_launch_in_home_pending_intent", pending);
-            startActivity(home);
-        } catch (Exception e) {
-            Log.w("flycast", "Setup panel through the home failed, opening it directly", e);
-            startActivity(panel);
-        }
-        finish();
+        quitToStart(this);
+    }
+
+    /**
+     * hotd2-vr: back to Confidential Mission VR's start screen (CmStartActivity): it opens in the
+     * headset's home (an immersive app opens a panel that way), and the game's activity finishes.
+     * The VR menu's "Quit to the start screen" calls this through JNI, from any thread.
+     */
+    public static void quitToStart(Activity activity)
+    {
+        activity.runOnUiThread(() -> {
+            Intent panel = new Intent(activity.getApplicationContext(), CmStartActivity.class);
+            panel.setAction(Intent.ACTION_MAIN);
+            panel.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                android.app.PendingIntent pending = android.app.PendingIntent.getActivity(activity.getApplicationContext(),
+                        0, panel, android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+                Intent home = new Intent(Intent.ACTION_MAIN)
+                        .addCategory(Intent.CATEGORY_HOME)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra("extra_launch_in_home_pending_intent", pending);
+                activity.startActivity(home);
+            } catch (Exception e) {
+                Log.w("flycast", "Start screen through the home failed, opening it directly", e);
+                activity.startActivity(panel);
+            }
+            activity.finish();
+        });
     }
 
     private void setStorageDirectories()

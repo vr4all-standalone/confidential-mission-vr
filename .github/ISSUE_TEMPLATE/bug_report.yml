@@ -1,4 +1,4 @@
-name: Bug report (VR Light Gun Hub)
+name: Bug report (Confidential Mission VR)
 description: Something doesn't work in the Quest app or the PCVR build
 labels: [bug]
 body:
@@ -19,8 +19,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Release
-      description: The release you downloaded, e.g. 0.1.0
+      label: App version
+      description: "The release you downloaded, e.g. 1.1.0 (on the Quest also in Settings > Apps > Installed apps > Confidential Mission VR)"
     validations:
       required: true
   - type: input
@@ -35,19 +35,14 @@ body:
     attributes:
       label: Game
       options:
-        - The House of the Dead 2, Europe (PAL)
-        - The House of the Dead 2, USA
-        - The House of the Dead 2, Japan
-        - The Maze of the Kings (NAOMI)
-        - Confidential Mission (NAOMI)
-        - Other
+        - Confidential Mission (NAOMI, the MAME set confmiss)
     validations:
       required: true
   - type: input
     id: format
     attributes:
-      label: Game file format
-      description: .chd, .gdi, .cue with .bin files, .cdi, or a MAME set (.zip)
+      label: Game files
+      description: The disc in the confmiss folder (gds-0001.chd, .cue or .gdi), and the BIOS (naomi.zip, or inside confmiss.zip)
   - type: textarea
     id: what
     attributes:

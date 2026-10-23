@@ -408,7 +408,7 @@ function Test-CmSim {
 	$name = 'accept-cm-sim'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWiden
 		At = @(Get-CmStartsXr) + '49=shot a', '58=shot b', '58.5=pose head 0 1.6 0 30 0', '60=shot c', '61=pose head 0 1.6 0 0 0', '62=shot d'
-		Expect = 'XRSIM: runtime up for ".*" \(832x720 per eye, 72 Hz, /interaction_profiles/oculus/touch_controller\)',
+		Expect = 'XRSIM: runtime up for "Confidential Mission VR" \(832x720 per eye, 72 Hz, /interaction_profiles/oculus/touch_controller\)',
 			'XR: session created', 'XR: eye buffers 832x720', 'VR: camera profile for  CONFIDENTIAL MISSION ---------$'
 		Reject = 'XR: initialisation failed' }
 	if ($why) { return $why }

@@ -31,13 +31,14 @@
     <!-- no TV banner or logo: the main manifest's are Flycast's art (res/drawable-xhdpi/ic_banner.xml
          takes its place in the resources too) -->
     <application
-        android:label="VR Light Gun Hub"
+        android:label="Confidential Mission VR"
         tools:replace="android:label"
         tools:remove="android:banner,android:logo">
         <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
         <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
 
-        <!-- launch in VR; also openable with a game file, as the regular app -->
+        <!-- the game in VR: started by the start screen (CmStartActivity) with the game, or by adb;
+             not in the library itself. Also openable with a game file, as the regular app. -->
         <activity-alias
             android:name="com.flycast.emulator.MainActivity"
             android:targetActivity="com.flycast.emulator.NativeGLActivity"
@@ -45,7 +46,6 @@
             tools:node="replace">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="com.oculus.intent.category.VR" />
                 <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
             </intent-filter>
@@ -56,19 +56,19 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- the setup panel: what's missing before the first game (VrSetupActivity). In a
-             process of its own, so it can end a game still running in the app's own process
-             and start the one picked afresh. -->
+        <!-- the start screen, the app's entry in the library: a 2D panel that checks the game's
+             files and starts it in VR. In a process of its own, so it can end a game still
+             running in the app's own process and start it afresh. -->
         <activity
-            android:name="com.flycast.emulator.VrSetupActivity"
+            android:name="com.flycast.emulator.CmStartActivity"
             android:process=":setup"
             android:exported="true"
             android:resizeableActivity="true"
             android:theme="@android:style/Theme.Material.NoActionBar">
-            <layout android:defaultHeight="600dp" android:defaultWidth="860dp" />
+            <layout android:defaultHeight="640dp" android:defaultWidth="860dp" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="com.oculus.intent.category.2D" />
             </intent-filter>
         </activity>

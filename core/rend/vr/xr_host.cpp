@@ -592,7 +592,7 @@ bool init()
 #endif
 	createInfo.enabledExtensionCount = (u32)extensions.size();
 	createInfo.enabledExtensionNames = extensions.data();
-	strcpy(createInfo.applicationInfo.applicationName, "VR Light Gun Hub");
+	strcpy(createInfo.applicationInfo.applicationName, "Confidential Mission VR");
 	createInfo.applicationInfo.applicationVersion = 1;
 	strcpy(createInfo.applicationInfo.engineName, "Flycast");
 	createInfo.applicationInfo.engineVersion = 1;
