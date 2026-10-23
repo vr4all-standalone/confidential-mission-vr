@@ -179,26 +179,88 @@ Seen on the PC with the window as wide as a Quest 3 eye (`config:vr.WindowTanX=1
 
 ## Rifle
 
-Task 4's spike (2026-10-22). Flat runs on the Windows build, widened (`$cmWiden`), 400 s, `start 0` every 2 s 30-52 s, player 1's block watched with `vr.WatchRam` (`0c155800:4,0c155804,0c155805,0c155806:2,0c155808,0c155809,0c15580a:2,0c15580c:4,0c155810:4,0c155814:4,0c155818:2,0c15581a:2,0c15581c,0c155820:4,0c155824:4`, 15 entries, now `$cmRifleWatch`; t4-r1 watched only 0c155800:4, 0c155804, 0c155808, 0c155818:2, 0c15581c) and keyed with `-On` on `VR: ram 0c15580[4-9] .* -> 2d` (a window shot, a rip, the trigger held 3 s). One run at a time. The runs:
-- t4-h1: 7 pulls at 1000,9000 from 52.5 s (the empty-pull check), `reload 0` at 55.9 s, then a 15-point spray (x 1200, 3000, 5000, 7000, 8800 by y 2500, 4500, 6500) every 0.4 s, a reload every 6th, Start every 4 s. Stalls in the long corridor from ~80 s: its far guard stands near gun 1800,5000, between the grid's columns. 13 kill-counter rises.
-- t4-h2: the 9 points from 52.5 s (`Get-CmTable 52.5 0.75`), then the spray with an 1800 column added. Clears the corridor, reaches the gallery with the exhibit figures ~125 s, and stalls there from ~215 s: a guard at the right side (drawn ~x 400-470, y 200-260) the grid rarely hits. ~59 rises.
-- t4-h3: the 9 points, then the sweep that is now `Get-CmRifleRoute` (17 columns 500 apart by 5 heights, every 0.3 s). Clears the gallery (~200-350 s), plays the timed target sequence from 356.5 s (failed), a green-lit corridor ~375-390 s, out of lives (the continue countdown) ~395 s. 99 rises.
-- t4-r1: `Get-CmRifleRoute` as committed (its 1139 fire actions are t4-h3's, in order). The target sequence from 312.5 s, the green-lit corridor 340-360 s, a lit room at 395 s with two lives left. ~130 rises.
+Task 4's spike (2026-10-22) hunted the pickup in play and found nothing. Task 4b's (2026-10-22) read the game's code from a RAM dump, confirmed it by poking the state live, and drew the rifle's model with a poke. All runs are flat on the Windows build, widened (`$cmWiden`), one at a time.
 
-- found: no — in none of the four runs did a byte of player 1's +0x4C..+0x51 (0c155804-0c155809) go to 0x2d (45): stage 1 from the first room to ~400 s (the corridor, the gallery, the target sequence, the green-lit corridor and the room after it). The pickup key never fired after its fix; its first form, `0c1558[01][0-9a-f]`, also caught the kill counter (t4-h2 195.68 s, `VR: ram 0c15581c 2c -> 2d`). The 5 s window shots show no dropped rifle. Whether the rifle drops in stage 1 at all is open; the user's "specific sequences" may be in later stages, which no run reached (2026-10-22)
-- scene: unknown — the route is `Get-CmRifleRoute` in `accept.ps1` (t4-h3's), keyed with `Get-CmRifleKeys` and watched with `$cmRifleWatch`. It reaches the target sequence in 2 of 2 runs (t4-h3 356.48 s, t4-r1 312.47 s, `VR: ram 0c155800 00000000 -> 00000006`) and gets past it in 1 of 2 (t4-r1, alive at 400 s). Pickups: 0 of 4 runs (t4-h1, h2, h3, r1). Next try: the route run longer into the later stages, with Start continuing (2026-10-22)
-- state: unknown for the rifle; the marker to look for is still 45 (0x2d) at +0x4C / +0x50. What the runs show instead (2026-10-22):
-  - +0x48 (0c155800, u32) is a mode: 0 in play; 0x0c in the reload lesson (29.9-45.9 s); 6 in the timed target sequence; 8 in its scope view (t4-h3 368.55-370.37 s, t4-r1 324.54-326.35 s); then 0 again.
-  - The scope view sets ammo and magazine to 0x10 (16), and +0x4D and +0x51 to 0x27. On leaving it, ammo goes 0e -> 02, +0x60 is put back to its value at the sequence's start (t4-h3 02c8 -> 02a4) and the magazine back to 06. So a magazine other than 6 doesn't by itself mean the rifle, and Task 6's detector must not take 0x10 (or mode 8) for it. Evidence: t4-h3 368.55 s `VR: ram 0c155808 06 -> 10`, `VR: ram 0c155809 00 -> 27`, `VR: ram 0c155800 00000006 -> 00000008`; 370.37 s `VR: ram 0c155818 02c8 -> 02a4`.
-  - Everywhere else the magazine is 06. A reload or a scene change refills ammo to 06.
-  - The zero words in t4-h1, h2 and h3 (not watched in t4-r1): 0c15580c, 0c155810 and 0c155814 change only at boot (-> ffffffff -> 00000000 at ~11.5 s) and stay 0 to the end. 0c155820 counts up by one at rare moments (to 3 by 97 s in t4-h1, 2 by 130 s in t4-h2, 4 by 378 s in t4-h3). 0c155824 counts up by one more often (1 in t4-h1, 1 in t4-h2, 25 by 388 s in t4-h3). Neither ever read 0x2d. What the two counters count was not checked.
-  - +0x64 (0c15581c) is not a state but a kill counter: 01 -> ff -> 00 at ~11.5 s, then +1 per enemy down (99 in t4-h3). The research's "state" there was wrong.
-- fire: unknown for the rifle (never picked up). The pistol (2026-10-22):
-  - Empty pull: **+0x60 does not rise.** In t4-h1, 7 pulls at 1000,9000, 0.4 s apart from 52.5 s, gave six rises of 0c155818 with ammo 06 -> 00 (log 52.34-54.34 s); the seventh pull changed nothing. `reload 0` at 55.9 s put ammo back to 06 (log 55.76 s). So a knock on a +0x60 rise and a click on a pull without one hold for the pistol.
-  - No automatic fire: in t4-h2, the keyed 3 s trigger hold at ~196 s gave one rise, on the press (195.95 s), and none more until the spray resumed (201.08 s).
-  - In the scope view, one rise per shot, ammo 10 -> 0f -> 0e (t4-h3 368.88 s, 369.21 s).
-- ends: unknown (no pickup). The scope view ends after ~1.8 s: mode 8 -> 0, magazine back to 06 (above) (2026-10-22)
-- model: unknown — no rifle was seen in any run's window shots. The commandos' rifle in the stage 1 intro (t4c-intro ~53 and ~68 s) was not checked: no `vr.WatchTex` census fit the spike's budget. Per the spec's fallback, while the rifle is equipped the hand shows the built-in arcade gun, recoloured (2026-10-22)
-- profile: no values come from evidence (2026-10-22).
-  - `GunRam` (Task 6): the `weapon` offset and `rifleValue` are unknown. The user's 45-round magazine points to +0x50 (0c155808 for P1) == 0x2d, unverified. Not +0x48: that is the mode above (0x0c, 6, 8).
-  - The rifle's `GunTarget` (Task 10): no textures, `wholePolys` or `minPolys`; `lengthM` stays 0.88 (the default).
+Task 4's runs: 400 s, `start 0` every 2 s 30-52 s, player 1's block watched (`$cmRifleWatch`; t4-r1 watched only 0c155800:4, 0c155804, 0c155808, 0c155818:2, 0c15581c), keyed on `VR: ram 0c15580[4-9] .* -> 2d`:
+- t4-h1: 7 pulls at 1000,9000 from 52.5 s (the empty-pull check), `reload 0` at 55.9 s, a 15-point spray every 0.4 s. Stalls in the long corridor from ~80 s.
+- t4-h2: the 9 points from 52.5 s, then the spray with an 1800 column. Reaches the gallery ~125 s and stalls there from ~215 s. Its keyed rip at 195.68 s (`rip\ram0000.bin`) is what Task 4b's static read used.
+- t4-h3: the 9 points, then the sweep that is now `Get-CmRifleRoute`. The timed target sequence from 356.5 s (failed), out of lives ~395 s.
+- t4-r1: `Get-CmRifleRoute` as committed. The target sequence from 312.5 s, a lit room at 395 s with two lives left.
+
+Task 4b's runs (`vr-test.ps1 -Config "$cmWiden,config:vr.WatchRam=..."`, the actions built by a scratch wrapper around accept.ps1's helpers):
+- t4b-p1 (88 s): `Get-CmStarts`, `Get-CmTable 52.5 0.75`, the rifle poked at 60 s. The table doesn't kill the first room's guard, so the player was out (the continue countdown) from ~59 s. The poke landed in the countdown and the held trigger did nothing. The poked mode 2 then lasted through the countdown, the game over and the attract, to the end of the run.
+- t4b-p2 (66 s): `start 0` 30-50 s, the rifle poked at 51.8 s in the first room, then the trigger tests below. Watch `0c155800:4,0c155804:4,0c155808:4,0c155818:2,0c15581c,0c155830:4,0c155838:4,0c155840:4,0c1557ec:4,0c15a45c:2`.
+- t4b-r900 (900 s): `Get-CmRifleRoute 900`, keyed on `VR: ram 0c155800 0000000[0-9a-f] -> 00000002` (window shots, a rip, the trigger held 3 s). Watch `0c155800:4,0c155804:4,0c155808:4,0c155818:2,0c15581c,0c155830:4,0c155838:4,0c155840:4,0c155914:4,0c155918:4`. No mode 2. It reaches the target sequence at 312.5 s (modes 6 and 8 for both players), then a lit corridor with a long-gun enemy ~390 s, then a rooftop scene from ~440 s, where the sweep stalls. The continue countdown runs from ~480 s to the end (the last hit-counter rise is at 483 s).
+- t4b-swap (440 s): the same route and keys, plus `vr.WatchTex=662000`, with the other item kinds' models swapped for the rifle's (see model:), keyed on `VR: tex 662000 shown` (window shots, `rip 2 20 1`).
+- t4b-attract (600 s): no presses, with t4b-swap's watches and keys. One natural rifle drop, `VR: tex 662000 shown (55 polys)` at 315.59 s, gone at 318.77 s, in the demo's train-car scene (see scene:). Its keyed rip at 315.83 s (2 passes) held the same 55 polys at W 73.7-80.1. The demo's players never picked it up: P1's and P2's modes were only 0 and 0x0c, with pistol reloads at 6.
+
+- found: yes. The code was read statically and confirmed by poking it live. No natural pickup was seen, though the attract demo drops a rifle (see scene:). The rifle is gun mode 2 at +0x48, and only the item pickup sets it. Evidence:
+  - **The weapon setter.** `setMode(player, mode)` at 0c02b344 (r4, r5) takes the block 0c1557b8 + player*0x114 and writes the mode to +0x48. Per mode it then writes the per-frame handler (+0x80), the trigger handler (+0x88), +0x84 (0c07b6c4 for modes 0 and 2), and the magazine (+0x50) and ammo (+0x4C), both u32:
+    - mode 0 (pistol): 6 rounds, handlers 0c02b5a4 / 0c02bbfa;
+    - **mode 2 (rifle): 45 rounds (0x2d), +0x78 = 8, handlers 0c02b5c8 / 0c02bc64;**
+    - modes 1 and 8 (the scope view): 10000 rounds. This is why the hunt saw 0x10 at +0x4C/+0x50 and 0x27 at +0x4D/+0x51;
+    - modes 6 and 12 (the reload lesson): 6;
+    - modes 7, 9, 10, 11: 1.
+  - **What gives it.** The only call with mode 2 is in the item object's shot handler (its update function is 0c038b00). When a player shoots an item (its hit flags at +20/+24 say which player), the handler switches on the item's kind at +0xB0, and kind 4 calls `setMode(player, 2)`. Item kinds are a 10-entry table at 0c0f79d0, 36 bytes each: +0 is the kind bit (1, 2, 4, 8, 0x10, 0x20, 0x40, ...), +4 the model. The rifle is entry 2 (bit 4), model 0c32bb20.
+  - **Where it comes from.** `dropItems(pos, mask)` at 0c038ab4 spawns an item (through 0c038806) for each kind whose bit is in `mask & 0x7ff`.
+    - When an enemy dies (8c033002), the game calls it with the enemy object's +0xE0. The enemy spawn (0c032344) copies that field from the spawn record's +4, and a stage script can also set it (8c034ad2).
+    - So a rifle drops from an enemy whose record carries bit 4, and the player collects it by shooting it.
+    - The records look like 40-byte entries from 0c0e1adc, indexed by the stage script. Which records are stage 1's, and so which enemy drops the rifle, was not pinned (static, unverified).
+  - **Live (poke).** At 51.68 s, t4b-p2 made the six writes that `setMode(0, 2)` makes: `poke 0c155838 4 0c02b5c8`, `0c155840 4 0c02bc64`, `0c155830 4 00000008`, `0c155808 4 0000002d`, `0c155804 4 0000002d`, `0c155800 4 00000002`. The game then ran it as the rifle:
+    - the HUD's ammo box showed the rifle's magazine icon and a count (21 at 54.3 s, ammo 0x15) in place of the pistol's six bullets;
+    - it fired automatically;
+    - the game took the rifle back itself at ammo 0 (see ends:).
+- scene: the attract demo shows a natural drop; play never reached one (2026-10-22).
+  - **The attract demo:** t4b-attract, with no presses, logged `VR: tex 662000 shown (55 polys)` at 315.59 s, gone at 318.77 s (window shot t315.8-item). It is the demo's train-car scene, a later stage than stage 1's museum. An armoured enemy goes down with the rifle rising over it, and a shot-bonus pop-up shows on player 2's side at the same moment. The demo's players don't pick it up. The enemy-death drop (8c033002) runs only when the enemy's +0x198 is 3, and what 3 means (a kind of kill?) was not checked. One run only, so whether the demo always reaches it at 315.6 s is untested.
+  - **In play,** no run saw a pickup:
+  - t4-h1/h2/h3/r1 and t4b-r900 covered stage 1 to ~440 s, then stalled on the rooftop;
+  - t4b-swap and t4b-attract never logged `VR: ram 0c155800 ... -> 00000002`.
+  - Items do drop on that route (t4b-swap drew 8 swapped drops in 440 s). The stage 1 enemies the route kills just don't carry the rifle bit.
+  - By the code, the rifle drops from particular enemies (bit 4 in their spawn record's mask) and is collected by shooting it. The user's "specific sequences" probably come after ~440 s or off this route.
+  - Next try: the train-car scene in play (after stage 1's rooftop, ~440 s, which the sweep can't pass), or read which spawn records are stage 1's.
+- state: player p's block is 0c1557b8 + p*0x114 (P1 0c1557b8, P2 0c1558cc). All fields are u32 unless noted (2026-10-22):
+  - **+0x48 mode: 2 = rifle equipped** (P1 0c155800, P2 0c155914). Only the pickup sets it. 0 is the pistol; 6, 8 and 9-12 belong to the scripted sequences (see found:).
+  - +0x4C ammo: 45 at the pickup, -1 per shot.
+  - +0x50 magazine: 45 for the rifle, 6 for the pistol. Only mode 2 sets 45, so magazine == 45 is an equivalent marker.
+  - Both +0x4C and +0x50 are u32. Their low bytes are right for 1, 6 and 45, but modes 1 and 8 hold 10000 (low byte 0x10).
+  - +0x78 is the auto-fire countdown: 8 at the pickup, then 5, 4, 3, 2, 1, 0 between shots while the trigger is held, and 0 when it is released.
+  - +0x80 is the per-frame handler: 0c02b5c8 rifle, 0c02b5a4 pistol. +0x88 is the trigger handler: 0c02bc64 rifle, 0c02bbfa pistol. +0x84 is 0c07b6c4 for both.
+  - +0x34 (float, P1 0c1557ec): the per-frame handler sets it every frame, 8.0 for the rifle and 16.0 for the pistol (t4b-p2 51.68 s `VR: ram 0c1557ec 41800000 -> 41000000`, back at 57.90 s). What it scales was not checked.
+  - +0x60 (u16), the shot counter, rises once per rifle shot, as it does for the pistol.
+  - +0x64 (byte) rose 9 times during the first 16 rifle shots at the first room's door in t4b-p2 (`VR: ram 0c15581c 00 -> 01` at 51.95 s, ... `08 -> 09` at 53.21 s). Whether it counts kills (Task 4's reading) or hits, with guards stepping out one after another, was not checked.
+  - The input word at 0c15a45c + p*10 (u16): bit 1 is the trigger held, bit 0 off screen (t4b-p2: 0002 while held, 0003 for `reload 0`).
+- fire: automatic (2026-10-22).
+  - **The code.** Each frame, the rifle's trigger handler (0c02bc64) does nothing off screen (no reload). With the trigger held, it fires when +0x78 <= 0 and restarts the countdown at 5. With the trigger released, it sets +0x78 = 0. So it fires on the first held frame, then every 5 frames: 12 a second at 60 Hz. The pistol's handler (0c02bbfa) fires on the pull edge only, and reloads off screen.
+  - **Measured in t4b-p2:**
+    - a 2 s hold (51.95-53.95 s): 24 shots, ammo 0x2c -> 0x15, a median 0.087 s apart on the log clock. +0x78 counts 4, 3, 2, 1, 0 between shots;
+    - 100 ms pulls (55.0, 55.5, 56.0 s): 2 shots each. A 300 ms hold (56.5 s): 4 shots;
+    - `reload 0` at 54.5 s, with 20 rounds left: nothing changes.
+  - **The haptic pattern it implies:** the first +0x60 rise after a pull edge is a Shot, and each further rise while the trigger is held is an Auto knock, ~83 ms apart (12 Hz). A pull always fires at once. There is no empty pull on the rifle: at 0 rounds it is already the pistol again.
+- ends: when the ammo reaches 0 (2026-10-22).
+  - Once +0x4C <= 0, the rifle's per-frame handler (0c02b5c8) calls `setMode(p, 0)`: the next frame it is the pistol, with 6 rounds. In t4b-p2:
+    - the last shot at 57.878 s (`VR: ram 0c155804 00000001 -> 00000000`);
+    - then at 57.897 s `VR: ram 0c155800 00000002 -> 00000000`, `0c155808 0000002d -> 00000006` and `0c155804 00000000 -> 00000006`.
+  - There is no reload: going off screen does nothing while the rifle is held.
+  - From the code (static, unverified), these also end it:
+    - 0c0257f0 sets mode 0 or 2 back to 0. It sets a player's record at 0c154cb8 to state 2 and clears the player's bit in 0c15a494, so it is probably the player going out;
+    - the game and stage starts (0c0258b4, 0c0259a6) set mode 0 for both players;
+    - the scripted sequences set their own modes over it.
+  - A poked mode 2 in the continue countdown lasted through the game over into the attract (t4b-p1, to 88 s). A detector shouldn't trust it outside play.
+- model: the rifle item's model, 0c32bb20 (entry 2 of the kind table) (2026-10-22).
+  - One mesh, texture **662000** (TCW 100cc400, ARGB4444; TSP 2009846d), drawn opaque as **55 polys** (strips: 218 vertices, 108 triangles).
+  - Seen naturally once, in the attract demo: t4b-attract 315.59 s, 55 polys, at W 73.7-80.1 in its keyed rip.
+  - Seen through a poke: t4b-swap ran `Get-CmRifleRoute 440` and set the model of item kinds 0, 1, 3, 4 and 5 to the rifle's: `poke 0c0f79d4 4 0c32bb20`, and the same at 0c0f79f8, 0c0f7a40, 0c0f7a64 and 0c0f7a88, at 20, 50, 110, 170, 230, 290 and 350 s.
+  - 8 drops then drew it, `VR: tex 662000 shown (55 polys)` at 118.3, 139.4, 159.7, 241.3, 246.1, 298.9, 402.7 and 439.1 s, 55 polys each time.
+  - The keyed rip at 118.3 s (2 passes) held the 55 polys at W 112.3-117.8, ~38 x 40 px of 640x480, about 12 game units across: an AK-style rifle above the dead guard (window shots t118.5-item, t139.6-item).
+  - Both rips were deleted under the disk rule. The runs recapture them: the attract with no presses for ~320 s, or the same pokes on a shorter route (the first drop came at 118 s).
+  - A second model with the same single mesh and texture sits at 0c326f78, listed beside 0c32bb20 at 0c131834 / 0c131884. None of the 40 rip folders under `build-win\vrtest` drew 662000.
+  - Nothing 3D shows the rifle while it is equipped: only the HUD's ammo box changes.
+- profile: from the evidence above (2026-10-22).
+  - `GunRam` (Task 6): **`weapon = 0x48`, `rifleValue = 2`** (the mode's low byte; P1 0c155800). Equivalent: `weapon = 0x50`, `rifleValue = 45` (only mode 2 sets 45). The rifle's haptics: an Auto knock per +0x60 rise while the trigger is held, 12 a second.
+  - The rifle's `GunTarget` (Task 10):
+    - `textures = {0x662000}`;
+    - `wholePolys = 55`;
+    - `minPolys = 55` (the 8 swap draws and the attract's natural draw were all whole);
+    - `lengthM = 0.88` (an AK's length; the model's own scale was not measured);
+    - no W skip band.
+  - Captures: the attract demo at ~315.6 s with no presses (`vr.WatchTex=662000`, `-On 'VR: tex 662000 shown|0|rip 2 20 1'`), or the swap pokes above. The game never draws the item while the rifle is held.
