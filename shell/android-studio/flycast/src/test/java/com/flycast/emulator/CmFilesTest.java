@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -82,6 +83,7 @@ public class CmFilesTest
         CmFiles.Result r = CmFiles.find(roots());
         assertEquals(z.getCanonicalFile(), r.zip.getCanonicalFile());
         assertTrue(r.chd);
+        assertEquals("gds-0001.chd", r.disc == null ? null : r.disc.getName());
         assertTrue(r.bios);
         assertTrue(r.missing.toString(), r.missing.isEmpty());
     }
@@ -118,6 +120,8 @@ public class CmFilesTest
         zip(download, "naomi.zip", "epr-21578h.ic27");
         CmFiles.Result r = CmFiles.find(roots());
         assertTrue(r.chd);
+        // the start screen names the disc that's there
+        assertEquals("gds-0001.gdi", r.disc == null ? null : r.disc.getName());
         assertTrue(r.missing.toString(), r.missing.isEmpty());
     }
 
@@ -225,5 +229,97 @@ public class CmFilesTest
         assertEquals(r.missing.toString(), 2, r.missing.size());
         for (String line : r.missing)
             assertTrue(line, line.contains("Download") && line.contains("next to confmiss.zip"));
+    }
+
+    @Test
+    public void noZipButTheOtherTwo() throws IOException
+    {
+        // the disc and the BIOS are there, only the game's zip isn't: one line, for the zip
+        file(download, "confmiss/gds-0001.chd");
+        zip(download, "naomi.zip", "epr-21578h.ic27");
+        CmFiles.Result r = CmFiles.find(roots());
+        assertNull(r.zip);
+        assertTrue(r.chd);
+        assertTrue(r.bios);
+        assertEquals(r.missing.toString(), 1, r.missing.size());
+        assertTrue(r.missing.toString(), r.missing.get(0).startsWith("confmiss.zip"));
+        assertTrue(r.missing.toString(), r.missing.get(0).contains("Download"));
+    }
+
+    @Test
+    public void noZipButTheBios() throws IOException
+    {
+        zip(download, "naomi.zip", "epr-21578h.ic27");
+        CmFiles.Result r = CmFiles.find(roots());
+        assertFalse(r.chd);
+        assertTrue(r.bios);
+        assertEquals(r.missing.toString(), 2, r.missing.size());
+        assertTrue(names(r.missing, "confmiss.zip"));
+        assertTrue(names(r.missing, "confmiss/gds-0001.chd"));
+    }
+
+    @Test
+    public void biosUnderAnotherNameByItsCrc() throws IOException
+    {
+        // the emulator finds the BIOS by its CRC first (naomi_cart.cpp): an entry renamed, with
+        // epr-21576h.ic27's CRC (four made-up bytes, no BIOS data)
+        File z = new File(download, "confmiss.zip");
+        try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(z))) {
+            out.putNextEntry(new ZipEntry("317-0298-com.pic"));
+            out.write(new byte[] { 5, 6, 7 });
+            out.closeEntry();
+            out.putNextEntry(new ZipEntry("bios.bin"));
+            out.write(withCrc(0xd4895685L));
+            out.closeEntry();
+        }
+        file(download, "confmiss/gds-0001.chd");
+        CmFiles.Result r = CmFiles.find(roots());
+        assertTrue(r.bios);
+        assertTrue(r.missing.toString(), r.missing.isEmpty());
+    }
+
+    @Test
+    public void theWalkStopsInAHugeTree() throws IOException
+    {
+        File crowd = new File(download, "a");
+        assertTrue(crowd.mkdirs());
+        for (int i = 0; i < CmFiles.WALK_LIMIT; i++)
+            assertTrue(new File(crowd, "f" + i).createNewFile());
+        zip(download, "b/confmiss.zip", "317-0298-com.pic");    // after the crowd: past the cap
+        assertNull(CmFiles.find(roots()).zip);
+        zip(download, "confmiss.zip", "317-0298-com.pic");      // at the top: still found
+        assertNotNull(CmFiles.find(roots()).zip);
+    }
+
+    /** Four bytes whose CRC-32 is crc (CRC-32's state after four bytes depends only on the four
+     *  table indices: found from the top byte down, then the bytes that give them). */
+    private static byte[] withCrc(long crc)
+    {
+        int[] table = new int[256];
+        for (int n = 0; n < 256; n++) {
+            int c = n;
+            for (int k = 0; k < 8; k++)
+                c = (c & 1) != 0 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+            table[n] = c;
+        }
+        // state = T[m3] ^ T[m2] >>> 8 ^ T[m1] >>> 16 ^ T[m0] >>> 24
+        int rest = ~(int) crc;
+        int[] m = new int[4];
+        for (int i = 3; i >= 0; i--) {
+            int shift = 8 * (3 - i), top = (rest >>> (24 - shift)) & 0xFF;
+            for (int n = 0; n < 256; n++)
+                if ((table[n] >>> 24) == top) { m[i] = n; break; }
+            rest ^= table[m[i]] >>> shift;
+        }
+        byte[] out = new byte[4];
+        int s = 0xFFFFFFFF;
+        for (int i = 0; i < 4; i++) {
+            out[i] = (byte) (m[i] ^ (s & 0xFF));
+            s = table[m[i]] ^ (s >>> 8);
+        }
+        CRC32 check = new CRC32();
+        check.update(out);
+        assertEquals(crc, check.getValue());
+        return out;
     }
 }

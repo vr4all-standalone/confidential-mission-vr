@@ -138,7 +138,7 @@ public class CmStartActivity extends Activity
             allow.setVisibility(View.VISIBLE);
         }
         row(zipRow, CmFiles.ZIP, cm.zip != null ? shortPath(cm.zip) : CmFiles.ZIP, cm, access);
-        row(discRow, CmFiles.DISC, "the disc, " + CmFiles.DISC, cm, access);
+        row(discRow, CmFiles.DISC, cm.disc != null ? "the disc, confmiss/" + cm.disc.getName() : "the disc", cm, access);
         row(biosRow, CmFiles.BIOS_ZIP, "the NAOMI BIOS", cm, access);
         play.setVisibility(cm.missing.isEmpty() ? View.VISIBLE : View.GONE);
         return cm;
@@ -151,8 +151,8 @@ public class CmStartActivity extends Activity
         {
             if (line.startsWith(name))
             {
-                row.setText("Missing:  " + line);
-                // before the access, everything is missing: not yet a problem
+                // before the access, Download hasn't been looked in yet
+                row.setText((access ? "Missing:  " : "Not checked yet:  ") + line);
                 row.setTextColor(access ? RED : SOFT);
                 return;
             }

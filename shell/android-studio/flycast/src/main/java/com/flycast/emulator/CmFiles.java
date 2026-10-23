@@ -14,7 +14,7 @@ import java.util.zip.ZipFile;
 /**
  * hotd2-vr: finding Confidential Mission's three files, the player's own MAME set: confmiss.zip
  * (the game, its key inside), the disc confmiss/gds-0001.chd next to it, and the NAOMI BIOS
- * (naomi.zip next to it, or the BIOS inside confmiss.zip). Plain Java, no Android, so a JVM test
+ * (naomi.zip next to it, or the BIOS inside confmiss.zip, by name or CRC). Plain Java, no Android, so a JVM test
  * runs it (CmFilesTest).
  */
 final class CmFiles
@@ -32,8 +32,15 @@ final class CmFiles
     private static final List<String> BIOS_FILES = Arrays.asList("epr-21576h.ic27", "epr-21576g.ic27",
             "epr-21578h.ic27", "epr-21578g.ic27", "epr-21577h.ic27", "epr-21577g.ic27", "epr-21579d.ic27",
             "epr-21576h_multi.ic27");
+    /** Their CRCs, in the same order: the emulator looks a BIOS file up by its CRC first, then by its
+     *  name (naomi_cart.cpp), so a renamed one works too. */
+    private static final long[] BIOS_CRCS = { 0xd4895685L, 0xd2a1c6bfL, 0x7b452946L, 0x55413214L,
+            0xfdf17452L, 0x25f64af7L, 0x33513691L, 0xcce01f1fL };
     /** How many folders deep confmiss.zip is looked for under each root (as VrGames looks in Download). */
     private static final int DEPTH = 3;
+    /** At most this many files and folders looked at under each root, so a huge Download can't keep
+     *  the start screen (which looks on the UI thread) waiting. */
+    static final int WALK_LIMIT = 5000;
 
     static final class Result
     {
@@ -41,6 +48,8 @@ final class CmFiles
         File zip;
         /** the disc next to it; the BIOS next to it or inside it */
         boolean chd, bios;
+        /** the disc found (gds-0001.chd, .cue or .gdi in the confmiss folder), or null */
+        File disc;
         /** One line per missing file, saying where it goes. Empty: ready to play. */
         List<String> missing = new ArrayList<>();
     }
@@ -48,14 +57,15 @@ final class CmFiles
     /**
      * Looks for confmiss.zip under each root in turn (the app's own files/games folders, then
      * Download), up to three folders deep, and checks what's next to it. With more than one, the
-     * first complete one, else the one missing the least.
+     * first complete one, else the one missing the least. With none, each root itself is checked
+     * for the other two, so only what's absent is named.
      */
     static Result find(List<File> roots)
     {
         List<File[]> found = new ArrayList<>();     // { the zip, its root }
         for (File root : roots)
             if (root != null)
-                search(root, root, DEPTH, found);
+                search(root, root, DEPTH, found, new int[] { WALK_LIMIT });
         Result best = null;
         for (File[] f : found)
         {
@@ -67,19 +77,49 @@ final class CmFiles
         }
         if (best != null)
             return best;
-        Result none = new Result();
-        none.missing.add(ZIP + " (the game, a MAME set with its key inside): in Download");
-        none.missing.add(DISC + " (the disc): in a folder named confmiss in Download, next to " + ZIP);
-        none.missing.add(BIOS_ZIP + " (the NAOMI BIOS): in Download, next to " + ZIP);
-        return none;
+        return withoutZip(roots);
     }
 
-    /** The files named confmiss.zip in any case: the shallowest first, by name. */
-    private static void search(File dir, File root, int depth, List<File[]> out)
+    /** No confmiss.zip: the disc and the BIOS in a root itself (the root with the most of them), and
+     *  a line for each file that isn't there. */
+    private static Result withoutZip(List<File> roots)
     {
+        Result r = new Result();
+        File at = null;
+        for (File root : roots)
+        {
+            if (root == null || !root.isDirectory())
+                continue;
+            File disc = findDisc(root);
+            boolean bios = nonEmpty(new File(root, BIOS_ZIP));
+            if ((disc != null ? 1 : 0) + (bios ? 1 : 0) > (r.chd ? 1 : 0) + (r.bios ? 1 : 0))
+            {
+                r.disc = disc;
+                r.chd = disc != null;
+                r.bios = bios;
+                at = root;
+            }
+        }
+        String where = at != null ? at.getName() : "Download";
+        r.missing.add(ZIP + " (the game, a MAME set with its key inside): in " + where
+                + (at == null ? "" : ", next to " + (r.bios ? BIOS_ZIP : "the confmiss folder")));
+        if (!r.chd)
+            r.missing.add(DISC + " (the disc): in a folder named confmiss in " + where + ", next to " + ZIP);
+        if (!r.bios)
+            r.missing.add(BIOS_ZIP + " (the NAOMI BIOS): in " + where + ", next to " + ZIP);
+        return r;
+    }
+
+    /** The files named confmiss.zip in any case: the shallowest first, by name. Stops once it has
+     *  looked at WALK_LIMIT files and folders under the root (left). */
+    private static void search(File dir, File root, int depth, List<File[]> out, int[] left)
+    {
+        if (left[0] <= 0)
+            return;
         File[] files = dir.listFiles();
         if (files == null)
             return;
+        left[0] -= files.length;
         Arrays.sort(files);
         for (File f : files)
             if (f.getName().equalsIgnoreCase(ZIP) && f.isFile() && f.length() > 0)
@@ -87,7 +127,7 @@ final class CmFiles
         if (depth > 0)
             for (File f : files)
                 if (!f.getName().startsWith(".") && f.isDirectory())
-                    search(f, root, depth - 1, out);
+                    search(f, root, depth - 1, out, left);
     }
 
     private static Result check(File found, File root)
@@ -101,29 +141,47 @@ final class CmFiles
         r.zip = exact.isFile() ? exact : found;
         if (!exact.isFile())
             r.missing.add(ZIP + ": rename " + found.getName() + " to " + ZIP + ", in small letters (in " + where + ")");
-        for (String disc : DISCS)
-        {
-            File f = new File(dir, disc);
-            if (f.isFile() && f.length() > 0)
-                r.chd = true;
-        }
+        r.disc = findDisc(dir);
+        r.chd = r.disc != null;
         if (!r.chd)
             r.missing.add(DISC + " (the disc): in a folder named confmiss next to " + ZIP + " (in " + where + ")");
-        File biosZip = new File(dir, BIOS_ZIP);
-        r.bios = (biosZip.isFile() && biosZip.length() > 0) || hasBios(r.zip);
+        r.bios = nonEmpty(new File(dir, BIOS_ZIP)) || hasBios(r.zip);
         if (!r.bios)
             r.missing.add(BIOS_ZIP + " (the NAOMI BIOS): in " + where + ", next to " + ZIP);
         return r;
     }
 
-    /** confmiss.zip has the NAOMI BIOS inside (by its file names). */
+    /** The disc in dir's confmiss folder: .chd, .cue or .gdi; null when there's none. */
+    private static File findDisc(File dir)
+    {
+        for (String disc : DISCS)
+        {
+            File f = new File(dir, disc);
+            if (nonEmpty(f))
+                return f;
+        }
+        return null;
+    }
+
+    private static boolean nonEmpty(File f)
+    {
+        return f.isFile() && f.length() > 0;
+    }
+
+    /** confmiss.zip has the NAOMI BIOS inside (by a file's name or its CRC). */
     private static boolean hasBios(File zip)
     {
         try (ZipFile z = new ZipFile(zip)) {
             Enumeration<? extends ZipEntry> entries = z.entries();
             while (entries.hasMoreElements())
-                if (BIOS_FILES.contains(entries.nextElement().getName().toLowerCase(Locale.ROOT)))
+            {
+                ZipEntry e = entries.nextElement();
+                if (BIOS_FILES.contains(e.getName().toLowerCase(Locale.ROOT)))
                     return true;
+                for (long crc : BIOS_CRCS)
+                    if (e.getCrc() == crc)
+                        return true;
+            }
         } catch (IOException | RuntimeException e) {
             // not a zip, or unreadable: no BIOS in it
         }

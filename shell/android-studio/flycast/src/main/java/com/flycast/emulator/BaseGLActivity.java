@@ -168,7 +168,7 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
             // adb). The Flycast menu can't be shown in the headset, so boot the game directly, or
             // show the start screen when it can't be found (or read) yet.
             String game = findVrGame();
-            Log.i("flycast", "VR build started without a game, booting " + game);
+            Log.i("flycast", game != null ? "VR build: booting " + game : "VR build: no game found, to the start screen");
             if (game == null) {
                 showVrSetup();
                 return;

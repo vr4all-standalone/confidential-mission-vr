@@ -176,7 +176,7 @@ $ErrorActionPreference = 'Continue'   # the tools may write warnings on stderr
 $certs = & (Join-Path $tools.FullName 'apksigner.bat') verify --print-certs $apk 2>&1 | ForEach-Object { "$_" }
 $signed = $LASTEXITCODE -eq 0
 $badgingAll = @(& (Join-Path $tools.FullName 'aapt2.exe') dump badging $apk 2>&1 | ForEach-Object { "$_" })
-$badging = $badgingAll | Select-Object -First 1
+$badging = $badgingAll | Where-Object { $_ -match '^package:' } | Select-Object -First 1   # not a warning line
 $manifestTree = @(& (Join-Path $tools.FullName 'aapt2.exe') dump xmltree --file AndroidManifest.xml $apk 2>&1 |
 	ForEach-Object { "$_" })
 $tmp = Join-Path $env:TEMP "vrlgh-debug-$PID.cer"

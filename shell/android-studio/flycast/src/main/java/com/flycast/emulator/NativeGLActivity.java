@@ -32,7 +32,7 @@ public final class NativeGLActivity extends BaseGLActivity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         super.onCreate(savedInstanceState);
-        // hotd2-vr: on its way to the setup panel
+        // hotd2-vr: on its way to the start screen (BaseGLActivity.quitToStart)
         if (isFinishing())
             return;
 

@@ -4,8 +4,8 @@ Sega's light-gun game **Confidential Mission** (arcade, Sega NAOMI, 2000) in VR,
 Quest** (standalone) or a **PC VR** headset. The original game runs in an emulator, its 3D
 scenes are rebuilt around you in stereo, and your controller is the light gun.
 
-**Confidential Mission VR is built on mikermak's [hotd2-vr](https://github.com/mikermak/hotd2-vr)**
-(The House of the Dead 2 VR): the VR mode, the panel the start screen grew from and the tools
+**Confidential Mission VR is built on mikermak's [hotd2-vr](https://github.com/mikermak/hotd2-vr)**:
+the VR mode, the panel the start screen grew from and the tools
 are his work, and much of this readme is too. hotd2-vr is itself a fork of the
 [Flycast](https://github.com/flyinghead/flycast) Dreamcast and NAOMI emulator. There is no remake
 here: the original game runs, and the emulator turns what it draws into a VR view.
@@ -348,7 +348,6 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
   #1 to hotd2-vr).
 - The app's icon is drawn for it from plain shapes (`hotd2-vr/assets/make-icon.py`).
 - Inspired by [DR-89/time-crisis-vr](https://github.com/DR-89/time-crisis-vr).
-- Confidential Mission is Sega's game, and The House of the Dead a trademark of Sega. Namco
-  is a trademark of Bandai Namco.
+- Confidential Mission is Sega's game. Namco is a trademark of Bandai Namco.
 
 Unofficial fan project, not affiliated with Sega. No game is included.
