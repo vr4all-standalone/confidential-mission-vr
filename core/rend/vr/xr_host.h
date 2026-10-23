@@ -47,6 +47,15 @@ bool menuPaused();
 void requestPause(bool on);
 // Emulator::render, render thread, first thing: stops or starts the emulator as requestPause asked.
 void applyPause();
+// What the left stick click does: the game camera goes where the head is (its yaw) on the next frame.
+void recenter();
+// Quit to the start screen: on Android BaseGLActivity.quitToStart through JNI (the start screen
+// opens, the game's activity finishes); on the PC Flycast exits (dc_exit, at the next applyPause).
+void quitToStart();
+// The controllers and their labels again, until the next shot (Task 9; for now it only says so).
+void showControls();
+// A shot's knock in a hand, at vr.Haptics' strength as it is now: the menu's sample of it.
+void sampleKnock(int hand);
 #else
 inline bool enabled() { return false; }
 inline bool frame() { return false; }
@@ -56,6 +65,10 @@ inline const char *controllerProfile() { return ""; }
 inline bool menuPaused() { return false; }
 inline void requestPause(bool) {}
 inline void applyPause() {}
+inline void recenter() {}
+inline void quitToStart() {}
+inline void showControls() {}
+inline void sampleKnock(int) {}
 #endif
 
 }

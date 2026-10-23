@@ -132,6 +132,35 @@ Quit with the Meta button, then *Quit*.
 Where the settings menu is a hold, a shorter press of the left menu button is player 2's Start
 when you let go.
 
+## The menu
+
+The left controller's ≡ opens the settings menu. The game pauses, sound and all; its last
+picture stays around you (look around and lean as you like), and a panel stands about 1.2 m in
+front of you, a little below your eyes. ≡ or B closes it, and the game goes on exactly where it
+stopped. In the first seconds after the game starts, while the guns are being made, ≡ does
+nothing.
+
+Point at a row with either hand and pull the trigger, or move with a thumbstick (up and down,
+round from the bottom to the top) and press A. On a row with - and +, the left half of the row
+is - and the right half +; the thumbstick left and right are - and +, and A is +. A click
+anywhere on an On/Off row flips it. The pointer's line and dot show while the menu is open,
+even with the laser off.
+
+| Row | Does |
+|---|---|
+| Resume | closes the menu |
+| Recenter | the view goes where you face; the menu stays open, in front of you |
+| Gun | the gun drawn: Agents' pistol, Cabinet gun, Arcade gun (`vr.Gun`; for now each draws the arcade gun) |
+| Laser | the laser line and dot, On or Off (`vr.Laser`) |
+| Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
+| World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
+| Panel distance | the 2D plane's distance, 15 to 120 game units, 5 a step (`vr.HudDepth`) |
+| Wider view | the game's wider view, On or Off (`vr.Widen`); it changes at the next start, and says "(next start)" until then |
+| Show controls | the controllers and their labels (not in this build yet) |
+| Quit | back to the start screen (PC: Flycast quits) |
+
+Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
+
 ## The game
 
 Sega's NAOMI light-gun game from 2000, with its own profile:
@@ -181,6 +210,8 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.GunScale` | 0.68 | size of the gun, times the 25 cm arcade gun it is modelled on (also set with grip + thumbstick) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
 | `vr.Haptics` | 2 | the knock in the hand: 0 off, 1 low, 2 normal, 3 strong |
+| `vr.Gun` | 0 | the gun drawn: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun (for now each draws the arcade gun) |
+| `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
 | `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |
 | `vr.DropShotFlash` | yes | hide a bright full-screen flash right after a shot, should the game draw one |

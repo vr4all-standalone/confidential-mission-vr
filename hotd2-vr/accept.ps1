@@ -14,7 +14,8 @@
   six runs (accept-cm-tour, -off, -edges, -hall, -floor, -floor0), each played once per call;
   cm-sim and cm-buttons play their own (accept-cm-sim, accept-cm-buttons) through the OpenXR
   simulator, cm-buttons-pc two more (accept-cm-buttons-index, -vive) with the PC controllers.
-  cm-haptics, -low, -off, -mag and -reload play one each (accept-cm-haptics...) the same way.
+  cm-haptics, -low, -off, -mag and -reload play one each (accept-cm-haptics...) the same way,
+  and so do cm-menu and cm-menu-quit (accept-cm-menu, accept-cm-menu-quit).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -538,6 +539,81 @@ function Test-CmPause {
 	return $null
 }
 
+# The settings menu's place, as its open line says it (xr_menu.cpp): 1.2 m ahead of the head
+# (0, 1.6, 0) at 1.5 m (0.1 m below the eyes), 0.9 m wide, its 10 rows 0.063 m apart, the top
+# row's middle 0.274 m over the panel's. -Row and -U (0..1 across): where the simulator's right
+# hand at (0.18, 1.3, -0.35) points ("yaw pitch", degrees) to put its pointer there. The pointer
+# leaves the arcade gun's muzzle (vr.GunScale 0.68), which in the simulator, where the grip pose
+# is the aim pose, is 4.4 cm over the hand and 13.7 cm ahead of it: a few rounds of aiming from it.
+$cmMenuPitch = 0.063; $cmMenuTop = 0.274; $cmMenuWidth = 0.9
+function Get-CmMenuAim([int]$Row, [double]$U) {
+	$tx = ($U - 0.5) * $cmMenuWidth; $ty = 1.5 + $cmMenuTop - $Row * $cmMenuPitch; $tz = -1.2
+	$yaw = 0.0; $pitch = 0.0
+	for ($i = 0; $i -lt 5; $i++) {
+		$my = 0.0443 * [Math]::Cos($pitch) + 0.1374 * [Math]::Sin($pitch)
+		$mz = 0.0443 * [Math]::Sin($pitch) - 0.1374 * [Math]::Cos($pitch)
+		$dx = $tx - (0.18 + $mz * [Math]::Sin($yaw)); $dy = $ty - (1.3 + $my); $dz = $tz - (-0.35 + $mz * [Math]::Cos($yaw))
+		$yaw = [Math]::Atan2(-$dx, -$dz); $pitch = [Math]::Atan2($dy, [Math]::Sqrt($dx * $dx + $dz * $dz))
+	}
+	return '{0} {1}' -f (T ($yaw * 180 / [Math]::PI)), (T ($pitch * 180 / [Math]::PI))
+}
+
+# The settings menu through the simulator, widened, in stage 1's first room: the left menu button
+# opens it at 58 s (at Resume), the right stick down 4 times to Haptics, A (+ on a value row) makes
+# it Strong with a sample knock at that strength (0.03 s x 1.6), down once more to World size,
+# right (+) makes it 0.121 (0.110 x 1.1), the right hand points at the Laser row's right half at
+# 63 s and its trigger turns the laser off, B closes it at 65 s. That knock is the only one. Each
+# change is in emu.cfg at once (the run's, emu.cfg.after); build-win\emu.cfg is as it was.
+function Test-CmMenu {
+	$name = 'accept-cm-menu'
+	$downs = @(foreach ($t in 58.5, 59, 59.5, 60) { "$(T $t)=stick right 0 -1 150" })
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 72; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150' + $downs + @('60.5=xr right/a 1 150', '61=stick right 0 -1 150',
+			'62=stick right 1 0 150', "63=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 3 -U 0.75)", '63.5=xr right/trigger 1 100',
+			'65=xr right/b 1 150')
+		Expect = 'XR: menu button', 'XR: menu open \(paused\)',
+			"XR: menu at 1\.20 m, 10 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
+			'XR: menu Haptics -> Strong', 'XRSIM: haptic right 0\.048 1\.000', 'XR: menu World size -> 0\.121', 'XR: menu Laser -> Off',
+			'XR: menu closed \(resumed\)'
+		Reject = 'XR: initialisation failed', 'XR: \d+ black frames' }
+	if ($why) { return $why }
+	$n = Get-LogCount $name 'XRSIM: haptic'
+	Write-Host "  $n lines 'XRSIM: haptic' (want 1: the Haptics row's sample)"
+	if ($n -ne 1) { return "$n haptic lines, want 1 (the sample knock only)" }
+	$dir = Join-Path $repo "build-win\vrtest\$name"
+	$after = Join-Path $dir 'emu.cfg.after'
+	if (-not (Test-Path -LiteralPath $after)) { return "no emu.cfg.after in $dir" }
+	foreach ($re in '^vr\.Haptics = 3$', '^vr\.Laser = no$', '^vr\.WorldScale = 0\.121') {
+		$hit = Select-String -LiteralPath $after -Pattern $re -CaseSensitive -Quiet
+		Write-Host "  emu.cfg.after $(if ($hit) { 'has' } else { 'lacks' }) $re"
+		if (-not $hit) { return "the run's emu.cfg has no line $re" }
+	}
+	$cfg = Join-Path $repo 'build-win\emu.cfg'
+	$before = Join-Path $dir 'emu.cfg.before'
+	$same = if (Test-Path -LiteralPath $before) { (Get-FileHash -LiteralPath $before).Hash -eq (Get-FileHash -LiteralPath $cfg).Hash } else { -not (Test-Path -LiteralPath $cfg) }
+	Write-Host "  build-win\emu.cfg $(if ($same) { 'as it was' } else { 'changed' })"
+	if (-not $same) { return 'build-win\emu.cfg changed by the run' }
+	return $null
+}
+
+# Quit to the start screen from the settings menu: opened at 58 s, the stick up from Resume wraps
+# to Quit, A: Flycast leaves (dc_exit on the PC; the headset goes back to the start screen), so
+# vr-test.ps1 ends early with exit code 2.
+function Test-CmMenuQuit {
+	$name = 'accept-cm-menu-quit'
+	$params = @{ Game = 'confmiss'; Name = $name; Seconds = 70; XrSim = $true; Config = $cmWiden
+		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150', '58.5=stick right 0 1 150', '59=xr right/a 1 150'
+		Expect = 'XR: menu open \(paused\)', 'XR: menu quit'; Reject = 'XR: initialisation failed' }
+	if ($Reuse -and (Test-Path -LiteralPath (Get-RunLog $name))) { return Invoke-VrTest $params }
+	$out = @(& $vrTest @params)
+	$code = $LASTEXITCODE
+	$out | ForEach-Object { Write-Host "  $_" }
+	$fails = @($out | Where-Object { $_ -match '^FAIL' })
+	if ($fails) { return $fails -join '; ' }
+	if ($code -ne 2) { return "vr-test.ps1 exit $code, want 2 (Flycast left early)" }
+	return $null
+}
+
 # The haptics (the knock from the game's own shot counter, vr.Haptics) through the simulator,
 # widened, in stage 1's first room: 8 right pulls 0.6 s apart from 54 s (6 shots, then 2 on an
 # empty gun), B (the game's reload) at 59.5 s, 3 more shots from 61 s, X (player 2 joins) at 64 s
@@ -624,6 +700,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
 	'cm-haptics' = 'Test-CmHaptics'; 'cm-haptics-low' = 'Test-CmHapticsLow'; 'cm-haptics-off' = 'Test-CmHapticsOff'
 	'cm-haptics-mag' = 'Test-CmHapticsMag'; 'cm-haptics-reload' = 'Test-CmHapticsReload'
+	'cm-menu' = 'Test-CmMenu'; 'cm-menu-quit' = 'Test-CmMenuQuit'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

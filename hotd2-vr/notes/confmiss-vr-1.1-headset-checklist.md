@@ -42,3 +42,13 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 - [ ] With the magazine empty, a pull gives a light click, clearly weaker than a shot; after a reload the knock is back.
 - [ ] Low, Normal and Strong feel different: set `vr.Haptics` to 1, 2 and 3 in emu.cfg (until the settings menu has it) and fire a few shots with each; 0 gives none at all.
 - [ ] Two guns (X): player 2's knocks are in the left hand and player 1's in the right, each only for its own shots.
+
+## Task 7
+
+- [ ] The left menu button mid-game opens the menu ("PAUSED", ten rows) about an arm's length ahead, a little below your eyes: every row and the footer are readable at arm's length without leaning in, and the panel is not cut off at the edges of the view.
+- [ ] Laser pointing with both hands: each hand's line and dot land on the row it points at (with the laser off too), the selection follows, and the trigger of either hand chooses.
+- [ ] Stick plus A: the right and the left thumbstick move the selection up and down (round from Quit to Resume and back) and left/right change a value; A chooses, and on a value row is +.
+- [ ] The - and + halves: a click on the left half of Haptics, World size, Panel distance and Gun steps down, on the right half up; a click anywhere on Laser or Wider view flips it. Each Haptics change gives a sample knock in that hand.
+- [ ] Quit returns to the start screen ("CONFIDENTIAL MISSION VR"), and Play starts the game again.
+- [ ] Settings are kept after restarting the app: change Laser, Haptics, World size and Panel distance, quit, close the app, open it and play: all four are as you left them (and Wider view, changed, applies now).
+- [ ] The menu button or B closes the menu and the game goes on; the closing B does not reload, and the A that chose Resume does not press Start.

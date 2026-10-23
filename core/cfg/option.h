@@ -499,6 +499,7 @@ extern Option<bool> VrWidenFov;
 extern Option<bool> VrDropShotMarker;
 extern Option<bool> VrDropShotFlash;
 extern Option<int> VrHaptics;
+extern Option<int> VrGun;
 extern Option<bool> CustomTextures;
 extern Option<bool> PreloadCustomTextures;
 extern Option<bool> DumpTextures;
