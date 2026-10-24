@@ -87,7 +87,8 @@ std::string value(int row)
 		// a gun not made yet shows dimmed (only when vr.Gun names it: the row skips it)
 		const std::vector<GunChoice> choices = gunChoices();
 		const GunChoice& gun = choices[gunAt(choices)];
-		return std::string(gun.label) + (!gun.made ? " (not made yet)" : !gun.complete ? " (incomplete)" : "");
+		return std::string(gun.label) + (!gun.made ? (config::VrGameHands ? " (not made yet)" : " (game's models off)")
+				: !gun.complete ? " (incomplete)" : "");
 	}
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
@@ -140,6 +141,8 @@ void change(int row, int dir, int hand)
 		// the next one each way, round and round, skipping those not made yet
 		const std::vector<GunChoice> choices = gunChoices();
 		const int n = (int)choices.size();
+		if (n < 2)
+			break;	// (locked: another game's own model)
 		int at = gunAt(choices);
 		for (int i = 0; i < n; i++)
 		{

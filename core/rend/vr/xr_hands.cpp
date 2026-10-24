@@ -412,7 +412,10 @@ GunKind chosenGun()
 	refresh();
 	if (!cmGuns())
 		return GunKind::Arcade;	// (another game's own model takes no choosing: handModel())
-	const int setting = std::clamp((int)config::VrGun, 0, 3);
+	// (a setting this build doesn't know is Auto, as the menu's row shows it)
+	int setting = config::VrGun;
+	if (setting < 0 || setting > 3)
+		setting = 0;
 	const GunKind wanted = setting == 1 ? GunKind::Pistol : setting == 2 ? GunKind::Cabinet : GunKind::Arcade;
 	GunKind kind = GunKind::Arcade;
 	std::string why;	// each gun passed over, and why
@@ -474,10 +477,15 @@ const HandsModel *handModel(GunKind kind)
 
 std::vector<GunChoice> gunChoices()
 {
+	// another game's own model takes no choosing: one choice, the row locked (vr.Gun kept)
+	if (!cmGuns())
+		return { { (int)config::VrGun, config::VrGameHands && handsModel() != nullptr ? "The game's own" : "Arcade gun", true, true } };
+	// (with the game's own models off, the hand holds the arcade gun: theirs aren't offered)
+	const bool own = config::VrGameHands;
 	return {
 		{ 0, "Auto", true, true },
-		{ 1, "Agents' pistol", gunModel(GunKind::Pistol) != nullptr, gunComplete(GunKind::Pistol) },
-		{ 2, "Cabinet gun", gunModel(GunKind::Cabinet) != nullptr, gunComplete(GunKind::Cabinet) },
+		{ 1, "Agents' pistol", own && gunModel(GunKind::Pistol) != nullptr, gunComplete(GunKind::Pistol) },
+		{ 2, "Cabinet gun", own && gunModel(GunKind::Cabinet) != nullptr, gunComplete(GunKind::Cabinet) },
 		{ 3, "Arcade gun", true, true },
 	};
 }

@@ -168,7 +168,8 @@ Sega's NAOMI light-gun game from 2000, with its own profile:
 - **The guns.** The agents' own pistol in your hand, or the game's cabinet gun, or the red
   arcade gun: the menu's Gun row. The pistol and the cabinet gun (and the assault rifle) are
   made from your own copy of the game, on the first start (a minute or two, only once: B skips
-  it, and the arcade gun stays for that session); nothing of the game comes with this app.
+  it, and the guns not made by then stay out of the hand that session); nothing of the game
+  comes with this app.
   Auto takes the agents' pistol when all of it was made, else the cabinet gun, else the arcade
   gun; a gun chosen that isn't made yet falls back the same way. Reload by shooting away from
   the view, or with B (the cabinet's second button reloads in this game).

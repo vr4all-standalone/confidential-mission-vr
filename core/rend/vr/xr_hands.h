@@ -60,6 +60,8 @@ const char *gunName(GunKind kind);
 const HandsModel *handModel(GunKind kind);
 
 // vr.Gun's choices, in the menu's order, round and round (Task 14b appends the player's own).
+// The game's own models off: only Auto and the arcade gun are made. Another game: one choice
+// (its own model or the arcade gun), so the row can't change vr.Gun.
 struct GunChoice
 {
 	int setting;		// vr.Gun

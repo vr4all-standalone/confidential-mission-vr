@@ -100,4 +100,5 @@ Before these, delete every `gun-cm-*.bin` from the app's data folder (or reinsta
 - [ ] The log says "XR: gun: agents' pistol (auto)" after the first start (or "cabinet gun (auto: the agents' pistol is incomplete)").
 - [ ] Open the menu and switch the Gun row (+ and -): the new gun shows in the hand at once, while the game is paused: the agents' pistol, the cabinet gun, the arcade gun, Auto. Each one's laser leaves its own muzzle.
 - [ ] Shoot with each gun: the muzzle flash sits at the muzzle, and shots land on the dot.
+- [ ] After a trigger change on the Gun row, the dot stays on the row (the new gun's muzzle moves it a few cm; rows are 6.3 cm apart).
 - [ ] Delete only `gun-cm-pistol.bin` and start again: the Gun row skips the agents' pistol, and with it chosen before, the cabinet gun is in the hand ("(chosen: the agents' pistol is not made yet)").

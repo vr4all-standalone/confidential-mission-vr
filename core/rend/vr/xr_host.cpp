@@ -1496,14 +1496,17 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		}
 		// the gun in this hand (Task 14: the rifle for a while), its model and muzzle
 		const GunKind kind = handGun(g.player);
-		const bool game = gameGun(kind);
+		// (looked up once: each lookup can load the model, and one made meanwhile might not read)
+		const HandsModel *model = handModel(kind);
+		const bool game = model != nullptr;
+		const glm::vec3 muzzle = game ? model->muzzle : GunMuzzle;
 		const float gunScale = std::clamp(game ? (float)config::VrHandScale : (float)config::VrGunScale, 0.4f, 1.6f);
 		// the game's pistol is in a right hand: mirrored for the left
 		const bool mirror = game && g.hand == Left;
 		const glm::mat4 placement = gunPlacement(game, gunScale, palm, mirror);
 		// Shots leave the muzzle along the barrel, so the aim line and the hit agree. Into
 		// rebuilt game eye space for the hit test.
-		const glm::vec3 o = glm::vec3(pose * placement * glm::vec4(gunMuzzle(kind), 1.f));
+		const glm::vec3 o = glm::vec3(pose * placement * glm::vec4(muzzle, 1.f));
 		const glm::vec3 d = rot * glm::vec3(0, 0, -1);
 		const float s = worldScale();
 		const glm::vec3 og = glm::vec3(o.x, -o.y, o.z) / s;
@@ -1529,7 +1532,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		const glm::vec3 hand = palm;
 		// A long one (the hero's staff, its head 75 cm out) tips up less: its muzzle rises no
 		// more than one 40 cm from the hand would. Every pistol here is shorter.
-		const float reach = glm::distance(glm::vec3(placement * glm::vec4(gunMuzzle(kind), 1.f)), hand);
+		const float reach = glm::distance(glm::vec3(placement * glm::vec4(muzzle, 1.f)), hand);
 		const float tip = std::min(1.f, 0.4f / std::max(reach, 0.01f));
 		glm::mat4 recoilMat = glm::translate(glm::mat4(1.f), glm::vec3(0.f, 0.f, 0.035f * kick) + hand);
 		recoilMat = glm::rotate(recoilMat, glm::radians(18.f * tip * kick), glm::vec3(1, 0, 0));
@@ -1555,7 +1558,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		g.visible = config::VrShowGun && holds(g.hand) == Holds::Gun;
 		// (the slide and the open hand only for a gun that's held: not while the hand holds its controller)
 		// (a gun alone, Confidential Mission's: no hand of the game's for the other one)
-		if (game && slide && !handModel(kind)->gunOnly && holds(g.hand) == Holds::Gun)
+		if (game && slide && !model->gunOnly && holds(g.hand) == Holds::Gun)
 			updateOtherHand(time, 1 - g.hand, tracked[1 - g.hand], locations[1 - g.hand], pose * placement, gunScale, mirror);
 		else
 		{
