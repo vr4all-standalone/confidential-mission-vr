@@ -360,6 +360,10 @@ void gunAxes(const Tris& gun, dvec3 out[3])
 		if (glm::length(e) > 0.7 * longest)
 			z += e;
 	z = glm::normalize(z);
+	// square to its plane of symmetry (across it, the thinnest axis): a long gun's longest edges
+	// (Task 12's assault rifle: the stock's and the receiver's diagonals) run a little across it,
+	// which puts the muzzle off to the side
+	z = glm::normalize(z - glm::dot(z, ax[2]) * ax[2]);
 	// down: the grip, the far side of the second axis
 	dvec3 y = glm::normalize(ax[1] - glm::dot(ax[1], z) * z);
 	double lo = 1e300, hi = -1e300;
@@ -1855,6 +1859,26 @@ bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const T
 			fronts.push_back(front);
 			backs.push_back(back);
 		}
+	}
+	// a height whose rear-most piece is far from the others' isn't the grip (a long gun's magazine
+	// below it, its stock's heel above it): left out
+	{
+		std::vector<double> mids;
+		for (size_t i = 0; i < ys.size(); i++)
+			mids.push_back((fronts[i] + backs[i]) / 2);
+		const double middle = median(mids);
+		size_t kept = 0;
+		for (size_t i = 0; i < ys.size(); i++)
+			if (std::abs(mids[i] - middle) <= 0.15 * length)
+			{
+				ys[kept] = ys[i];
+				fronts[kept] = fronts[i];
+				backs[kept] = backs[i];
+				kept++;
+			}
+		ys.resize(kept);
+		fronts.resize(kept);
+		backs.resize(kept);
 	}
 	if (under - lo.y < 0.1 * length || ys.size() < 4)
 	{

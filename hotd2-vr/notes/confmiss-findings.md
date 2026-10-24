@@ -288,3 +288,23 @@ Task 4b's runs (`vr-test.ps1 -Config "$cmWiden,config:vr.WatchRam=..."`, the act
     - 210 triangles;
     - x -0.014..0.014, y -0.097..0.026, z -0.243..0.057;
     - muzzle (0, 0.012, -0.243).
+- the assault rifle (Task 12, 2026-10-23): `GunTarget` guns[2] in vr_reproject.cpp, `attractBy = 340`.
+  - Where: the attract demo, with no presses from boot, fast-forwarded. It is the run's first part while `gun-cm-rifle.bin` is missing. Start leaves the demo, and the demo doesn't come back in play, so the rifle has to come before Start. Start follows 0.5 s after the drop, and the old cabinet and pistol timeline counts from that Start.
+  - The drop: tex 662000 at 55 polys, at **315.6 s of game** in cm-rip-rifle (two runs, done after 370 s and 369 s of game), the same as t4b-attract's 315.59 s. The cap is 340 s. Past it, the log says `no assault rifle in the attract demo by 340 s of game` and the run goes on to Start.
+  - The cabinet gun is now caught in the attract part too, in the demo's how-to-play scene (~136 s of game). It came out the same, 176896 bytes.
+  - Built at 0.88 m:
+    - 273976 bytes, flags 3, 108 triangles, 2 textures;
+    - x -0.026..0.026, y -0.138..0.070, z -0.587..0.293;
+    - muzzle (0.001, 0.013, -0.587);
+    - vrcheck's grip at y -0.041: z -0.012..0.031, the origin 23 % off its middle.
+  - It needed two changes to buildGun (hands_build.cpp):
+    - The frame's z is squared to the plane of symmetry. The sum of the longest edges ran 2.43 degrees across it, which put the muzzle 0.025 m off to the side, and the build said it wasn't a gun.
+    - A grip height whose rear-most piece's middle is over 0.15 of the length from the median is left out of the grip fit: the magazine below, the stock's heel above.
+    - The old guns: the cabinet gun turns 0.008 degrees, the pistol 0.105. Both keep all their heights. vrcheck's grip readings are unchanged (3 %, 30 %).
+  - vrcheck's grip guard now takes the rear-most piece at 30 % that goes on down to 50 %. A long gun's stock heel doesn't.
+  - The flip test (the lowest points behind the middle) gives +0.015 of the length for the rifle: the right way round, but by a small margin.
+  - Run length on the PC, first line to done:
+    - before: 16.1 s on the clock, 84 s of game;
+    - after: 81.8 s on the clock, 370 s of game, with the rifle at 67.3 s on the clock (a second run: 97.8 s, 369 s of game, the rifle at 83.6 s);
+    - a run that hit the cap: 101.9 s, 395 s of game.
+  - Tests: cm-rip-cabinet and the pistol scenarios copy a seed of the rifle file (`build-win\vrtest\cm-rifle-seed.bin`, made by cm-rip-rifle) so their runs stay as short as before. A missing rifle file alone starts no run.

@@ -84,3 +84,13 @@ Before these, delete `gun-cm-cabinet.bin` and `gun-cm-pistol.bin` from the app's
 
 - [ ] After the first start, the menu's Gun row offers the agents' pistol (Task 13). The log says "VR hands: the agents' pistol from this game (complete)".
 - [ ] In the hand the agents' pistol looks whole: suppressor, slide, grip and trigger guard, with no holes and nothing inside-out (no faces you see through to the inside, from any side).
+
+## Task 12
+
+Before these, delete every `gun-cm-*.bin` from the app's data folder (or reinstall), so the first start makes all three guns.
+
+- [ ] The first start's panel stays up for the whole run: the attract demo plays to its train-car scene first, then the game is started for the other guns. Note how long it takes on the Quest, from the panel coming up to it going away (Task 15).
+- [ ] After it, the log says "VR hands: the assault rifle from this game", and the menu's Gun row offers the assault rifle (Task 13/14).
+- [ ] In the hand the assault rifle looks whole and the right way round: the muzzle forward, the stock back, the magazine and grip down, with no holes and nothing inside-out.
+- [ ] Delete only `gun-cm-rifle.bin` and start again: no panel, the game starts as usual (the rifle is only watched for in play).
+- [ ] With every file deleted, press B at the panel to skip: the arcade gun stays for the session, and the log says "VR hands: watching for the assault rifle in play".

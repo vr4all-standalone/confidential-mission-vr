@@ -59,9 +59,16 @@ constexpr double StaffGiveUpAfter = 150.0;
 // The run for Confidential Mission's guns: Start once at 30 s of game (findings startOk), its
 // SEGA logo's; the reload tutorial with the cabinet gun comes a second later (measured on the
 // PC); the cabinet gun is given up at 120 s.
+// Task 12: before that, while a gun from the attract demo (GunTarget::attractBy, the assault rifle)
+// has no file, no presses from boot: the demo drops the rifle at about 316 s of game (measured on
+// the PC). Once each such gun is made, or its attractBy has come, Start leaves the demo (CmStartAfter
+// later) for the same reload tutorial, and everything below counts from that Start as from 30 s.
+// Start can't come first: the demo doesn't come back in play.
 constexpr double CmStartAt = 30.0;
 constexpr double CmRun = 90.0;
 constexpr double CmGiveUpAfter = 120.0;
+constexpr double CmRifleRun = 316.0;	// the attract demo's part, typically (the progress bar)
+constexpr double CmStartAfter = 0.5;
 // Then the merged guns (GunTarget::merge, the agents' pistol): from the cabinet gun (or from 90 s
 // without it), Start every 2 s for 16 s, as v1's presses from 30 to 46 s did, through the gun
 // adjustment screen and the briefing to the stage 1 intro (about 50-66 s of game), where the
@@ -93,7 +100,8 @@ std::atomic<bool> gunSeen[3];	// a pass with minPolys of it since the last vblan
 std::atomic<bool> gunOver[3];	// given up (or merged) in this run
 double gunLastSeen[3];			// game seconds (run time)
 std::atomic<bool> cmCapturing;	// the merged guns' part of the run is on
-double cmMergedAt;				// ...since then (run time; < 0 not yet)
+double cmMergedAt;				// ...since then (run time as if Start came at CmStartAt; < 0 not yet)
+double cmStartAt;				// the run's Start (run time; < 0: the attract demo's part is on)
 bool cmBestSaved, cmSaved;
 bool cmStartLogged;
 double startedAt;			// game seconds at the start
@@ -125,13 +133,31 @@ bool haveModel()
 	const Source *source = gameModelSource();
 	if (source != nullptr && source->kind == Source::CmGuns)
 	{
-		// every gun's file (Task 12: but the rifle's, which comes in play)
+		// every gun's file but those from the attract demo (the assault rifle: its file missing
+		// alone starts no run, PF20; it's watched for in play)
 		for (const GunTarget& gun : source->guns)
-			if (gun.used() && !file_exists(gunPath(gun)))
+			if (gun.used() && gun.attractBy <= 0.f && !file_exists(gunPath(gun)))
 				return false;
 		return true;
 	}
 	return file_exists(modelPath()) || (!legacyModelPath().empty() && file_exists(legacyModelPath()));
+}
+
+// Confidential Mission: the guns from the attract demo still to make (gunMutex, or before the run).
+bool attractGunsLeft(const Source& source)
+{
+	for (int i = 0; i < 3; i++)
+		if (source.guns[i].attractBy > 0.f && !gunDone[i])
+			return true;
+	return false;
+}
+
+// ...and that they're watched for in play.
+void logWatched(const Source& source)
+{
+	for (int i = 0; i < 3; i++)
+		if (source.guns[i].attractBy > 0.f && !gunDone[i])
+			NOTICE_LOG(RENDERER, "VR hands: watching for the %s in play", source.guns[i].name);
 }
 
 bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete,
@@ -169,16 +195,22 @@ void onStart()
 	const Source *source = gameModelSource();
 	if (source == nullptr || !config::VrGameHands)
 		return;
-	if (haveModel())
+	cmRun = source->kind == Source::CmGuns;
+	const bool watchOnly = haveModel();
+	if (watchOnly)
 	{
 		NOTICE_LOG(RENDERER, "VR hands: %s, made before: %s", source->name(),
 				(file_exists(modelPath()) ? modelPath() : legacyModelPath()).c_str());
-		return;
+		// but a gun from the attract demo without its file: watched for in play, no run (PF20)
+		bool left = false;
+		for (const GunTarget& gun : source->guns)
+			left = left || (cmRun && gun.used() && gun.attractBy > 0.f && !file_exists(gunPath(gun)));
+		if (!left)
+			return;
 	}
 	state = Watching;
 	passes = failedAt = 0;
 	staffRun = source->kind == Source::HerosStaff;
-	cmRun = source->kind == Source::CmGuns;
 	{
 		std::lock_guard<std::mutex> lock(gunMutex);
 		for (int i = 0; i < 3; i++)
@@ -195,12 +227,18 @@ void onStart()
 		textureCache.clear();
 		cmCapturing = false;
 		cmMergedAt = -1.0;
+		cmStartAt = cmRun && attractGunsLeft(*source) ? -1.0 : CmStartAt;
 		cmBestSaved = cmSaved = false;
 	}
 	cmStartLogged = false;
 	{
 		std::lock_guard<std::mutex> lock(failureMutex);
 		lastFailure.clear();
+	}
+	if (watchOnly)
+	{
+		logWatched(*source);
+		return;
 	}
 	// The run: in the headset, or on the PC when asked (vr.HandsPrep, for testing; the OpenXR
 	// simulator counts as the PC). Never online: it presses Start for this side's player in the
@@ -238,26 +276,72 @@ void onVBlank()
 	{
 		// Confidential Mission (S23): skipped is skipped for the session, no gun made by watching
 		// play either (the reload tutorial comes right after Start), so the arcade gun stays and
-		// the next start asks again. Task 12's hook: the rifle, which only comes in play, is the
-		// one to go on watching for (mark the other guns done, and Watching).
-		stopPrep("skipped", cmRun ? Off : Watching);
+		// the next start asks again. But the guns from the attract demo (the assault rifle), which
+		// come in play too, are still watched for with vr.GameHands on (Task 12): the others are
+		// marked done, and Watching.
+		const Source *source = gameModelSource();
+		bool watch = false;
+		if (cmRun && config::VrGameHands && source != nullptr && source->kind == Source::CmGuns)
+		{
+			std::lock_guard<std::mutex> lock(gunMutex);
+			watch = attractGunsLeft(*source);
+			for (int i = 0; i < 3; i++)
+				if (source->guns[i].attractBy <= 0.f)
+					gunDone[i] = true;
+		}
+		stopPrep("skipped", cmRun && !watch ? Off : Watching);
+		if (watch)
+			logWatched(*source);
 		return;
 	}
-	const double t = gameSeconds() - startedAt;
+	const double now = gameSeconds() - startedAt;
 	if (cmRun)
 	{
-		progress = (float)std::min(t / CmRun, 0.97);
-		bool start = t >= CmStartAt && t < CmStartAt + PressHold;
-		if (start && !cmStartLogged)
-		{
-			cmStartLogged = true;
-			INFO_LOG(RENDERER, "VR hands: Start at %.1f s", t);
-		}
 		const Source *source = gameModelSource();
 		if (source == nullptr || source->kind != Source::CmGuns)
 		{
 			stopPrep("stopped");
 			return;
+		}
+		auto advance = [](double to) {
+			progress = std::max(progress.load(), (float)std::min(to, 0.97));
+		};
+		if (cmStartAt < 0.0)
+		{
+			// the attract demo's part: hands off until each of its guns is made or its time has come
+			bool waiting = false;
+			{
+				std::lock_guard<std::mutex> lock(gunMutex);
+				for (int i = 0; i < 3; i++)
+				{
+					const GunTarget& gun = source->guns[i];
+					if (gun.attractBy <= 0.f || gunDone[i] || gunOver[i])
+						continue;
+					if (now < gun.attractBy)
+						waiting = true;
+					else
+					{
+						gunOver[i] = true;
+						NOTICE_LOG(RENDERER, "VR hands: no %s in the attract demo by %.0f s of game", gun.name, now);
+					}
+				}
+			}
+			advance(now / (CmRifleRun + CmStartAfter + CmRun - CmStartAt));
+			if (waiting)
+			{
+				lightgunSet(0, OffScreen, OffScreen, 0);
+				return;
+			}
+			cmStartAt = now + CmStartAfter;
+		}
+		// the rest of the run's time as if Start came at CmStartAt
+		const double t = now - cmStartAt + CmStartAt;
+		advance(now / (cmStartAt + CmRun - CmStartAt));
+		bool start = t >= CmStartAt && t < CmStartAt + PressHold;
+		if (start && !cmStartLogged)
+		{
+			cmStartLogged = true;
+			INFO_LOG(RENDERER, "VR hands: Start at %.1f s", now);
 		}
 		// merged guns taken out (under gunMutex) to be built without it: the render thread takes it
 		// every pass, and a merge can take a second on the headset
@@ -295,7 +379,7 @@ void onVBlank()
 			{
 				cmMergedAt = t;
 				cmCapturing = true;
-				INFO_LOG(RENDERER, "VR hands: on to the merged guns at %.1f s", t);
+				INFO_LOG(RENDERER, "VR hands: on to the merged guns at %.1f s", now);
 			}
 			if (cmMergedAt >= 0.0)
 			{
@@ -344,6 +428,7 @@ void onVBlank()
 		lightgunSet(0, OffScreen, OffScreen, start ? 4 : 0);
 		return;
 	}
+	const double t = now;
 	if (staffRun)
 	{
 		// Hands off: the attract demo plays by itself.

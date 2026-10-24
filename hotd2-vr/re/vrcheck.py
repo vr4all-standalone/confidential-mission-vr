@@ -602,28 +602,34 @@ def _read_hnd(path):
 def _grip_section(pts):
     """A gun-only model's grip, across, under its origin (30 % of the way down to the gun's lowest
     point: under a trigger guard, which further up is one piece with the grip): the height, and the
-    z and x extents of the rear-most piece of the cross-section (pieces part where there's a gap of
-    2 mm; a trigger guard is in front), or None."""
+    z and x extents of the rear-most piece of the cross-section that goes on down to 50 % of the way
+    (a long gun's stock heel, behind the grip, doesn't) (pieces part where there's a gap of 2 mm; a
+    trigger guard is in front), or None."""
     tris = pts.reshape(-1, 3, 3)
+
+    def pieces_at(ys):
+        spans = []
+        for t in tris:
+            d = t[:, 1] - ys
+            hit = [t[i] for i in range(3) if d[i] == 0]
+            for i, j in ((0, 1), (1, 2), (2, 0)):
+                if d[i] * d[j] < 0:
+                    hit.append(t[i] + (t[j] - t[i]) * (d[i] / (d[i] - d[j])))
+            if hit:
+                h = np.array(hit)
+                spans.append((h[:, 2].min(), h[:, 2].max(), h[:, 0].min(), h[:, 0].max()))
+        pieces = []
+        for s in sorted(spans):
+            if pieces and s[0] <= pieces[-1][1] + 0.002:
+                p = pieces[-1]
+                pieces[-1] = (p[0], max(p[1], s[1]), min(p[2], s[2]), max(p[3], s[3]))
+            else:
+                pieces.append(s)
+        return pieces
     ys = 0.30 * pts[:, 1].min()
-    spans = []
-    for t in tris:
-        d = t[:, 1] - ys
-        hit = [t[i] for i in range(3) if d[i] == 0]
-        for i, j in ((0, 1), (1, 2), (2, 0)):
-            if d[i] * d[j] < 0:
-                hit.append(t[i] + (t[j] - t[i]) * (d[i] / (d[i] - d[j])))
-        if hit:
-            h = np.array(hit)
-            spans.append((h[:, 2].min(), h[:, 2].max(), h[:, 0].min(), h[:, 0].max()))
-    pieces = []
-    for s in sorted(spans):
-        if pieces and s[0] <= pieces[-1][1] + 0.002:
-            p = pieces[-1]
-            pieces[-1] = (p[0], max(p[1], s[1]), min(p[2], s[2]), max(p[3], s[3]))
-        else:
-            pieces.append(s)
-    return ys, (pieces[-1] if pieces else None)
+    below = pieces_at(0.50 * pts[:, 1].min())
+    hanging = [p for p in pieces_at(ys) if any(p[0] <= q[1] + 0.002 and q[0] <= p[1] + 0.002 for q in below)]
+    return ys, (hanging[-1] if hanging else None)
 
 
 def hnd(args):
@@ -921,11 +927,12 @@ def _write_png(path, rgb, filters=(0,)):
 
 
 def _synthetic_hnd(path, mirror=False, version=2, flags=HND_GUN_ONLY | HND_COMPLETE, polys=279, grip_z=(-0.02, 0.02),
-                   guard_z=None):
+                   guard_z=None, stock_z=None):
     """A boxy gun as HND1: a barrel 27 cm long along -z (y 0..4 cm) and a grip below it (y -10..0
     cm, z grip_z), origin at the grip's top, in its middle; the muzzle at (0, 2, -22) cm. mirror: z
     the other way (the muzzle at +z). guard_z: a trigger guard as well, a web from the barrel down
-    to y -2 cm over z guard_z (in front of the grip, one piece with it)."""
+    to y -2 cm over z guard_z (in front of the grip, one piece with it). stock_z: a long gun's stock
+    as well, behind the grip over z stock_z, its heel down to y -3.5 cm."""
     def box(lo, hi):
         (x0, y0, z0), (x1, y1, z1) = lo, hi
         c = [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
@@ -934,6 +941,8 @@ def _synthetic_hnd(path, mirror=False, version=2, flags=HND_GUN_ONLY | HND_COMPL
     verts = box((-0.015, 0.0, -0.22), (0.015, 0.04, 0.05)) + box((-0.012, -0.10, grip_z[0]), (0.012, 0.0, grip_z[1]))
     if guard_z is not None:
         verts += box((-0.008, -0.02, guard_z[0]), (0.008, 0.0, guard_z[1]))
+    if stock_z is not None:
+        verts += box((-0.015, -0.035, stock_z[0]), (0.015, 0.04, stock_z[1]))
     sz = -1.0 if mirror else 1.0
     out = bytearray(b'HND1') + struct.pack('<I', version)
     out += struct.pack('<3f', 0.0, 0.02, -0.22 * sz) + struct.pack('<3f', 0.0, 0.02, -0.22 * sz) + struct.pack('<f', 0.0)
@@ -1187,6 +1196,13 @@ def selftest():
             'gun.bin: gun x -0.015..0.015 y -0.100..0.040 z -0.220..0.060 (length 0.280 m), muzzle 0.000 0.020 -0.220, middle y -0.013',
             'gun.bin: grip at y -0.030: z 0.020..0.060, x -0.012..0.012; the origin 100 % of its depth off its middle',
             'FAIL gun.bin: the origin is not inside the grip (want 40 % of its depth or less off its middle)'])
+        # a long gun (Task 12's assault rifle): its stock's heel, behind the grip, reaches below the
+        # 30 % cut but not down to 50 %, so it isn't the grip; the origin in the grip passes
+        _synthetic_hnd(gun_m, stock_z=(0.06, 0.12))
+        check(['hnd', gun_m, '--gun-only'], 0, [
+            'gun.bin: HND1 v2 flags 3 (gun only, complete) source polys 279 triangles 36 textures 1',
+            'gun.bin: gun x -0.015..0.015 y -0.100..0.040 z -0.220..0.120 (length 0.340 m), muzzle 0.000 0.020 -0.220, middle y -0.009',
+            gun_grip])
         # the log's verdict and the flag agree (cm-rip-pistol-one): incomplete is flagged gun only, and
         # --complete fails it
         _synthetic_hnd(gun_m, flags=HND_GUN_ONLY, polys=90)

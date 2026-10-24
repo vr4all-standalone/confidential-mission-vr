@@ -68,6 +68,10 @@ struct GunTarget
 	uint16_t maxOpenEdges;
 	float extents[3];
 	float extentsOff;
+	// Caught in the attract demo with no presses from boot, by this many seconds of game (0: not):
+	// the run's first part while its file is missing, before Start leaves the demo. Its file
+	// missing alone starts no run, and it's watched for in play as well (hands_rip.cpp).
+	float attractBy;
 
 	bool used() const { return file != nullptr && file[0] != 0; }
 	bool has(uint32_t tex) const {

@@ -508,6 +508,12 @@ static std::vector<GameProfile> makeProfiles()
 	// grip is not part of it. 0.30 m along the barrel and the suppressor.
 	p.model.guns[1] = { "agents' pistol", "gun-cm-pistol.bin", { 0x7e2800, 0x6cc400, 0x82f800, 0x76a800 }, 91, 10, 0.30f, 0, 0, true,
 			{ 78, 10, 2, 1 }, 30, { 1.92f, 1.46f, 0.26f }, 0.10f };
+	// The assault rifle (Task 12; findings Rifle, model: and profile:): the item an enemy drops (kind
+	// 4, model 0c32bb20), one mesh, tex 662000, 55 polygons, drawn whole whenever it's drawn. The
+	// attract demo drops one in its train-car scene at about 316 s of game with no presses from boot,
+	// so the run waits for it there first (to 340 s); in play it's watched for (nothing shows it while
+	// it's held). 0.88 m, an AK's length (the model's own scale wasn't measured).
+	p.model.guns[2] = { "assault rifle", "gun-cm-rifle.bin", { 0x662000 }, 55, 55, 0.88f, 0, 0, false, {}, 0, {}, 0, 340.f };
 	list.push_back(p);
 	return list;
 }
