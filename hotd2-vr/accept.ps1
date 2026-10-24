@@ -1181,10 +1181,13 @@ function Get-LogTimes([string]$run, [string]$regex, [double]$From = 0, [double]$
 # One held burst with the rifle, from -From to -To of a run's log: the rounds the game fired (player p's shot counter
 # +0x60 watched with vr.WatchRam, a "VR: ram" line per rise) against the knocks in $hand: the pull's Shot (0.030 s,
 # 1.0) once, then Auto knocks (0.020 s, 0.6), at least $minAuto, each knock over before the next (the gaps between
-# the simulator's lines over the longest knock's 30 ms, 35 ms with a margin). $null when so (knocks = rounds +-1).
+# the simulator's lines over the longest knock's 30 ms, 35 ms with a margin). $null when so (knocks = rounds +-1), the last
+# knock within 0.1 s of the last round (the knocks keep up: no backlog), and the burst's flashes (the line the hand logs
+# when the trigger is let go, "XR: P<n> rifle burst: <k> flashes") one per round, +-1 (Ruling S33).
 function Test-RifleBurst([string]$run, [string]$hand, [int]$player, [double]$From, [double]$To, [int]$minAuto) {
 	$counter = '{0:x8}' -f (0x0C1557B8 + 276 * $player + 0x60)
-	$rounds = @(Get-LogTimes $run "VR: ram $counter " $From $To).Count
+	$roundTimes = @(Get-LogTimes $run "VR: ram $counter " $From $To)
+	$rounds = $roundTimes.Count
 	$shots = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.030 1\.000" $From $To).Count
 	$auto = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.020 0\.600" $From $To).Count
 	$all = @(Get-LogTimes $run "XRSIM: haptic $hand " $From $To)
@@ -1198,17 +1201,28 @@ function Test-RifleBurst([string]$run, [string]$hand, [int]$player, [double]$Fro
 	if ([Math]::Abs($all.Count - $rounds) -gt 1) { return "$($all.Count) knocks for $rounds rounds" }
 	if ($auto -lt $minAuto) { return "$auto Auto knocks, want $minAuto or more" }
 	if ($all.Count -gt 1 -and $min -lt 0.035) { return "two knocks $(T $min) s apart: they run into each other" }
+	$lag = if ($all.Count -and $rounds) { $all[-1] - $roundTimes[-1] } else { 0 }
+	Write-Host ("  the last knock {0:0.000} s after the last round (at most 0.1)" -f $lag)
+	if ([Math]::Abs($lag) -gt 0.1) { return "the last knock $(T $lag) s after the last round: the knocks fall behind" }
+	$burst = Select-String -LiteralPath (Get-RunLog $run) -Pattern "XR: P$($player + 1) rifle burst: (\d+) flashes" -CaseSensitive |
+		Where-Object { $_.Line -match '^(\d+):(\d\d):(\d{3}) ' -and ($t = [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000) -ge $From -and $t -lt $To + 1 } |
+		Select-Object -First 1
+	if (-not $burst) { return "no 'XR: P$($player + 1) rifle burst: <n> flashes' line: one flash for the whole burst?" }
+	$flashes = [int]([regex]::Match($burst.Line, 'burst: (\d+) flashes').Groups[1].Value)
+	Write-Host "  $flashes flashes for $rounds rounds"
+	if ([Math]::Abs($flashes - $rounds) -gt 1) { return "$flashes flashes for $rounds rounds: want one each" }
 	return $null
 }
 
 # The rifle in player 1's hand, through the simulator: the rifle poked at 52.6 s (stage 1's first room), the right
 # hand in view pointing ahead; the trigger held 2 s from 53.5 s (24 rounds: a Shot and Auto knocks, at least
 # floor(1.5 x 12) = 18) and 2.5 s from 57.5 s (the 21 left: the game gives the pistol back at ~59.3 s, the hand the
-# chosen gun), then a pull at 61 s (the pistol's Shot). Window shots of the hand at 56 s (the rifle) and 62 s.
+# chosen gun), then a pull at 61 s (the pistol's Shot). Window shots of the hand at 52.4 s (the pistol, before the poke:
+# the same room, so a shot that differs shows the gun changed, not the scene; Ruling S33) and 56 s (the rifle).
 function Get-CmRifleSimParams([string]$name, [double]$seconds) {
 	@{ Game = 'confmiss'; Name = $name; Seconds = $seconds; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c155818:2"
 		At = @('20=pose right 0.1 1.45 -0.3 0 0') + @(Get-CmStartsXr) + @(Get-CmRiflePoke 52.6) +
-			'53.5=xr right/trigger 1 2000', '56=shot rifle', '57.5=xr right/trigger 1 2500', '61=xr right/trigger 1 100', '62=shot pistol'
+			'53.5=xr right/trigger 1 2000', '56=shot rifle', '57.5=xr right/trigger 1 2500', '61=xr right/trigger 1 100', '52.4=shot pistol'
 		Reject = @('XR: initialisation failed', 'XRSIM: haptic right 0\.012') }
 }
 # With the rifle's file: its model in the hand ("XR: P1 hand: assault rifle (gun-cm-rifle.bin)"), the knocks, the
@@ -1226,6 +1240,10 @@ function Test-CmRifleSim {
 	$weapon = Get-LogCount $name 'VR: P[12] weapon '
 	Write-Host "  $weapon weapon lines (want 2: player 1's pistol -> rifle and back)"
 	if ($weapon -ne 2) { return "$weapon weapon lines, want 2" }
+	# the rifle's model loaded at the start with the other guns, not mid-play at the pickup (52.6 s; Ruling S33)
+	$loadedAt = Get-LogClock (Get-RunLog $name) "XR: the game's own model from .*gun-cm-rifle\.bin"
+	Write-Host "  the rifle's model loaded at $(T $loadedAt) s (want before 50 s: the pickup is at 52.6 s, about 52.4 s on the log's clock)"
+	if ($loadedAt -ge 50) { return "the rifle's model loaded at $(T $loadedAt) s, at the pickup: want it at the start" }
 	foreach ($burst in @(53.2, 56.3), @(57.2, 60.8)) {
 		$why = Test-RifleBurst $name 'right' 0 $burst[0] $burst[1] 18
 		if ($why) { return "the burst from $(T $burst[0]) s: $why" }
@@ -1235,9 +1253,9 @@ function Test-CmRifleSim {
 	Write-Host "  after the rifle: $shot Shot knocks (want 1), $auto Auto (want 0)"
 	if ($shot -ne 1 -or $auto -ne 0) { return "after the rifle: $shot Shot and $auto Auto knocks, want 1 and 0" }
 	$dir = Join-Path $repo "build-win\vrtest\$name"
-	$why = Test-RunShots $name 't056-rifle.png', 't062-pistol.png'
+	$why = Test-RunShots $name 't056-rifle.png', 't052.4-pistol.png'
 	if ($why) { return $why }
-	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't056-rifle.png'), (Join-Path $dir 't062-pistol.png'), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't056-rifle.png'), (Join-Path $dir 't052.4-pistol.png'), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
 	if ($why) { return "the rifle and the pistol look alike: $why" }
 	$arcade = 'accept-cm-rifle-sim-arcade'
 	$held = "$cmRifleFile.hold"

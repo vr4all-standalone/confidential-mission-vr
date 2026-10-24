@@ -414,6 +414,10 @@ GunKind chosenGun()
 	refresh();
 	if (!cmGuns())
 		return GunKind::Arcade;	// (another game's own model takes no choosing: handModel())
+	// the assault rifle's model too, read at the start with the other guns (drawHands() puts it on
+	// the GPU with them): at the pickup, mid-play, it could cost the headset a frame (Ruling S33)
+	if (config::VrGameHands)
+		gunModel(GunKind::Rifle);
 	// (a setting this build doesn't know is Auto, as the menu's row shows it)
 	int setting = config::VrGun;
 	if (setting < 0 || setting > 3)
@@ -512,8 +516,12 @@ void drawHands(const glm::mat4& viewProj, const glm::vec3& eyePos, const HandsVi
 			found = &slot.model;
 	if (found == nullptr || !initGl())
 		return;
+	// every model loaded goes to the GPU at the first draw, not just this one: the assault
+	// rifle's at its pickup mid-play could cost a frame (Ruling S33)
+	for (Slot& slot : slots)
+		if (slot.loaded)
+			upload(slot.model);
 	Model& model = *found;
-	upload(model);
 	glcache.UseProgram(program);
 	glUniform3f(uEye, eyePos.x, eyePos.y, eyePos.z);
 	glUniform4f(uLight, view.muzzleLight.x, view.muzzleLight.y, view.muzzleLight.z, view.muzzleLight.w);

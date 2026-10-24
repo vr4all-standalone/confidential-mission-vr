@@ -149,6 +149,10 @@ struct Gun
 	bool pullOutside;
 	XrTime lastShot;
 	unsigned shotCount;
+	// The last flash was a round of the rifle's burst after the pull (a smaller kick); the flashes
+	// since the trigger was pulled (with the rifle logged once it's let go).
+	bool autoKick;
+	unsigned burstFlashes;
 	// When the last reload started (racked slide, gun pointed down; 0: done), and a
 	// trigger held through it.
 	XrTime reloadAt;
@@ -1489,6 +1493,12 @@ void gunKnocks(Gun& g, XrTime time, bool trigger)
 		{
 			g.autosDue--;
 			lasts = autoKnock(g.hand);
+			// each round of the burst flashes and kicks too, a little (Ruling S33: one flash for the
+			// whole burst looked like the rifle had stopped)
+			g.lastShot = time;
+			g.shotCount++;
+			g.autoKick = true;
+			g.burstFlashes++;
 		}
 		else
 		{
@@ -1566,13 +1576,18 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		// Recoil: back and muzzle up around the hand, with a small bounce (gunKick) and a
 		// little sideways twist that differs per shot. A shot fired now shows its flash
 		// and kick in this very frame.
+		if (trigger && !g.triggerWas)
+			g.burstFlashes = 0;
 		if (trigger && !g.triggerWas && onScreen)
 		{
 			g.lastShot = time;
 			g.shotCount++;
+			g.autoKick = false;
+			g.burstFlashes = 1;
 		}
 		const float sinceShot = g.lastShot != 0 ? (time - g.lastShot) * 1e-9f : 1e9f;
-		const float kick = gunKick(sinceShot);
+		// (a round of the rifle's burst after the pull: half the kick)
+		const float kick = gunKick(sinceShot) * (g.autoKick ? 0.5f : 1.f);
 		const float twist = ((g.shotCount * 2654435761u) >> 24) / 255.f - 0.5f;	// -0.5..0.5 per shot
 		const glm::vec3 hand = palm;
 		// A long one (the hero's staff, its head 75 cm out) tips up less: its muzzle rises no
@@ -1637,6 +1652,8 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		return;
 	}
 	gunKnocks(g, time, trigger);
+	if (!trigger && g.triggerWas && g.burstFlashes > 1)
+		NOTICE_LOG(INPUT, "XR: P%d rifle burst: %u flashes", g.player + 1, g.burstFlashes);
 
 	// Seen but outside the game's view: the trigger does nothing (no shot, no reload).
 	const bool outside = !onScreen && aimOutside;
