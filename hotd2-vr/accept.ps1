@@ -27,6 +27,9 @@
   cm-rip-pistol plays accept-cm-rip-pistol (it deletes the files, the run goes on from the cabinet
   gun to the agents' pistol in the stage 1 intro and leaves both files there), cm-rip-pistol-one
   accept-cm-rip-pistol-one (the same with one capture merged; each pass draws all of it, so it's whole too).
+  cm-merge-unit plays nothing: it compiles re\hands_build_test.cpp with core\rend\vr\hands_build.cpp
+  (the VS 2022 Build Tools, as build-win.cmd; into build-win\vrtest\cm-merge-unit, not the app),
+  runs it (the pistol's merge on synthetic captures) and then vrcheck.py's selftest.
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -999,6 +1002,19 @@ function Test-CmRipPistolOne {
 	return Invoke-VrCheck $check -Want @(if ($complete) { 'flags 3 ' } else { 'flags 1 \(gun only\)' })
 }
 
+# The merge of a gun's captures (hands_build.cpp's mergeCaptures) on synthetic captures, built and run
+# on its own (re\hands_build_test.cmd), then vrcheck.py's selftest; -Reuse changes nothing here.
+function Test-CmMergeUnit {
+	$out = @(& cmd /c (Join-Path $PSScriptRoot 're\hands_build_test.cmd') (Join-Path $repo 'build-win\vrtest\cm-merge-unit'))
+	$code = $LASTEXITCODE
+	$out | ForEach-Object { Write-Host "  $_" }
+	if ($code -ne 0) {
+		$why = ($out | Where-Object { $_ -match '^FAIL|error' } | Select-Object -First 3) -join '; '
+		return "hands_build_test exit ${code}: $why"
+	}
+	return Invoke-VrCheck @('selftest') -Want @('^selftest OK$')
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
@@ -1009,6 +1025,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-hands' = 'Test-CmHands'; 'cm-hands-shot' = 'Test-CmHandsShot'
 	'cm-rip-cabinet' = 'Test-CmRipCabinet'; 'cm-rip-hand' = 'Test-CmRipHand'; 'cm-rip-skip' = 'Test-CmRipSkip'
 	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'
+	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

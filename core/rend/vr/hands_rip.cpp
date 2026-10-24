@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <iterator>
@@ -135,7 +136,7 @@ bool haveModel()
 
 bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete,
 		const std::string *verdict = nullptr);
-void finishMerged(const GunTarget& gun, int i);
+void finishMerged(const GunTarget& gun, int i, std::vector<Rip> captures, std::vector<CachedTexture> cache);
 
 // The run over: back to the game as it was, still watching for the scene in play (next), or not.
 void stopPrep(const char *why, State next = Watching)
@@ -145,6 +146,16 @@ void stopPrep(const char *why, State next = Watching)
 	state = next;
 	settings.input.fastForwardMode = fastForwardWas;
 	lightgunSet(0, OffScreen, OffScreen, 0);
+	if (cmRun)
+	{
+		// the merged guns' captures and their textures (up to ~20 MB) go: nothing is captured
+		// outside the run (gunMutex: not held by the callers)
+		std::lock_guard<std::mutex> lock(gunMutex);
+		cmCapturing = false;
+		for (std::vector<Rip>& captures : gunCaptures)
+			std::vector<Rip>().swap(captures);
+		std::vector<CachedTexture>().swap(textureCache);
+	}
 	NOTICE_LOG(RENDERER, "VR hands: %s after %.0f s of game", why, gameSeconds() - startedAt);
 }
 
@@ -248,64 +259,86 @@ void onVBlank()
 			stopPrep("stopped");
 			return;
 		}
-		std::lock_guard<std::mutex> lock(gunMutex);
-		// at 120 s, each gun seen whole or not at all from the fullest capture of it, if any
-		if (t > CmGiveUpAfter && !cmBestSaved)
+		// merged guns taken out (under gunMutex) to be built without it: the render thread takes it
+		// every pass, and a merge can take a second on the headset
+		struct Merge { int i; std::vector<Rip> captures; std::vector<CachedTexture> textures; };
+		std::vector<Merge> merges;
 		{
-			cmBestSaved = true;
-			for (int i = 0; i < 3; i++)
-				if (!source->guns[i].merge && !gunDone[i])
-				{
-					if (!gunBest[i].empty())
-						saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i], false);
-					gunOver[i] = true;
-				}
-		}
-		// the merged ones once the others are made (or at 90 s)
-		bool othersDone = true, merging = false;
-		for (int i = 0; i < 3; i++)
-		{
-			if (gunSeen[i].exchange(false))
-				gunLastSeen[i] = t;
-			if (!gunDone[i] && !gunOver[i])
+			std::lock_guard<std::mutex> lock(gunMutex);
+			// at 120 s, each gun seen whole or not at all from the fullest capture of it, if any
+			if (t > CmGiveUpAfter && !cmBestSaved)
 			{
-				if (source->guns[i].merge)
-					merging = true;
-				else
-					othersDone = false;
+				cmBestSaved = true;
+				for (int i = 0; i < 3; i++)
+					if (!source->guns[i].merge && !gunDone[i])
+					{
+						if (!gunBest[i].empty())
+							saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i], false);
+						gunOver[i] = true;
+					}
+			}
+			// the merged ones once the others are made (or at 90 s)
+			bool othersDone = true, merging = false;
+			for (int i = 0; i < 3; i++)
+			{
+				if (gunSeen[i].exchange(false))
+					gunLastSeen[i] = t;
+				if (!gunDone[i] && !gunOver[i])
+				{
+					if (source->guns[i].merge)
+						merging = true;
+					else
+						othersDone = false;
+				}
+			}
+			if (cmMergedAt < 0.0 && merging && t >= CmStartAt && (othersDone || t >= CmMergedBy))
+			{
+				cmMergedAt = t;
+				cmCapturing = true;
+				INFO_LOG(RENDERER, "VR hands: on to the merged guns at %.1f s", t);
+			}
+			if (cmMergedAt >= 0.0)
+			{
+				const double since = t - cmMergedAt;
+				start = start || (since < CmPressFor + PressHold && std::fmod(since, PressEvery) < PressHold);
+				for (int i = 0; i < 3; i++)
+					if (source->guns[i].merge && !gunDone[i] && !gunOver[i]
+							&& ((gunLastSeen[i] >= 0.0 && t - gunLastSeen[i] >= CmQuietFor) || t >= CmLastAt))
+					{
+						gunOver[i] = true;
+						Merge& m = merges.emplace_back();
+						m.i = i;
+						m.captures.swap(gunCaptures[i]);
+					}
+				// the textures go with them (a copy while another merged gun is still capturing)
+				bool still = false;
+				for (int i = 0; i < 3; i++)
+					still = still || (source->guns[i].merge && !gunDone[i] && !gunOver[i]);
+				for (size_t k = 0; k < merges.size(); k++)
+					if (k + 1 == merges.size() && !still)
+						merges[k].textures.swap(textureCache);
+					else
+						merges[k].textures = textureCache;
 			}
 		}
-		if (cmMergedAt < 0.0 && merging && t >= CmStartAt && (othersDone || t >= CmMergedBy))
-		{
-			cmMergedAt = t;
-			cmCapturing = true;
-			INFO_LOG(RENDERER, "VR hands: on to the merged guns at %.1f s", t);
-		}
-		if (cmMergedAt >= 0.0)
-		{
-			const double since = t - cmMergedAt;
-			start = start || (since < CmPressFor + PressHold && std::fmod(since, PressEvery) < PressHold);
-			for (int i = 0; i < 3; i++)
-				if (source->guns[i].merge && !gunDone[i] && !gunOver[i]
-						&& ((gunLastSeen[i] >= 0.0 && t - gunLastSeen[i] >= CmQuietFor) || t >= CmLastAt))
-				{
-					finishMerged(source->guns[i], i);
-					gunOver[i] = true;
-				}
-		}
+		for (Merge& m : merges)
+			finishMerged(source->guns[m.i], m.i, std::move(m.captures), std::move(m.textures));
 		// over when each gun is made or given up
-		bool over = true, all = true;
-		for (int i = 0; i < 3; i++)
+		bool over = true, all = true, saved;
 		{
-			over = over && (gunDone[i] || gunOver[i]);
-			all = all && gunDone[i];
+			std::lock_guard<std::mutex> lock(gunMutex);
+			for (int i = 0; i < 3; i++)
+			{
+				over = over && (gunDone[i] || gunOver[i]);
+				all = all && gunDone[i];
+			}
+			saved = cmSaved;
 		}
 		if (over)
 		{
-			cmCapturing = false;
-			if (cmSaved)
+			if (saved)
 				progress = 1.f;
-			stopPrep(cmSaved ? "done" : "no gun came up whole (gave up)", all ? Off : Watching);
+			stopPrep(saved ? "done" : "no gun came up whole (gave up)", all ? Off : Watching);
 			return;
 		}
 		lightgunSet(0, OffScreen, OffScreen, start ? 4 : 0);
@@ -440,19 +473,18 @@ u32 textureOf(const PolyParam& pp) {
 	return pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
 }
 
-// A merged gun's captures (gunMutex held, emu thread): put together into its model and saved,
-// complete or not, with what the merge did in the log.
-void finishMerged(const GunTarget& gun, int i)
+// A merged gun's captures and the textures they use, taken out of gunMutex's care (emu thread):
+// put together into its model without the lock, then saved under it, complete or not, with what the
+// merge did (and how long it took) in the log. They're let go of on the way out.
+void finishMerged(const GunTarget& gun, int i, std::vector<Rip> captures, std::vector<CachedTexture> cache)
 {
-	std::vector<Rip> captures;
-	captures.swap(gunCaptures[i]);
 	if (captures.empty())
 	{
 		WARN_LOG(RENDERER, "VR hands: the %s never came up", gun.name);
 		return;
 	}
-	const TextureSource textures = [](u32 tcw, u32 size, Image& image) {
-		for (const CachedTexture& c : textureCache)
+	const TextureSource textures = [&cache](u32 tcw, u32 size, Image& image) {
+		for (const CachedTexture& c : cache)
 			if (c.tcw == tcw && c.size == (size & 0x3F))
 			{
 				image = c.image;
@@ -464,18 +496,21 @@ void finishMerged(const GunTarget& gun, int i)
 	std::string error;
 	bool complete = false;
 	GunReport r;
+	const auto from = std::chrono::steady_clock::now();
 	const bool built = buildGun(captures, gun, textures, model, error, &complete, &r);
+	const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - from).count();
 	NOTICE_LOG(RENDERER, "VR hands: the %s: %u captures, %u merged onto the fullest (no. %u, %u polygons; %u didn't fit, "
-			"worst rms %.4f %% of its length): %u polygons %u/%u/%u/%u, the body's open edges %u, extents 1 : %.3f : %.3f",
-			gun.name, r.captures, r.merged, r.reference + 1, r.referencePolys, r.dropped, r.rms * 100.0, r.polys,
-			r.texturePolys[0], r.texturePolys[1], r.texturePolys[2], r.texturePolys[3], r.openEdges, r.extents[1], r.extents[2]);
-	textureCache.clear();
+			"worst rms %.4f %% of its length): %u polygons %u/%u/%u/%u, the body's open edges %u, extents 1 : %.3f : %.3f; "
+			"built in %.0f ms", gun.name, r.captures, r.merged, r.reference + 1, r.referencePolys, r.dropped, r.rms * 100.0,
+			r.polys, r.texturePolys[0], r.texturePolys[1], r.texturePolys[2], r.texturePolys[3], r.openEdges, r.extents[1],
+			r.extents[2], ms);
 	if (!built)
 	{
 		WARN_LOG(RENDERER, "VR hands: the %s, but %s", gun.name, error.c_str());
 		return;
 	}
 	const std::string verdict = complete ? std::string("complete") : "incomplete: " + r.incomplete;
+	std::lock_guard<std::mutex> lock(gunMutex);
 	saveGun(gun, i, model, r.polys, complete, &verdict);
 }
 
@@ -570,7 +605,7 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 	const TextureSource textures = [](u32 tcw, u32 tsp, Image& image) {
 		return decodeTexture(&vram[0], VRAM_SIZE, PALETTE_RAM, PAL_RAM_CTRL, tcw, tsp, image);
 	};
-	std::lock_guard<std::mutex> lock(gunMutex);
+	std::unique_lock<std::mutex> lock(gunMutex);
 	for (int i = 0; i < 3; i++)
 	{
 		const GunTarget& gun = source.guns[i];
@@ -639,6 +674,7 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 		if (!saveGun(gun, i, model, runCount, true))
 			gunFailedAt[i] = passes;
 	}
+	lock.unlock();	// stopPrep takes it
 	for (int i = 0; i < 3; i++)
 		if (!gunDone[i])
 			return;

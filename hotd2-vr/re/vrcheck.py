@@ -600,11 +600,12 @@ def _read_hnd(path):
 
 
 def _grip_section(pts):
-    """A gun-only model's grip, across, a little under its origin (15 % of the way down to the
-    gun's lowest point): the height, and the z and x extents of the piece of the cross-section
-    whose middle is nearest the origin (pieces part where there's a gap of 2 mm), or None."""
+    """A gun-only model's grip, across, under its origin (30 % of the way down to the gun's lowest
+    point: under a trigger guard, which further up is one piece with the grip): the height, and the
+    z and x extents of the rear-most piece of the cross-section (pieces part where there's a gap of
+    2 mm; a trigger guard is in front), or None."""
     tris = pts.reshape(-1, 3, 3)
-    ys = 0.15 * pts[:, 1].min()
+    ys = 0.30 * pts[:, 1].min()
     spans = []
     for t in tris:
         d = t[:, 1] - ys
@@ -622,7 +623,7 @@ def _grip_section(pts):
             pieces[-1] = (p[0], max(p[1], s[1]), min(p[2], s[2]), max(p[3], s[3]))
         else:
             pieces.append(s)
-    return ys, (min(pieces, key=lambda p: abs(p[0] + p[1])) if pieces else None)
+    return ys, (pieces[-1] if pieces else None)
 
 
 def hnd(args):
@@ -919,16 +920,20 @@ def _write_png(path, rgb, filters=(0,)):
                 + chunk(b'IDAT', zlib.compress(b''.join(rows))) + chunk(b'IEND', b''))
 
 
-def _synthetic_hnd(path, mirror=False, version=2, flags=HND_GUN_ONLY | HND_COMPLETE, polys=279, grip_z=(-0.02, 0.02)):
+def _synthetic_hnd(path, mirror=False, version=2, flags=HND_GUN_ONLY | HND_COMPLETE, polys=279, grip_z=(-0.02, 0.02),
+                   guard_z=None):
     """A boxy gun as HND1: a barrel 27 cm long along -z (y 0..4 cm) and a grip below it (y -10..0
     cm, z grip_z), origin at the grip's top, in its middle; the muzzle at (0, 2, -22) cm. mirror: z
-    the other way (the muzzle at +z)."""
+    the other way (the muzzle at +z). guard_z: a trigger guard as well, a web from the barrel down
+    to y -2 cm over z guard_z (in front of the grip, one piece with it)."""
     def box(lo, hi):
         (x0, y0, z0), (x1, y1, z1) = lo, hi
         c = [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
         faces = ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3))
         return [c[i] for a, b, cc, d in faces for i in (a, b, cc, a, cc, d)]
     verts = box((-0.015, 0.0, -0.22), (0.015, 0.04, 0.05)) + box((-0.012, -0.10, grip_z[0]), (0.012, 0.0, grip_z[1]))
+    if guard_z is not None:
+        verts += box((-0.008, -0.02, guard_z[0]), (0.008, 0.0, guard_z[1]))
     sz = -1.0 if mirror else 1.0
     out = bytearray(b'HND1') + struct.pack('<I', version)
     out += struct.pack('<3f', 0.0, 0.02, -0.22 * sz) + struct.pack('<3f', 0.0, 0.02, -0.22 * sz) + struct.pack('<f', 0.0)
@@ -1159,7 +1164,7 @@ def selftest():
         gun_head = 'gun.bin: HND1 v2 flags 3 (gun only, complete) source polys 279 triangles 24 textures 1'
         gun_ext = ('gun.bin: gun x -0.015..0.015 y -0.100..0.040 z -0.220..0.050 (length 0.270 m), '
                    'muzzle 0.000 0.020 -0.220, middle y -0.015')
-        gun_grip = 'gun.bin: grip at y -0.015: z -0.020..0.020, x -0.012..0.012; the origin 0 % of its depth off its middle'
+        gun_grip = 'gun.bin: grip at y -0.030: z -0.020..0.020, x -0.012..0.012; the origin 0 % of its depth off its middle'
         check(['hnd', gun_m, '--polys', '279', '--length', '0.27', '--gun-only', '--complete'], 0, [gun_head, gun_ext, gun_grip])
         check(['hnd', gun_m, '--polys', '280'], 1, [gun_head, gun_ext, gun_grip, 'FAIL gun.bin: 279 source polys, want 280 or more'])
         check(['hnd', gun_m, '--length', '0.3'], 1, [gun_head, gun_ext, gun_grip, 'FAIL gun.bin: length 0.270 m, want 0.300 +-5 %'])
@@ -1172,8 +1177,22 @@ def selftest():
         check(['hnd', gun_m, '--gun-only'], 1, [
             gun_head, 'gun.bin: gun x -0.015..0.015 y -0.100..0.040 z -0.220..0.070 (length 0.290 m), '
             'muzzle 0.000 0.020 -0.220, middle y -0.015',
-            'gun.bin: grip at y -0.015: z 0.030..0.070, x -0.012..0.012; the origin 125 % of its depth off its middle',
+            'gun.bin: grip at y -0.030: z 0.030..0.070, x -0.012..0.012; the origin 125 % of its depth off its middle',
             'FAIL gun.bin: the origin is not inside the grip (want 40 % of its depth or less off its middle)'])
+        # the origin in a trigger guard (at the 15 % cut of Task 11 the guard and the grip were one
+        # piece, z -0.050..0.060, and the origin read 5 % off its middle)
+        _synthetic_hnd(gun_m, grip_z=(0.02, 0.06), guard_z=(-0.05, 0.02))
+        check(['hnd', gun_m, '--gun-only'], 1, [
+            'gun.bin: HND1 v2 flags 3 (gun only, complete) source polys 279 triangles 36 textures 1',
+            'gun.bin: gun x -0.015..0.015 y -0.100..0.040 z -0.220..0.060 (length 0.280 m), muzzle 0.000 0.020 -0.220, middle y -0.013',
+            'gun.bin: grip at y -0.030: z 0.020..0.060, x -0.012..0.012; the origin 100 % of its depth off its middle',
+            'FAIL gun.bin: the origin is not inside the grip (want 40 % of its depth or less off its middle)'])
+        # the log's verdict and the flag agree (cm-rip-pistol-one): incomplete is flagged gun only, and
+        # --complete fails it
+        _synthetic_hnd(gun_m, flags=HND_GUN_ONLY, polys=90)
+        check(['hnd', gun_m, '--polys', '10', '--gun-only', '--complete'], 1, [
+            'gun.bin: HND1 v2 flags 1 (gun only) source polys 90 triangles 24 textures 1', gun_ext, gun_grip,
+            'FAIL gun.bin: not flagged complete'])
         _synthetic_hnd(gun_m, flags=HND_COMPLETE)
         check(['hnd', gun_m, '--gun-only'], 1, ['gun.bin: HND1 v2 flags 2 (complete) source polys 279 triangles 24 textures 1',
                                                 gun_ext, 'FAIL gun.bin: not flagged gun only'])

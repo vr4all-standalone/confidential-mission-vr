@@ -1162,14 +1162,18 @@ struct UvKey
 
 // A merged gun's captures (GunTarget::merge) brought together in the eye space of the one with
 // the most of its body (textures[0]): every other one fitted onto that by the corners both have
-// (UvKey, each in one place in each), at least 8 of them and rms 1 % of the body's length at
-// most (else dropped); its polygons moved by the fit. The corners are welded: the fullest
-// capture's where they meet, another's onto the nearest one so far with its UvKey (within 5 % of
-// the length: a texture can be used twice, on the gun's two sides), else where they meet (to the
-// fit's error), so that a corner a frame's projection or the fit moved a little is still the same
-// one. A polygon is one by its texture and its welded corners: the first one seen of each is
-// kept, the fullest capture's first. Out: those polygons re-projected into
-// that capture's view (merged), so that the rest goes as for one capture, and the checks.
+// (UvKey, each in one place in every capture: a texture can be used twice, on the gun's two sides,
+// and a capture that shows one side only can't tell), at least 8 of them and rms 1 % of the body's
+// length at most (else dropped); its polygons moved by the fit. The corners are welded: the fullest
+// capture's where they meet (to 1e-4 of the length, so that float noise between its parts doesn't
+// split a seam); another's onto the nearest one so far with its UvKey, within 5 % of the length, one
+// to one (two of its corners never onto one: mirrored twins near the middle stay apart), else where
+// they meet (to the fit's error), so that a corner a frame's projection or the fit moved a little is
+// still the same one. A polygon is one by its texture and its welded corners: the first one seen of
+// each is kept, the fullest capture's first, and drawn at the welded corners (so that its seams meet
+// its neighbours whichever capture they came from). Out: those polygons re-projected into that
+// capture's view (merged; one with a corner behind its camera left out), so that the rest goes as
+// for one capture, and the checks on what's in it.
 bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& picks, const GunTarget& target,
 		Rip& merged, Polys& polys, GunReport& report, std::string& error)
 {
@@ -1218,6 +1222,9 @@ bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& p
 		error = "it has no length";
 		return false;
 	}
+	auto keyOf = [](const RipPoly& p, size_t k) {
+		return UvKey { p.texture(), std::lround(p.v[k].u * 1024.0), std::lround(p.v[k].v * 1024.0) };
+	};
 	auto keyed = [&](size_t c) {
 		std::map<UvKey, std::pair<dvec3, bool>> keys;	// where, and in one place only
 		for (const RipPoly *p : picks[c])
@@ -1225,14 +1232,20 @@ bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& p
 			const std::vector<dvec3> e = eye(captures[c], *p);
 			for (size_t k = 0; k < e.size(); k++)
 			{
-				const UvKey key { p->texture(), std::lround(p->v[k].u * 1024.0), std::lround(p->v[k].v * 1024.0) };
-				auto [it, fresh] = keys.try_emplace(key, e[k], true);
+				auto [it, fresh] = keys.try_emplace(keyOf(*p, k), e[k], true);
 				if (!fresh && glm::length(it->second.first - e[k]) > 0.002 * length)
 					it->second.second = false;
 			}
 		}
 		return keys;
 	};
+	// a key in two places in any capture is left out of every fit: a capture that shows one of the
+	// gun's sides only can't tell, and would be fitted side onto side
+	std::set<UvKey> ambiguous;
+	for (size_t c = 0; c < captures.size(); c++)
+		for (const auto& [key, at] : keyed(c))
+			if (!at.second)
+				ambiguous.insert(key);
 	// the welded corners, found through a grid of cells a hundredth of the body's length
 	std::vector<dvec3> corner;
 	std::unordered_map<PointKey, std::vector<uint32_t>, PointHash> grid;
@@ -1266,47 +1279,79 @@ bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& p
 		return best;
 	};
 	std::map<UvKey, std::vector<uint32_t>> byKey;	// the welded corners with each UvKey
-	struct Kept { const RipPoly *src; std::vector<dvec3> pos; std::vector<uint32_t> ids; };
+	struct Kept { const RipPoly *src; std::vector<uint32_t> ids; };
 	std::vector<Kept> kept;
 	std::set<std::pair<uint32_t, std::vector<uint32_t>>> seen;
 	auto add = [&](size_t c, const Rigid *fit, double tol) {
-		for (const RipPoly *p : picks[c])
+		const Polys& ps = picks[c];
+		std::vector<std::vector<dvec3>> pos(ps.size());
+		for (size_t j = 0; j < ps.size(); j++)
 		{
-			Kept k { p, eye(captures[c], *p), {} };
-			for (size_t i = 0; i < k.pos.size(); i++)
-			{
-				dvec3& e = k.pos[i];
-				if (fit != nullptr)
+			pos[j] = eye(captures[c], *ps[j]);
+			if (fit != nullptr)
+				for (dvec3& e : pos[j])
 					e = (*fit)(e);
-				const UvKey key { p->texture(), std::lround(p->v[i].u * 1024.0), std::lround(p->v[i].v * 1024.0) };
-				std::vector<uint32_t>& same = byKey[key];
-				uint32_t id = UINT32_MAX;
-				double bestD = 0.05 * length;
-				if (fit != nullptr)
-					for (uint32_t s : same)
-					{
-						const double d = glm::length(corner[s] - e);
-						if (d <= bestD)
-						{
-							id = s;
-							bestD = d;
-						}
-					}
-				if (id == UINT32_MAX)
+		}
+		// another capture's corners onto the welded ones with their keys: its places (a corner of
+		// several of its polygons is one place) per key, the nearest pairs first, one to one
+		std::map<std::pair<size_t, size_t>, uint32_t> snapped;	// (polygon, corner): welded corner
+		if (fit != nullptr)
+		{
+			struct Place { dvec3 at; std::vector<std::pair<size_t, size_t>> uses; };
+			std::map<UvKey, std::vector<Place>> places;
+			for (size_t j = 0; j < ps.size(); j++)
+				for (size_t i = 0; i < pos[j].size(); i++)
 				{
-					id = weld(e, tol);
-					if (std::find(same.begin(), same.end(), id) == same.end())
-						same.push_back(id);
+					std::vector<Place>& same = places[keyOf(*ps[j], i)];
+					auto it = std::find_if(same.begin(), same.end(), [&](const Place& pl) { return glm::length(pl.at - pos[j][i]) <= tol; });
+					if (it == same.end())
+						it = same.insert(same.end(), Place { pos[j][i], {} });
+					it->uses.emplace_back(j, i);
 				}
+			for (const auto& [key, same] : places)
+			{
+				const auto known = byKey.find(key);
+				if (known == byKey.end())
+					continue;
+				std::vector<std::tuple<double, size_t, uint32_t>> pairs;
+				for (size_t a = 0; a < same.size(); a++)
+					for (uint32_t s : known->second)
+					{
+						const double d = glm::length(corner[s] - same[a].at);
+						if (d <= 0.05 * length)
+							pairs.emplace_back(d, a, s);
+					}
+				std::sort(pairs.begin(), pairs.end());
+				std::vector<bool> placed(same.size());
+				std::set<uint32_t> taken;
+				for (const auto& [d, a, s] : pairs)
+					if (!placed[a] && taken.insert(s).second)
+					{
+						placed[a] = true;
+						for (const auto& use : same[a].uses)
+							snapped[use] = s;
+					}
+			}
+		}
+		for (size_t j = 0; j < ps.size(); j++)
+		{
+			Kept k { ps[j], {} };
+			for (size_t i = 0; i < pos[j].size(); i++)
+			{
+				const auto it = snapped.find({ j, i });
+				const uint32_t id = it != snapped.end() ? it->second : weld(pos[j][i], tol);
+				std::vector<uint32_t>& same = byKey[keyOf(*ps[j], i)];
+				if (std::find(same.begin(), same.end(), id) == same.end())
+					same.push_back(id);
 				k.ids.push_back(id);
 			}
 			std::vector<uint32_t> sorted = k.ids;
 			std::sort(sorted.begin(), sorted.end());
-			if (seen.emplace(p->texture(), std::move(sorted)).second)
+			if (seen.emplace(ps[j]->texture(), std::move(sorted)).second)
 				kept.push_back(std::move(k));
 		}
 	};
-	add(ref, nullptr, 1e-6 * length);
+	add(ref, nullptr, 1e-4 * length);
 	report.merged = 1;
 	const auto refKeys = keyed(ref);
 	for (size_t c = 0; c < captures.size(); c++)
@@ -1317,7 +1362,7 @@ bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& p
 		for (const auto& [key, at] : keyed(c))
 		{
 			const auto it = refKeys.find(key);
-			if (at.second && it != refKeys.end() && it->second.second)
+			if (it != refKeys.end() && ambiguous.count(key) == 0)
 			{
 				from.push_back(at.first);
 				to.push_back(it->second.first);
@@ -1335,23 +1380,56 @@ bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& p
 		add(c, &fit, std::clamp(4.0 * rms, 0.002, 0.01) * length);
 	}
 
-	// the checks: the polygons by texture, the body's open edges and its extents
+	// into the fullest capture's view, at the welded corners; a polygon with a corner behind its
+	// camera can't be, and is left out
+	const Rip& view = captures[ref];
+	merged.fbWidth = view.fbWidth;
+	merged.fbHeight = view.fbHeight;
+	merged.focalX = view.focalX;
+	merged.focalY = view.focalY;
+	merged.polys.clear();
+	merged.polys.reserve(kept.size());
+	std::vector<const Kept *> in;
+	for (const Kept& k : kept)
+	{
+		RipPoly p = *k.src;
+		bool inFront = true;
+		for (size_t i = 0; i < p.v.size() && inFront; i++)
+		{
+			const dvec3& e = corner[k.ids[i]];
+			const double w = -e.z;
+			inFront = w > 1e-9;
+			p.v[i].x = (float)(e.x / w * view.focalX + view.fbWidth * 0.5);
+			p.v[i].y = (float)(-e.y / w * view.focalY + view.fbHeight * 0.5);
+			p.v[i].z = (float)(1.0 / w);
+		}
+		if (inFront)
+		{
+			merged.polys.push_back(std::move(p));
+			in.push_back(&k);
+		}
+	}
+	polys.clear();
+	for (const RipPoly& p : merged.polys)
+		polys.push_back(&p);
+
+	// the checks, on what's in it: the polygons by texture, the body's open edges and its extents
 	std::map<std::pair<uint32_t, uint32_t>, int> edges;
 	std::vector<dvec3> bodyCorners;
 	std::unordered_set<uint32_t> inBody;
-	report.polys = (uint32_t)kept.size();
-	for (const Kept& k : kept)
+	report.polys = (uint32_t)in.size();
+	for (const Kept *k : in)
 	{
 		for (int t = 0; t < 4; t++)
-			report.texturePolys[t] += target.textures[t] != 0 && k.src->texture() == target.textures[t];
-		if (k.src->texture() != body)
+			report.texturePolys[t] += target.textures[t] != 0 && k->src->texture() == target.textures[t];
+		if (k->src->texture() != body)
 			continue;
-		for (size_t i = 0; i < k.ids.size(); i++)
-			if (inBody.insert(k.ids[i]).second)
-				bodyCorners.push_back(k.pos[i]);
-		for (size_t i = 0; i + 2 < k.ids.size(); i++)
+		for (uint32_t id : k->ids)
+			if (inBody.insert(id).second)
+				bodyCorners.push_back(corner[id]);
+		for (size_t i = 0; i + 2 < k->ids.size(); i++)
 		{
-			const uint32_t a = k.ids[i], b = k.ids[i + 1], c = k.ids[i + 2];
+			const uint32_t a = k->ids[i], b = k->ids[i + 1], c = k->ids[i + 2];
 			if (a == b || b == c || a == c)
 				continue;
 			for (const auto [p, q] : { std::pair(a, b), std::pair(b, c), std::pair(a, c) })
@@ -1400,35 +1478,6 @@ bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& p
 				target.extents[2] / target.extents[0], target.extentsOff * 100.0);
 	report.incomplete = why;
 
-	// into the fullest capture's view
-	const Rip& view = captures[ref];
-	merged.fbWidth = view.fbWidth;
-	merged.fbHeight = view.fbHeight;
-	merged.focalX = view.focalX;
-	merged.focalY = view.focalY;
-	merged.polys.clear();
-	merged.polys.reserve(kept.size());
-	for (const Kept& k : kept)
-	{
-		RipPoly p = *k.src;
-		bool inFront = true;
-		for (size_t i = 0; i < p.v.size(); i++)
-		{
-			const dvec3& e = k.pos[i];
-			const double w = -e.z;
-			inFront = inFront && w > 1e-9;
-			if (!inFront)
-				break;
-			p.v[i].x = (float)(e.x / w * view.focalX + view.fbWidth * 0.5);
-			p.v[i].y = (float)(-e.y / w * view.focalY + view.fbHeight * 0.5);
-			p.v[i].z = (float)(1.0 / w);
-		}
-		if (inFront)
-			merged.polys.push_back(std::move(p));
-	}
-	polys.clear();
-	for (const RipPoly& p : merged.polys)
-		polys.push_back(&p);
 	return true;
 }
 
@@ -1686,7 +1735,7 @@ bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const T
 			bool good = true, sight = true;
 			for (const RipVertex& v : p.v)
 			{
-				good = good && std::isfinite(v.z) && v.z > 0.f;
+				good = good && std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && v.z > 0.f;
 				sight = sight && v.z > 0.f && target.skips(1.f / v.z);
 			}
 			if (good && !sight)

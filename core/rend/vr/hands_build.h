@@ -150,9 +150,11 @@ bool buildStaff(const Rip& rip, const StaffParts& parts, const TextureSource& te
 // along the barrel the target's lengthM, the muzzle the middle of its front face. Without
 // merge (target.merge) the capture with the most of its polygons is the model; merged, the
 // captures come together in the eye space of the one with the most of its body: each other
-// one fitted onto it (Kabsch on the corners both have, by texture and texture coordinates),
-// and each of its polygons not there yet added. *complete: all of it was there (wholePolys;
-// merged, the target's other checks too), and so flagged; report->incomplete says what wasn't.
+// one fitted onto it (Kabsch on the corners both have, by texture and texture coordinates, but
+// those any capture shows in two places), and each of its polygons not there yet added, drawn at
+// the welded corners. *complete: all of it was there (wholePolys; merged, the target's other
+// checks too, on what went into the model), and so flagged; report->incomplete says what wasn't.
+// re/hands_build_test.cpp tests the merge on synthetic captures.
 // False with a reason when the captures don't have enough of it or its shape doesn't come out
 // as a gun.
 bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const TextureSource& textures,
