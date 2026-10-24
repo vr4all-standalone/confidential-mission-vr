@@ -95,6 +95,12 @@ struct GunReport
 	uint32_t polys = 0, texturePolys[4] {};	// the model's polygons, and by texture
 	uint32_t openEdges = 0;		// the body's
 	double extents[3] {};		// the body's along its own axes, longest first, that one 1
+	// How its front and back were told apart (hands_build.cpp gunAxes), of its length: the mean of
+	// its lowest fifth's corners behind the corners' middle (the grip's bottom is behind it); its
+	// front's and back's heights (the corners within a tenth of the length of each end). Under 0.05
+	// behind, the thinner end is the muzzle instead (byEnds).
+	double lowBehind = 0.0, endHeights[2] {};
+	bool byEnds = false;
 	std::string incomplete;		// the first check that failed; empty: all of it is there
 };
 

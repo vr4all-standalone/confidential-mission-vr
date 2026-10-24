@@ -302,9 +302,14 @@ Task 4b's runs (`vr-test.ps1 -Config "$cmWiden,config:vr.WatchRam=..."`, the act
     - A grip height whose rear-most piece's middle is over 0.15 of the length from the median is left out of the grip fit: the magazine below, the stock's heel above.
     - The old guns: the cabinet gun turns 0.008 degrees, the pistol 0.105. Both keep all their heights. vrcheck's grip readings are unchanged (3 %, 30 %).
   - vrcheck's grip guard now takes the rear-most piece at 30 % that goes on down to 50 %. A long gun's stock heel doesn't.
-  - The flip test (the lowest points behind the middle) gives +0.015 of the length for the rifle: the right way round, but by a small margin.
+  - The flip test (the lowest points behind the middle) gives +0.015 of the length for the rifle: the right way round, but by a small margin. A wrong camera estimate could tip it, and the file is never made again.
+    - Since Task 12's fix round, `gunAxes` uses the end with the shorter cross-section as the muzzle when that margin is under 0.05 of the length. The cross-section is the height of the corners within a tenth of the length of each end.
+    - The rifle: +0.015, the front 0.064 and the back 0.097 of its length high. That's the same way round as before, and the file is byte for byte the same.
+    - The cabinet gun (+0.263) and the pistol (+0.211) are well over 0.05, so the rule doesn't touch them.
+    - The log line `VR hands: the <gun>'s front and back: ...` gives the numbers for each gun made.
   - Run length on the PC, first line to done:
     - before: 16.1 s on the clock, 84 s of game;
     - after: 81.8 s on the clock, 370 s of game, with the rifle at 67.3 s on the clock (a second run: 97.8 s, 369 s of game, the rifle at 83.6 s);
     - a run that hit the cap: 101.9 s, 395 s of game.
   - Tests: cm-rip-cabinet and the pistol scenarios copy a seed of the rifle file (`build-win\vrtest\cm-rifle-seed.bin`, made by cm-rip-rifle) so their runs stay as short as before. A missing rifle file alone starts no run.
+  - Repeated runs (Task 12 review, a note only): say the rifle hits the 340 s cap and another gun's file also stays missing. Then every later start replays the ~340 s attract part before Start. PF20 holds to the letter, but the cost multiplies. It takes a double failure, so it stays a note.

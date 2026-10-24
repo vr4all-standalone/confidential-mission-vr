@@ -338,8 +338,8 @@ void principalAxes(const std::vector<dvec3>& pts, const dvec3& mid, dvec3 axes[3
 }
 
 // Rows x, y, z of gun space in eye space: z from the muzzle back along the barrel, y up
-// (away from the grip).
-void gunAxes(const Tris& gun, dvec3 out[3])
+// (away from the grip). facing: how front and back were told apart, for the log.
+void gunAxes(const Tris& gun, dvec3 out[3], GunReport *facing = nullptr)
 {
 	const std::vector<dvec3> pts = corners(gun);
 	const dvec3 mid = mean(pts);
@@ -380,17 +380,56 @@ void gunAxes(const Tris& gun, dvec3 out[3])
 		lo = -lo;
 		hi = -hi;
 	}
-	// back: where the bottom of the grip is
-	double along = 0.0;
+	// back: where the bottom of the grip is (the lowest fifth's corners, behind the middle)...
+	double along = 0.0, zLo = 1e300, zHi = -1e300;
 	size_t low = 0;
 	for (const dvec3& p : pts)
+	{
+		const double s = glm::dot(p - mid, z);
+		zLo = std::min(zLo, s);
+		zHi = std::max(zHi, s);
 		if (glm::dot(p - mid, y) < lo * 0.8)
 		{
-			along += glm::dot(p - mid, z);
+			along += s;
 			low++;
 		}
-	if (low > 0 && along / low < 0)
+	}
+	const double length = std::max(zHi - zLo, 1e-12);
+	double behind = low > 0 ? along / low / length : 0.0;
+	// ...but a long gun's magazine in front of its grip and the grip nearly cancel (Task 12's rifle:
+	// +0.015 of its length, which a wrong camera estimate could tip, and the file is never made
+	// again): under FacingMargin, the end with the shorter cross-section is the muzzle (the rifle's
+	// barrel ~3 cm high, its stock ~10 cm): the height of the corners within EndSlice of each end
+	constexpr double FacingMargin = 0.05, EndSlice = 0.1;	// of the length
+	auto endHeight = [&](bool front) {
+		double a = 1e300, b = -1e300;
+		for (const dvec3& p : pts)
+		{
+			const double s = glm::dot(p - mid, z);
+			if (front ? s < zLo + EndSlice * length : s > zHi - EndSlice * length)
+			{
+				const double h = glm::dot(p - mid, y);
+				a = std::min(a, h);
+				b = std::max(b, h);
+			}
+		}
+		return (b - a) / length;
+	};
+	double ends[2] { endHeight(true), endHeight(false) };	// at -z, at +z
+	const bool byEnds = std::abs(behind) < FacingMargin;
+	if (byEnds ? ends[1] < ends[0] : behind < 0)
+	{
 		z = -z;
+		behind = -behind;
+		std::swap(ends[0], ends[1]);
+	}
+	if (facing != nullptr)
+	{
+		facing->lowBehind = behind;
+		facing->endHeights[0] = ends[0];
+		facing->endHeights[1] = ends[1];
+		facing->byEnds = byEnds;
+	}
 	out[0] = glm::cross(y, z);
 	out[1] = y;
 	out[2] = z;
@@ -1788,7 +1827,7 @@ bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const T
 	// gun space as for the pistol: the barrel along -z, y away from the grip; first in game
 	// units around its middle
 	dvec3 axes[3];
-	gunAxes(eyeT, axes);
+	gunAxes(eyeT, axes, &rep);
 	const dvec3 mid = mean(corners(eyeT));
 	const Tris g = toSpace(eyeT, mid, axes, 1.0);
 	dvec3 lo, hi;

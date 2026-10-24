@@ -350,6 +350,83 @@ bool finite(const std::vector<dvec3>& pts)
 
 std::string str(uint32_t n) { return std::to_string(n); }
 
+// Task 12's assault rifle, made up (game units of 0.1 m, 8.8 long, one texture, built on its own
+// as the game's rifle is, not merged): a barrel 3 cm high in front, the body, a magazine hanging in
+// front of the grip and the grip behind it, both as low (they nearly cancel in gunAxes' front/back
+// test, as the game's rifle's do), a stock 11 cm high behind. stockDivs: the stock's divisions
+// across (more corners at the back move the corners' middle back).
+Model rifleModel(int stockDivs)
+{
+	Model m;
+	box(m, "barrel", TexA, dvec3(-0.15, 0.3, -5.9), dvec3(0.15, 0.6, -2.0), { 1, 1, 1 }, 0, {}, false);
+	box(m, "body", TexA, dvec3(-0.25, -0.1, -2.0), dvec3(0.25, 0.8, 1.0), { 1, 1, 1 }, 0, {}, false);
+	box(m, "magazine", TexA, dvec3(-0.18, -1.5, -1.3), dvec3(0.18, -0.1, -0.7), { 1, 2, 1 }, 5, {}, false);
+	box(m, "grip", TexA, dvec3(-0.18, -1.5, 0.1), dvec3(0.18, -0.1, 0.5), { 1, 2, 1 }, 5, {}, false);
+	box(m, "stock", TexA, dvec3(-0.2, -0.3, 1.0), dvec3(0.2, 0.8, 2.9), { stockDivs, stockDivs, 1 }, 0, {}, false);
+	return m;
+}
+GunTarget rifleTarget(const Model& m)
+{
+	const uint16_t n = (uint16_t)m.size();
+	return { "test rifle", "rifle.bin", { TexA, 0, 0, 0 }, n, n, 0.88f, 0.f, 0.f, false, { 0, 0, 0, 0 }, 0, { 0.f, 0.f, 0.f }, 0.f };
+}
+Shot rifleShot() { return { lookAt(dvec3(16, 5, 8), dvec3(0, 0, -1.5)), [](const Quad&) { return true; }, 0.0, 0.0 }; }
+
+// gunAxes' front/back test on the made-up model in its own axes (z back, y up): the mean z of its
+// lowest fifth's corners (each quad's two triangles' corners, as buildGun counts them) behind the
+// corners' middle, of the length.
+double lowBehind(const Model& m)
+{
+	std::vector<dvec3> pts;
+	for (const Quad& q : m)
+		for (int k : { 0, 1, 2, 1, 2, 3 })
+			pts.push_back(q.c[k].p);
+	dvec3 mid(0.0), lo(1e300), hi(-1e300);
+	for (const dvec3& p : pts)
+	{
+		mid += p / (double)pts.size();
+		lo = glm::min(lo, p);
+		hi = glm::max(hi, p);
+	}
+	double along = 0.0;
+	size_t n = 0;
+	for (const dvec3& p : pts)
+		if (p.y - mid.y < 0.8 * (lo.y - mid.y))
+		{
+			along += p.z - mid.z;
+			n++;
+		}
+	return n ? along / n / (hi.z - lo.z) : 0.0;
+}
+
+// The model's height (y) at its front (-z) and its back: its corners within 5 % of its length of each end.
+void endHeights(const std::vector<dvec3>& pts, double& front, double& back)
+{
+	double zlo = 1e300, zhi = -1e300;
+	for (const dvec3& p : pts)
+	{
+		zlo = std::min(zlo, p.z);
+		zhi = std::max(zhi, p.z);
+	}
+	const double near = 0.05 * (zhi - zlo);
+	double flo = 1e300, fhi = -1e300, blo = 1e300, bhi = -1e300;
+	for (const dvec3& p : pts)
+	{
+		if (p.z < zlo + near)
+		{
+			flo = std::min(flo, p.y);
+			fhi = std::max(fhi, p.y);
+		}
+		if (p.z > zhi - near)
+		{
+			blo = std::min(blo, p.y);
+			bhi = std::max(bhi, p.y);
+		}
+	}
+	front = fhi - flo;
+	back = bhi - blo;
+}
+
 }	// namespace
 
 int main()
@@ -373,6 +450,10 @@ int main()
 		c.check(r.model.sourcePolys == n, "source polys " + str(r.model.sourcePolys));
 		const int open = r.model.ok ? cracks(r.model.corners, 0.003) : -1;
 		c.check(open == 0, str(open) + " pairs of corners within 3 mm but apart (cracks in the seams)");
+		// a pistol's grip is well behind the middle: front and back as before Task 12's fix, not by the ends
+		printf("  merge-complete: gunAxes %+.3f behind, by the ends %d\n", r.report.lowBehind, r.report.byEnds);
+		c.check(r.report.lowBehind > 0.05 && !r.report.byEnds, "front and back by the ends, or the grip "
+				+ std::to_string(r.report.lowBehind) + " behind");
 		c.done(r);
 	}
 	// 2. One polygon in no capture (a quad of the barrel's back, which only B shows): incomplete,
@@ -481,6 +562,30 @@ int main()
 		c.check(r.report.polys == inFront && r.report.incomplete.rfind(want, 0) == 0,
 				str(r.report.polys) + " polygons, incomplete \"" + r.report.incomplete + "\", want it to start \"" + want + "\"");
 		c.check(r.model.sourcePolys == inFront, "source polys " + str(r.model.sourcePolys) + ", want " + str(inFront));
+		c.done(r);
+	}
+
+	// 7. Task 12's assault rifle: its magazine in front of the grip and the grip behind nearly cancel in
+	// gunAxes' front/back test (the lowest fifth's corners behind the middle; the game's rifle gives
+	// +0.015 of its length). One a little behind, one with more corners in its stock (the middle
+	// further back) a little in front. Either way round the muzzle is the thin end: the barrel's
+	// 3 cm in front, the stock's 11 cm behind.
+	for (const auto& [name, divs] : { std::pair("rifle", 1), std::pair("rifle-near-cancelling", 2) })
+	{
+		Case c(name);
+		const Model rifle = rifleModel(divs);
+		const Result r = run({ capture(rifle, rifleShot()) }, rifleTarget(rifle));
+		double front = 0.0, back = 0.0;
+		if (r.model.ok)
+			endHeights(r.model.corners, front, back);
+		printf("  %s: the lowest fifth %+.3f of its length behind the middle (in its own axes); the model's front %.3f m "
+				"and back %.3f m high; gunAxes: %+.3f behind, the ends %.3f and %.3f high, by the ends %d\n", name,
+				lowBehind(rifle), front, back, r.report.lowBehind, r.report.endHeights[0], r.report.endHeights[1], r.report.byEnds);
+		c.check(r.built, "not built: " + r.error);
+		c.check(r.report.byEnds && std::abs(r.report.lowBehind) < 0.05, "front and back not told by the ends ("
+				+ std::to_string(r.report.lowBehind) + " behind)");
+		c.check(r.model.ok && front < 0.05 && back > 0.08, "backwards: the front " + std::to_string(front) + " m high, the back "
+				+ std::to_string(back) + " m (want the barrel's 0.03 in front, the stock's 0.11 behind)");
 		c.done(r);
 	}
 

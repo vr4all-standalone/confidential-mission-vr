@@ -349,12 +349,14 @@ void onVBlank()
 		std::vector<Merge> merges;
 		{
 			std::lock_guard<std::mutex> lock(gunMutex);
-			// at 120 s, each gun seen whole or not at all from the fullest capture of it, if any
+			// at 120 s, each gun seen whole or not at all from the fullest capture of it, if any; not
+			// one from the attract demo (the assault rifle): it's saved complete only, as its file
+			// made would end the watching for it in play
 			if (t > CmGiveUpAfter && !cmBestSaved)
 			{
 				cmBestSaved = true;
 				for (int i = 0; i < 3; i++)
-					if (!source->guns[i].merge && !gunDone[i])
+					if (!source->guns[i].merge && source->guns[i].attractBy <= 0.f && !gunDone[i])
 					{
 						if (!gunBest[i].empty())
 							saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i], false);
@@ -558,6 +560,15 @@ u32 textureOf(const PolyParam& pp) {
 	return pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
 }
 
+// buildGun's front and back (GunReport), for the log.
+std::string facing(const GunReport& r)
+{
+	char s[200];
+	snprintf(s, sizeof(s), "the lowest fifth %+.3f of its length behind the middle, the front %.3f and the back %.3f high%s",
+			r.lowBehind, r.endHeights[0], r.endHeights[1], r.byEnds ? " (under 0.05: the thinner end is the muzzle)" : "");
+	return s;
+}
+
 // A merged gun's captures and the textures they use, taken out of gunMutex's care (emu thread):
 // put together into its model without the lock, then saved under it, complete or not, with what the
 // merge did (and how long it took) in the log. They're let go of on the way out.
@@ -594,6 +605,7 @@ void finishMerged(const GunTarget& gun, int i, std::vector<Rip> captures, std::v
 		WARN_LOG(RENDERER, "VR hands: the %s, but %s", gun.name, error.c_str());
 		return;
 	}
+	NOTICE_LOG(RENDERER, "VR hands: the %s's front and back: %s", gun.name, facing(r).c_str());
 	const std::string verdict = complete ? std::string("complete") : "incomplete: " + r.incomplete;
 	std::lock_guard<std::mutex> lock(gunMutex);
 	saveGun(gun, i, model, r.polys, complete, &verdict);
@@ -739,7 +751,8 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 		std::vector<u8> model;
 		std::string error;
 		bool complete = false;
-		if (!buildGun(captures, gun, textures, model, error, &complete))
+		GunReport r;
+		if (!buildGun(captures, gun, textures, model, error, &complete, &r))
 		{
 			gunFailedAt[i] = passes;
 			WARN_LOG(RENDERER, "VR hands: the %s, but %s", gun.name, error.c_str());
@@ -756,6 +769,7 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 				gunFailedAt[i] = passes;
 			continue;
 		}
+		NOTICE_LOG(RENDERER, "VR hands: the %s's front and back: %s", gun.name, facing(r).c_str());
 		if (!saveGun(gun, i, model, runCount, true))
 			gunFailedAt[i] = passes;
 	}

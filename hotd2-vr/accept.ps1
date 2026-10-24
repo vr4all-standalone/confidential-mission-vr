@@ -32,7 +32,9 @@
   accept-cm-rip-rifle-next (the rifle's file alone missing: no run, watched for in play); it leaves all
   three files and a copy of the rifle's, build-win\vrtest\cm-rifle-seed.bin, which cm-rip-cabinet,
   cm-rip-pistol and cm-rip-pistol-one put in place after deleting the files (so their runs start at
-  the cabinet gun, as before); cm-rip-skip doesn't (B skips during the rifle's part).
+  the cabinet gun, as before); cm-rip-skip doesn't (B skips during the rifle's part). cm-rip-rifle comes
+  before them in the list; run without the seed, they fail and say so. cm-rip-skip-rifle plays
+  accept-cm-rip-skip-rifle: the skip with the rifle's seed in place, which goes Off (nothing watched for).
   cm-merge-unit plays nothing: it compiles re\hands_build_test.cpp with core\rend\vr\hands_build.cpp
   (the VS 2022 Build Tools, as build-win.cmd; into build-win\vrtest\cm-merge-unit, not the app),
   runs it (the pistol's merge on synthetic captures) and then vrcheck.py's selftest.
@@ -888,14 +890,16 @@ function Remove-CmGuns {
 $cmRifleFile = Join-Path $cmGunData 'gun-cm-rifle.bin'
 $cmRifleSeed = Join-Path $repo 'build-win\vrtest\cm-rifle-seed.bin'
 function Copy-CmRifleSeed {
-	if (-not (Test-Path -LiteralPath $cmRifleSeed)) { return "no $cmRifleSeed (cm-rip-rifle makes it)" }
+	if (-not (Test-Path -LiteralPath $cmRifleSeed)) { return "no ${cmRifleSeed}: run cm-rip-rifle first (it makes it; the full list does)" }
 	Copy-Item -LiteralPath $cmRifleSeed -Destination $cmRifleFile -Force
 	return $null
 }
-# The log's clock (mm:ss:fff at the start of each line) at the first line matching $pattern, in seconds.
+# The log's clock (mm:ss:fff at the start of each line) at the first line matching $pattern, in seconds;
+# it throws (the scenario fails) when there's no such line or it has no clock.
 function Get-LogClock([string]$log, [string]$pattern) {
 	$hit = Select-String -LiteralPath $log -Pattern $pattern -CaseSensitive | Select-Object -First 1
-	if (-not $hit -or $hit.Line -notmatch '^(\d+):(\d+):(\d+)') { return $null }
+	if (-not $hit) { throw "no line matching $pattern in $log" }
+	if ($hit.Line -notmatch '^(\d+):(\d+):(\d+)') { throw "no clock at the start of line $($hit.LineNumber) of $log" }
 	return [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000.0
 }
 
@@ -983,6 +987,24 @@ function Test-CmRipSkip {
 	$params.Reject += 'VR hands: the assault rifle from this game'
 	$why = Invoke-VrTest $params
 	if ($why) { return "the next start: $why" }
+	return $null
+}
+
+# The skip with the rifle's file there (cm-rip-rifle's seed): no gun from the attract demo is left to
+# watch for in play, so the run goes Off, with no watching line (Task 12, S23).
+function Test-CmRipSkipRifle {
+	if (-not $Reuse) {
+		Remove-CmGuns
+		$why = Copy-CmRifleSeed
+		if ($why) { return $why }
+	}
+	$first = 'VR hands: no model yet, taking the guns from the game'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip-rifle'; Seconds = 12; XrSim = $true
+		Config = "$cmWiden,config:vr.HandsPrep=yes"; On = @("$first|2|xr right/b 1 200")
+		Expect = $first, 'VR hands: skipped after'
+		Reject = @('XR: initialisation failed', 'VR hands: watching for', 'VR hands: the cabinet gun from this game') }
+	if ($why) { return $why }
+	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made though the run was skipped" }
 	return $null
 }
 
@@ -1097,8 +1119,10 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-menu' = 'Test-CmMenu'; 'cm-menu-quit' = 'Test-CmMenuQuit'
 	'cm-controllers' = 'Test-CmControllers'; 'cm-controllers-rt' = 'Test-CmControllersRt'
 	'cm-hands' = 'Test-CmHands'; 'cm-hands-shot' = 'Test-CmHandsShot'
-	'cm-rip-cabinet' = 'Test-CmRipCabinet'; 'cm-rip-hand' = 'Test-CmRipHand'; 'cm-rip-skip' = 'Test-CmRipSkip'
-	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'; 'cm-rip-rifle' = 'Test-CmRipRifle'
+	# cm-rip-rifle first: it leaves the rifle's seed, which the next ones need (cm-rip-hand: cm-rip-cabinet's file)
+	'cm-rip-rifle' = 'Test-CmRipRifle'; 'cm-rip-cabinet' = 'Test-CmRipCabinet'; 'cm-rip-hand' = 'Test-CmRipHand'
+	'cm-rip-skip' = 'Test-CmRipSkip'; 'cm-rip-skip-rifle' = 'Test-CmRipSkipRifle'
+	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
