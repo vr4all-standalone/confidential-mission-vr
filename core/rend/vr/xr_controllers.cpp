@@ -7,6 +7,7 @@
 #include "xr_gun.h"
 #include "xr_sim.h"
 #include "glb_mesh.h"
+#include "xr_own.h"
 #include "controller_model.h"
 #include "rend/gles/gles.h"
 #include "rend/gles/glcache.h"
@@ -55,19 +56,20 @@ const Material Textured { { 1.f, 1.f, 1.f }, 0.25f, 30.f };
 const Material Untextured { { 0.80f, 0.80f, 0.82f }, 0.25f, 30.f };
 
 // A model: interleaved position, normal, uv (8 floats a vertex), 16- or 32-bit indices, parts
-// (ranges of the indices, each with its material), an optional base colour texture. Kept on
-// the CPU until the first draw puts it on the GPU.
-struct Part { unsigned first, count; Material material; };
+// (ranges of the indices, each with its material and base colour texture, if any: the runtime's
+// model at most one, the player's own one a part). Kept on the CPU until the first draw puts it on
+// the GPU.
+struct Part { unsigned first, count; Material material; int texture = -1; };	// (an index into textures; -1: none)
 struct Model
 {
 	std::vector<float> verts;
 	std::vector<u32> indices;
 	std::vector<Part> parts;
-	int texWidth = 0, texHeight = 0;
-	std::vector<u8> rgba;
+	std::vector<GlbImage> images;	// (until uploaded)
 	unsigned triangles = 0;
 
-	GLuint vao = 0, vbo = 0, ibo = 0, texture = 0;
+	GLuint vao = 0, vbo = 0, ibo = 0;
+	std::vector<GLuint> textures;	// the images', once uploaded
 	GLenum indexType = GL_UNSIGNED_SHORT;
 	bool uploaded = false;
 	bool failed = false;
@@ -75,6 +77,13 @@ struct Model
 
 Model builtIn;
 Model runtime[2];
+// The player's own (xr_own.h): controllers/left.glb, right.glb, drawn on the aim pose (GLB space ->
+// aim space: ownToAim) instead of the runtime's or the built-in one; read again when the folder
+// changes (own::generation()).
+Model own[2];
+glm::mat4 ownToAim[2];
+bool ownLoaded[2];
+unsigned ownGeneration;
 
 // Asking the runtime for its models: init, then retry() for each hand still built in.
 struct Ask
@@ -119,7 +128,9 @@ void makeBuiltIn(Model& m)
 	m.triangles = TriangleCount;
 }
 
-void fromGlb(Model& m, GlbMesh&& mesh)
+// perPart (the player's own): a part per primitive, its base colour factor and image; else one part,
+// the runtime's texture times white, or untextured grey
+void fromGlb(Model& m, GlbMesh&& mesh, bool perPart = false)
 {
 	m = Model();
 	const size_t vertexCount = mesh.positions.size() / 3;
@@ -135,10 +146,12 @@ void fromGlb(Model& m, GlbMesh&& mesh)
 		m.verts[i * 8 + 7] = mesh.uvs[i * 2 + 1];
 	}
 	m.indices = std::move(mesh.indices);
-	m.texWidth = mesh.texWidth;
-	m.texHeight = mesh.texHeight;
-	m.rgba = std::move(mesh.rgba);
-	m.parts.push_back({ 0, (unsigned)m.indices.size(), m.texWidth != 0 ? Textured : Untextured });
+	m.images = std::move(mesh.images);
+	if (perPart)
+		for (const GlbPart& p : mesh.parts)
+			m.parts.push_back({ p.firstIndex, p.indexCount, { { p.color[0], p.color[1], p.color[2] }, 0.25f, 30.f }, p.image });
+	else
+		m.parts.push_back({ 0, (unsigned)m.indices.size(), !m.images.empty() ? Textured : Untextured, m.images.empty() ? -1 : 0 });
 	m.triangles = (unsigned)(m.indices.size() / 3);
 }
 
@@ -237,25 +250,27 @@ bool upload(Model& m)
 	glEnableVertexAttribArray(VERTEX_UV_ARRAY);
 	bindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	if (m.texWidth != 0)
+	for (const GlbImage& image : m.images)
 	{
+		GLuint id = 0;
 		glActiveTexture(GL_TEXTURE0);
-		glGenTextures(1, &m.texture);
-		glcache.BindTexture(GL_TEXTURE_2D, m.texture);
+		glGenTextures(1, &id);
+		m.textures.push_back(id);
+		glcache.BindTexture(GL_TEXTURE_2D, id);
 		// mipmapped: the model is small in the view, its texture often large (GLES 3: any size)
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m.texWidth, m.texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, m.rgba.data());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.rgba.data());
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 		glGenerateMipmap(GL_TEXTURE_2D);
 		glcache.BindTexture(GL_TEXTURE_2D, 0);
 	}
 	// on the GPU now
 	m.verts = std::vector<float>();
-	m.rgba = std::vector<u8>();
+	m.images = std::vector<GlbImage>();
 	m.uploaded = true;
 	return true;
 }
@@ -267,8 +282,9 @@ void release(Model& m)
 	if (m.ibo != 0)
 		glDeleteBuffers(1, &m.ibo);
 	deleteVertexArray(m.vao);
-	if (m.texture != 0)
-		glcache.DeleteTextures(1, &m.texture);
+	for (GLuint& id : m.textures)
+		if (id != 0)
+			glcache.DeleteTextures(1, &id);
 	m = Model();
 }
 
@@ -310,7 +326,7 @@ bool loadRuntimeModel(int hand)
 	std::string error;
 	const bool read = loadGlb(glb.data(), std::min<size_t>(glb.size(), buffer.bufferCountOutput), mesh, error);
 	const std::string texture = !read ? "unreadable (" + error + ")"
-			: mesh.texWidth != 0 ? "texture " + std::to_string(mesh.texWidth) + "x" + std::to_string(mesh.texHeight)
+			: !mesh.images.empty() ? "texture " + std::to_string(mesh.images[0].width) + "x" + std::to_string(mesh.images[0].height)
 			: "untextured (" + mesh.untextured + ")";
 	NOTICE_LOG(RENDERER, "XR: render model %s: \"%s\" version %u, %u bytes, %s", ModelPath[hand], properties.modelName,
 			properties.modelVersion, buffer.bufferCountOutput, texture.c_str());
@@ -387,6 +403,46 @@ void askRuntime()
 	ask.loggedWhy = why;
 }
 
+// The player's own models (xr_own.h) read again when the folder changed: each hand's GLB, at most
+// 200,000 triangles and 8 textures. Logs "XR: controller model from controllers/left.glb (<n>
+// triangles)", or why it was skipped. (On the render thread: an old one leaves the GPU.)
+void refreshOwn()
+{
+	if (own::generation() == ownGeneration)
+		return;
+	ownGeneration = own::generation();
+	for (int hand : { Left, Right })
+	{
+		release(own[hand]);
+		ownLoaded[hand] = false;
+		const own::ControllerFile& file = own::controller(hand);
+		if (!file.present)
+			continue;
+		std::string why = file.why;
+		GlbMesh mesh;
+		if (file.usable)
+		{
+			std::vector<u8> data;
+			std::string error;
+			if (!own::readFile(file.path, data, 256u * 1024 * 1024))
+				why = "unreadable, or over 256 MB";
+			else if (!loadGlb(data.data(), data.size(), mesh, error, own::MaxTextures, own::MaxTextureSide))
+				why = error;
+			else if (mesh.indices.size() / 3 > own::MaxTriangles)
+				why = "over " + std::to_string(own::MaxTriangles) + " triangles (" + std::to_string(mesh.indices.size() / 3) + ")";
+		}
+		if (!why.empty())
+		{
+			WARN_LOG(RENDERER, "XR: controller model from %s skipped: %s", file.shown.c_str(), why.c_str());
+			continue;
+		}
+		fromGlb(own[hand], std::move(mesh), true);
+		ownToAim[hand] = file.modelToAim;
+		ownLoaded[hand] = true;
+		NOTICE_LOG(RENDERER, "XR: controller model from %s (%u triangles)", file.shown.c_str(), own[hand].triangles);
+	}
+}
+
 }	// namespace
 
 void init(XrInstance instance, XrSession session)
@@ -395,6 +451,8 @@ void init(XrInstance instance, XrSession session)
 		release(m);
 	ask = Ask();
 	ask.session = session;
+	own::scan();
+	refreshOwn();
 	if (!builtIn.uploaded && builtIn.indices.empty())
 		makeBuiltIn(builtIn);
 
@@ -452,7 +510,7 @@ bool fromRuntime(int hand)
 	return (hand == Left || hand == Right) && ask.loaded[hand] && !runtime[hand].failed;
 }
 
-void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const glm::mat4& grip)
+void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const glm::mat4& grip, const glm::mat4& aim)
 {
 	if (hand != Left && hand != Right)
 		return;
@@ -460,9 +518,15 @@ void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const gl
 		makeBuiltIn(builtIn);
 	if (!initProgram())
 		return;
+	refreshOwn();
 	Model *model = &builtIn;
 	glm::mat4 pose = grip;
-	if (fromRuntime(hand) && upload(runtime[hand]))
+	if (ownLoaded[hand] && upload(own[hand]))
+	{
+		model = &own[hand];
+		pose = aim * ownToAim[hand];
+	}
+	else if (fromRuntime(hand) && upload(runtime[hand]))
 	{
 		model = &runtime[hand];
 		pose = grip * kRuntimeModelOffset;
@@ -490,9 +554,7 @@ void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const gl
 	glUniformMatrix4fv(uModel, 1, GL_FALSE, &pose[0][0]);
 	glUniform3f(uEye, eyePos.x, eyePos.y, eyePos.z);
 	glUniform1i(uTex, 0);
-	glUniform1f(uTextured, model->texture != 0 ? 1.f : 0.f);
 	glActiveTexture(GL_TEXTURE0);
-	glcache.BindTexture(GL_TEXTURE_2D, model->texture);
 	bindVertexArray(model->vao);
 	glBindBuffer(GL_ARRAY_BUFFER, model->vbo);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->ibo);
@@ -506,6 +568,9 @@ void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const gl
 	for (const Part& part : model->parts)
 	{
 		const Material& m = part.material;
+		const bool textured = part.texture >= 0 && part.texture < (int)model->textures.size();
+		glUniform1f(uTextured, textured ? 1.f : 0.f);
+		glcache.BindTexture(GL_TEXTURE_2D, textured ? model->textures[part.texture] : 0);
 		glUniform3f(uColor, m.color.r, m.color.g, m.color.b);
 		glUniform1f(uSpecular, m.specular);
 		glUniform1f(uShininess, m.shininess);
@@ -532,6 +597,10 @@ void term()
 	release(builtIn);
 	for (Model& m : runtime)
 		release(m);
+	for (Model& m : own)
+		release(m);
+	ownLoaded[Left] = ownLoaded[Right] = false;
+	ownGeneration = 0;
 	ask = Ask();
 	if (program != 0)
 		glcache.DeleteProgram(program);

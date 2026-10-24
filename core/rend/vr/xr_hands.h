@@ -37,17 +37,22 @@ const HandsModel *handsModel();
 
 // The guns a hand can hold in Confidential Mission: the arcade gun (xr_gun.h's own, always
 // there), and the game's cabinet gun, agents' pistol and assault rifle, each its own file made
-// from the player's game (hands_rip.h; vr_reproject.cpp's guns[], in that order).
+// from the player's game (hands_rip.h; vr_reproject.cpp's guns[], in that order). After them
+// the player's own guns (xr_own.h: guns/*.glb in file-name order) as GunKind(4 + i), and vr.Gun
+// 4 + i: each drawn as the game's guns are (gun only), and feeling like the agents' pistol.
 enum class GunKind { Arcade, Cabinet, Pistol, Rifle };
+constexpr int OwnGuns = 4;	// the first of the player's own guns (GunKind and vr.Gun)
 // Its model, loaded on first use from its file (again once one is made or another game starts);
-// nullptr if missing or unreadable, for the arcade gun, and in a game without these guns.
+// nullptr if missing or unreadable, for the arcade gun, and in a game without these guns. The
+// player's own: read when the folder changes (xr_own.h), nullptr if skipped.
 const HandsModel *gunModel(GunKind kind);
 // All of it was in the game's frame (HND1 v2 flag 2); the arcade gun always.
 bool gunComplete(GunKind kind);
 // The gun vr.Gun gives: 0 auto, the agents' pistol if complete, else the cabinet gun if there,
 // else the arcade gun; 1-3 as chosen (the agents' pistol, the cabinet gun, the arcade gun), a
-// missing one falling back the same way. The arcade gun with vr.GameHands off, and in a game
-// without these guns. Logs "XR: gun: <gun> (<auto|chosen>[: <why the fallback>])" at the
+// missing one falling back the same way; 4 and on the player's own (with vr.GameHands off too),
+// one not there falling back as Auto does ("(chosen: <name> is not there)"). The arcade gun with
+// vr.GameHands off, and in a game without these guns. Logs "XR: gun: <gun> (<auto|chosen>[: <why the fallback>])" at the
 // start and at each change.
 GunKind chosenGun();
 // The gun in a player's (0, 1) hand: the assault rifle while the game says the player holds it
@@ -55,14 +60,14 @@ GunKind chosenGun();
 // Logs "XR: P1 hand: assault rifle (gun-cm-rifle.bin)" or "(arcade gun, recoloured)", and "XR: P1
 // hand: back to the <gun>".
 GunKind handGun(int player);
-// "agents' pistol", "cabinet gun", "arcade gun", "assault rifle"
+// "agents' pistol", "cabinet gun", "arcade gun", "assault rifle", a gun of the player's own: its name
 const char *gunName(GunKind kind);
 // The model a hand holding `kind` draws, with vr.GameHands on: Confidential Mission's gun of
 // that kind (gunModel(), none for the arcade gun), another game's own whatever the kind
-// (handsModel()); nullptr: the arcade gun.
+// (handsModel()); nullptr: the arcade gun. The player's own guns whatever vr.GameHands says.
 const HandsModel *handModel(GunKind kind);
 
-// vr.Gun's choices, in the menu's order, round and round (Task 14b appends the player's own).
+// vr.Gun's choices, in the menu's order, round and round, the player's own guns last (4, 5, ...).
 // The game's own models off: only Auto and the arcade gun are made. Another game: one choice
 // (its own model or the arcade gun), so the row can't change vr.Gun.
 struct GunChoice

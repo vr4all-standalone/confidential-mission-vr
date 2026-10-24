@@ -152,7 +152,7 @@ even with the laser off.
 |---|---|
 | Resume | closes the menu |
 | Recenter | the view goes where you face; the menu stays open, in front of you |
-| Gun | the gun in your hand: Auto, Agents' pistol, Cabinet gun or Arcade gun (`vr.Gun`; see The guns below). A gun not made yet is skipped; an agents' pistol made without all of it says "(incomplete)" and can still be chosen. The new gun shows at once, while the game is paused |
+| Gun | the gun in your hand: Auto, Agents' pistol, Cabinet gun or Arcade gun, then any of your own (`vr.Gun`; see The guns below, and Your own models). A gun not made yet is skipped; an agents' pistol made without all of it says "(incomplete)" and can still be chosen. The new gun shows at once, while the game is paused |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
@@ -204,6 +204,88 @@ the wider view, while the stock focal its light-gun hit test and on-screen check
 held where the game's aim is where the gun points. All of it, with the evidence:
 `hotd2-vr/notes/confmiss-findings.md`.
 
+## Your own models
+
+Guns and controllers of your own, as GLB files (glTF 2.0 binary), each with a small JSON file of
+the same name beside it (its sidecar). **The app ships no model of anyone else's: you are
+responsible for the rights to the files you add.**
+
+Where they go (read when the game starts and each time the VR menu opens):
+
+| | Guns | Controllers |
+|---|---|---|
+| Quest | `Download/guns/` (next to `confmiss.zip`) | `Download/controllers/` |
+| PC | `guns\` next to `flycast.exe`, or next to the game's zip (`roms\guns\`) | `controllers\`, the same |
+
+On the PC a folder next to `flycast.exe` comes first. On the Quest the app already has the
+access to all files it needs for `Download/`.
+
+### Guns
+
+`guns/<name>.glb` + `guns/<name>.json`. Each one is a choice of its own in the menu's Gun row,
+after the arcade gun (`vr.Gun` 4, 5, ... in file-name order); Auto never picks one. It is held
+like the agents' pistol (its size with `vr.HandScale`, the same kick); the assault rifle still
+takes over while the game gives it to you, and your gun comes back after. If the chosen gun's
+file is gone, the hand falls back as Auto does (the log says "(chosen: <name> is not there)").
+
+```json
+{ "name": "Zapper", "grip": [0, 0, 0], "muzzle": [0, 0.03, -0.18], "up": [0, 1, 0], "length": 0.22 }
+```
+
+| Field | What it is | Example |
+|---|---|---|
+| `name` | the menu's label, at most 24 characters (else the file name) | `"Zapper"` |
+| `grip` | the top of the grip, where your hand goes, in the GLB's own space and units | `[0, 0, 0]` |
+| `muzzle` | the end of the barrel, where the shots, the aim line and the flash start | `[0, 0.03, -0.18]` |
+| `up` | optional (default `[0, 1, 0]`): from the grip towards the top of the gun | `[0, 0, 1]` (a Z-up model) |
+| `length` | metres along the barrel, 0.05 to 1.5: the model is scaled to it | `0.22` |
+
+The barrel points from `grip` to `muzzle` (leaving out its part along `up`). A gun without a
+sidecar, or with a bad one, is left out, with one line in the log saying why. A model may have up
+to 200,000 triangles and 8 textures (each brought down to 2048 pixels a side; a part whose texture
+is over 4096 keeps just its colour); each part keeps its own colour and texture.
+
+### Controllers
+
+`controllers/left.glb` + `left.json`, `controllers/right.glb` + `right.json`, each hand on its
+own: drawn instead of the controller wherever one shows (a hand without a gun, the menu). The
+labels of Show controls stay where the built-in controller's buttons are.
+
+```json
+{ "aim": { "position": [0, 2, -6], "rotation": [0.2588, 0, 0, 0.9659] }, "scale": 0.01 }
+```
+
+| Field | What it is | Example |
+|---|---|---|
+| `aim.position` | where the controller's pointing ray starts, in the GLB's space and units | `[0, 2, -6]` |
+| `aim.rotation` | its direction there, a quaternion x, y, z, w (the ray along -z, +y up) | `[0.2588, 0, 0, 0.9659]` (30 degrees up) |
+| `scale` | metres per GLB unit | `0.01` (a model in centimetres) |
+
+That point goes on the controller's aim pose (OpenXR's): room = aim pose x scale x inverse(aim node).
+
+### Making a gun file: make-gun.py
+
+`hotd2-vr/tools/make-gun.py` turns an FBX or a GLB into a gun file and a sidecar with a first
+guess, with Blender (5.2) run headless:
+
+```bat
+"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" -b -P hotd2-vr\tools\make-gun.py -- mygun.fbx out --name "My gun" --length 0.22 [--texture-dir textures]
+```
+
+It binds the textures the model names but can't find (by file name, in `--texture-dir` and the
+model's folder), scales them to at most 1024 pixels a side, joins nothing, and writes
+`out\mygun.glb` (textures inside) and `out\mygun.json`: the muzzle guessed at the far end of the
+longest axis, the grip at the top of the lowest part, up +y. **Blender cannot read ASCII FBX**:
+convert one to binary FBX or GLB first.
+
+To check a gun, choose it in the menu and look at it (on the PC the window shows the left eye). The
+log says what was read:
+
+- `XR: own gun "My gun" from guns/mygun.glb (<n> triangles, <k> parts #rrggbb ..., <t> textures; muzzle x y z)`
+- `XR: own gun guns/mygun.glb skipped: <why>`
+- `XR: gun: My gun (chosen)` and `XR: P1 muzzle: My gun at x y z from the aim pose`
+- `XR: controller model from controllers/left.glb (<n> triangles)`, or `... skipped: <why>`
+
 ## Options
 
 Settings live in `/sdcard/Android/data/com.vrlightgunhub.confmiss/files/emu.cfg` (PC: `emu.cfg`
@@ -219,7 +301,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.GunScale` | 0.68 | size of the gun, times the 25 cm arcade gun it is modelled on (also set with grip + thumbstick) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
 | `vr.Haptics` | 2 | the knock in the hand: 0 off, 1 low, 2 normal, 3 strong |
-| `vr.Gun` | 0 | the gun in your hand: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun (The guns, below) |
+| `vr.Gun` | 0 | the gun in your hand: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun, 4 and on your own (The guns, below; Your own models) |
 | `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
 | `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |

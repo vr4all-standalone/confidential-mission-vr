@@ -1,6 +1,7 @@
 /*
 	A glTF 2.0 binary (GLB) read into one triangle mesh (hotd2-vr): the controllers' models from
-	the OpenXR runtime (xr_controllers.h, XR_FB_render_model). Parsed by cgltf (core/deps/cgltf).
+	the OpenXR runtime (xr_controllers.h, XR_FB_render_model), and the player's own guns and
+	controllers (xr_own.h). Parsed by cgltf (core/deps/cgltf).
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -13,21 +14,29 @@
 namespace vr::xr
 {
 
+// A base colour image as RGBA rows (top row first).
+struct GlbImage { int width = 0, height = 0; std::vector<u8> rgba; };
+// A primitive's triangles: indices[firstIndex, firstIndex + indexCount), its material's base
+// colour factor (RGBA; 1, 1, 1, 1 without one) and base colour image (an index into images; -1:
+// none, or not decoded).
+struct GlbPart { u32 firstIndex = 0, indexCount = 0; float color[4] { 1.f, 1.f, 1.f, 1.f }; int image = -1; };
+
 // Every triangle of the default scene (else of every node), in the file's own space (glTF:
 // metres, y up) with the node transforms applied: positions and normals x, y, z, texture
-// coordinates u, v (v down the image, as glTF has it), indices into them. The base colour
-// image of the first primitive that has one, when it is a PNG or a JPEG, as RGBA rows
-// (top row first): texWidth x texHeight; else none (texWidth 0) and the mesh is untextured,
-// with why in `untextured`: the image's MIME type (image/ktx2: glTF subset 1's Basis
-// Universal, not decoded here) or what was wrong with it (empty when textured).
-struct GlbMesh { std::vector<float> positions, normals, uvs; std::vector<u32> indices; int texWidth = 0, texHeight = 0; std::vector<u8> rgba;
-	std::string untextured; };
+// coordinates u, v (v down the image, as glTF has it; 0 for a primitive without a decoded
+// image), indices into them, a part per primitive. The base colour images of the primitives
+// that have one, when a PNG or a JPEG: the first maxImages that decode, in the order the
+// primitives come; when none is, why in `untextured`: the image's MIME type (image/ktx2: glTF
+// subset 1's Basis Universal, not decoded here) or what was wrong with it (empty when textured).
+struct GlbMesh { std::vector<float> positions, normals, uvs; std::vector<u32> indices; std::vector<GlbImage> images;
+	std::vector<GlbPart> parts; std::string untextured; };
 
 // All primitives (triangle lists, strips and fans), node transforms applied; base colour
-// PNG/JPEG via stb_image; other images: untextured. Primitives with no normals get face
-// normals. External files (a buffer or image by file name) are not read. False, with why in
+// PNG/JPEG via stb_image, at most 4096 pixels a side, and with fitSide > 0 halved (2 x 2 pixels
+// averaged) till no side is over it; other images: untextured. Primitives with no normals get
+// face normals. External files (a buffer or image by file name) are not read. False, with why in
 // `error`, when the data isn't a GLB this can draw (no triangles, or over 1,000,000 vertices or
-// 3,000,000 indices).
-bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error);
+// 3,000,000 indices). maxImages 1: the runtime's controllers, one texture for the whole model.
+bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error, int maxImages = 1, int fitSide = 0);
 
 }

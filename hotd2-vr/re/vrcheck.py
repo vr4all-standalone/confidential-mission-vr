@@ -540,6 +540,32 @@ def compare(args):
     return 0 if diff >= args.min_diff else 1
 
 
+def hues(args):
+    """hues: whether each colour (--rgb r,g,b, 0-255) shows in a window shot's --box: its pixels of about that hue
+    (as unit rgb vectors at least --cos alike, and brighter than 40) counted, at least --min each; with --against
+    (the same view without those colours) at least --min more than 3 times the count there."""
+    img = _read_png(args.png).astype(np.float32)[..., :3]
+    ys, xs = _region(args.box, *img.shape[:2], flag='--box')
+    other = _read_png(args.against).astype(np.float32)[..., :3] if args.against else None
+
+    def count(im, rgb):
+        part = im[ys, xs].reshape(-1, 3)
+        norm = np.linalg.norm(part, axis=1)
+        t = np.array(rgb, np.float32)
+        t /= max(float(np.linalg.norm(t)), 1e-6)
+        return int(((norm > 40) & (part @ t >= args.cos * norm)).sum())
+    bad = 0
+    for c in args.rgb:
+        rgb = [int(v) for v in c.split(',')]
+        n = count(img, rgb)
+        m = count(other, rgb) if other is not None else 0
+        good = n >= args.min + 3 * m
+        bad += not good
+        print(f'{"PASS" if good else "FAIL"} hue {c}: {n} pixels in {os.path.basename(args.png)}'
+              + (f', {m} in {os.path.basename(args.against)}' if other is not None else ''))
+    return 1 if bad else 0
+
+
 #
 # A game's own model (HND1: hands.bin, staff-mok.bin, gun-*.bin; the format is in
 # core/rend/vr/xr_hands.cpp)
@@ -761,6 +787,14 @@ def main(argv):
         s.add_argument('--box', default='full', help='x0,y0,x1,y1 as fractions (default: the whole picture)')
         s.add_argument(limit, type=float, default=default, help=f'mean absolute difference per channel (0-255) {what} this')
         s.set_defaults(run=compare)
+    s = sub.add_parser('hues')
+    s.add_argument('png')
+    s.add_argument('--rgb', action='append', required=True, help='r,g,b (0-255); again for each colour')
+    s.add_argument('--box', default='full', help='x0,y0,x1,y1 as fractions (default: the whole picture)')
+    s.add_argument('--cos', type=float, default=0.95, help="how alike a pixel's hue must be (default 0.95)")
+    s.add_argument('--min', type=int, default=30, help='pixels of each colour at least (default 30)')
+    s.add_argument('--against', help='the same view without those colours')
+    s.set_defaults(run=hues)
     s = sub.add_parser('hnd')
     s.add_argument('model')
     s.add_argument('--polys', type=int, help="at least this many of the game's polygons went into it (HND1 v2)")

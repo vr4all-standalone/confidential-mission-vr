@@ -18,6 +18,10 @@
 	A model without a slide (the staff, a gun only) has travel 0 and no parts in the slide
 	mesh; a gun only none in the hands' either (the other hand keeps its controller).
 
+	The player's own guns (xr_own.h), GLB files, are turned into the same model at load: a gun only,
+	its frame mesh a part per primitive, each with its base colour factor as the vertex colour and
+	its image (or a white texel) as the texture.
+
 	Lit like the arcade gun (xr_gun.cpp): a fixed key light and a dim fill, so the hands
 	read as solid in the game's dark scenes, rather than with the light baked in that one
 	frame of the game.
@@ -26,6 +30,8 @@
 */
 #include "xr_hands.h"
 #include "hands_rip.h"
+#include "glb_mesh.h"
+#include "xr_own.h"
 #include "rend/vr_reproject.h"
 #include "rend/gles/gles.h"
 #include "rend/gles/glcache.h"
@@ -37,7 +43,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
+#include <cfloat>
+#include <cmath>
 #include <cstdio>
+#include <memory>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -96,6 +105,16 @@ constexpr int GameSlot = 0, Slots = 4;
 Slot slots[Slots];
 std::string gunLogged;	// chosenGun()'s line, as last logged
 bool rifleHeld[2];		// each player's hand holds the assault rifle (handGun()), as last logged
+// The player's own guns (xr_own.h), GunKind(OwnGuns + i): every guns/*.glb, a skipped one too (not
+// loaded), so vr.Gun keeps naming the same file.
+struct OwnGun
+{
+	Model model;
+	std::string name;	// the menu's label
+	bool loaded = false;
+};
+std::vector<std::unique_ptr<OwnGun>> ownGuns;
+unsigned ownGeneration;		// own::generation() they were read at
 
 GLuint program;
 GLint uMvp = -1, uModel = -1, uEye = -1, uSpecular = -1, uShininess = -1, uAlphaTest = -1, uLight = -1, uTex = -1;
@@ -317,6 +336,22 @@ void upload(Model& model)
 	glcache.BindTexture(GL_TEXTURE_2D, 0);
 }
 
+// A model's GPU copies gone (it keeps its vertices and textures: drawn again, it goes back up).
+void releaseGl(Model& model)
+{
+	if (model.vbo != 0)
+		glDeleteBuffers(1, &model.vbo);
+	if (model.vao != 0)
+		deleteVertexArray(model.vao);
+	model.vbo = model.vao = 0;
+	for (Texture& t : model.textures)
+		if (t.id != 0)
+		{
+			glcache.DeleteTextures(1, &t.id);
+			t.id = 0;
+		}
+}
+
 void drawMesh(const Model& model, int mesh, const glm::mat4& viewProj, const glm::mat4& pose, float specular, float shininess)
 {
 	const glm::mat4 mvp = viewProj * pose;
@@ -343,6 +378,139 @@ void refresh()
 		slot = Slot();
 	gunLogged.clear();
 	rifleHeld[0] = rifleHeld[1] = false;
+	own::scan();	// (another game: maybe another folder)
+}
+
+// A gun of the player's own into `model`, as Confidential Mission's guns are (gun space: the
+// sidecar's grip the origin, its barrel -z, its up +y, scaled so the model spans its length along
+// the barrel); false with why not.
+bool loadOwnGun(Model& model, const own::GunFile& file, std::string& why)
+{
+	std::vector<u8> data;
+	if (!own::readFile(file.path, data, 256u * 1024 * 1024))
+	{
+		why = "unreadable, or over 256 MB";
+		return false;
+	}
+	GlbMesh mesh;
+	std::string error;
+	if (!loadGlb(data.data(), data.size(), mesh, error, own::MaxTextures, own::MaxTextureSide))
+	{
+		why = error;
+		return false;
+	}
+	data = std::vector<u8>();
+	const size_t triangles = mesh.indices.size() / 3;
+	if (triangles > own::MaxTriangles)
+	{
+		why = "over " + std::to_string(own::MaxTriangles) + " triangles (" + std::to_string(triangles) + ")";
+		return false;
+	}
+	const glm::vec3 up = glm::normalize(file.up);
+	const glm::vec3 barrel = file.muzzle - file.grip;
+	const glm::vec3 forward = glm::normalize(barrel - glm::dot(barrel, up) * up);
+	const glm::vec3 z = -forward, x = glm::cross(up, z);
+	const glm::mat3 turn = glm::transpose(glm::mat3(x, up, z));		// GLB -> gun space (rows x, up, z)
+	float lo = FLT_MAX, hi = -FLT_MAX;
+	for (size_t i = 0; i + 2 < mesh.positions.size(); i += 3)
+	{
+		const float along = glm::dot(glm::make_vec3(&mesh.positions[i]), forward);
+		lo = std::min(lo, along);
+		hi = std::max(hi, along);
+	}
+	if (!(hi - lo > 1e-9f))
+	{
+		why = "no length along the barrel";
+		return false;
+	}
+	const float scale = file.length / (hi - lo);
+
+	model = Model();
+	// texture 0 a white texel (the parts without an image: their colour alone), then the images
+	Texture white { 1, 1, 0 };
+	white.rgba = { 255, 255, 255, 255 };
+	model.textures.push_back(std::move(white));
+	for (GlbImage& image : mesh.images)
+	{
+		Texture t { (u32)image.width, (u32)image.height, 0 };
+		t.rgba = std::move(image.rgba);
+		model.textures.push_back(std::move(t));
+	}
+	model.vertices.reserve(mesh.indices.size() * VertexSize);
+	std::string colours;
+	for (const GlbPart& gp : mesh.parts)
+	{
+		u8 rgba[4];
+		for (int k = 0; k < 4; k++)
+			rgba[k] = (u8)std::lround(std::clamp(gp.color[k], 0.f, 1.f) * 255.f);
+		if (model.meshes[MeshFrame].size() < 8)
+		{
+			char hex[16];
+			snprintf(hex, sizeof(hex), " #%02x%02x%02x", rgba[0], rgba[1], rgba[2]);
+			colours += hex;
+		}
+		Part part;
+		part.texture = gp.image >= 0 && gp.image + 1 < (int)model.textures.size() ? (u32)gp.image + 1 : 0;
+		part.first = (u32)(model.vertices.size() / VertexSize);
+		part.count = gp.indexCount;
+		for (u32 k = 0; k < gp.indexCount; k++)
+		{
+			const u32 v = mesh.indices[gp.firstIndex + k];
+			const glm::vec3 p = scale * (turn * (glm::make_vec3(&mesh.positions[v * 3]) - file.grip));
+			const glm::vec3 n = turn * glm::make_vec3(&mesh.normals[v * 3]);
+			const float vertex[8] { p.x, p.y, p.z, n.x, n.y, n.z, mesh.uvs[v * 2], mesh.uvs[v * 2 + 1] };
+			const size_t at = model.vertices.size();
+			model.vertices.resize(at + VertexSize);
+			memcpy(&model.vertices[at], vertex, sizeof(vertex));
+			memcpy(&model.vertices[at + sizeof(vertex)], rgba, 4);
+		}
+		model.meshes[MeshFrame].push_back(part);
+	}
+	if (mesh.parts.size() > 8)
+		colours += " ...";
+	model.info.muzzle = scale * (turn * barrel);
+	model.info.grab = glm::vec3(0.f);
+	model.info.travel = 0.f;
+	model.info.onSlide = glm::mat4(1.f);
+	model.info.gunOnly = true;
+	model.flags = 3;	// (gun only, all of it)
+	const glm::vec3& m = model.info.muzzle;
+	NOTICE_LOG(RENDERER, "XR: own gun \"%s\" from %s (%zu triangles, %zu part%s%s, %zu texture%s; muzzle %.4f %.4f %.4f)",
+			file.name.c_str(), file.shown.c_str(), triangles, mesh.parts.size(), mesh.parts.size() == 1 ? "" : "s",
+			colours.c_str(), mesh.images.size(), mesh.images.size() == 1 ? "" : "s", m.x, m.y, m.z);
+	return true;
+}
+
+// The player's own guns read again when the folder changed (xr_own.h); each skipped one logged
+// with why: "XR: own gun guns/<file> skipped: <why>".
+void refreshOwn()
+{
+	if (own::generation() == 0)
+		own::scan();
+	if (own::generation() == ownGeneration)
+		return;
+	ownGeneration = own::generation();
+	for (auto& gun : ownGuns)
+		releaseGl(gun->model);
+	ownGuns.clear();
+	for (const own::GunFile& file : own::guns())
+	{
+		auto gun = std::make_unique<OwnGun>();
+		gun->name = file.name;
+		std::string why = file.why;
+		if (file.usable)
+			gun->loaded = loadOwnGun(gun->model, file, why);
+		if (!gun->loaded)
+			NOTICE_LOG(RENDERER, "XR: own gun %s skipped: %s", file.shown.c_str(), why.c_str());
+		ownGuns.push_back(std::move(gun));
+	}
+}
+
+// The player's own gun `kind` is: its index in ownGuns; -1 if none.
+int ownIndex(GunKind kind)
+{
+	const int i = (int)kind - OwnGuns;
+	return i >= 0 && i < (int)ownGuns.size() ? i : -1;
 }
 
 bool cmGuns()
@@ -376,6 +544,12 @@ const HandsModel *gunModel(GunKind kind)
 	refresh();
 	if (kind == GunKind::Arcade || !cmGuns())
 		return nullptr;
+	if ((int)kind >= OwnGuns)
+	{
+		refreshOwn();
+		const int i = ownIndex(kind);
+		return i >= 0 && ownGuns[i]->loaded ? &ownGuns[i]->model.info : nullptr;
+	}
 	Slot& slot = slots[(int)kind];
 	if (!slot.tried)
 	{
@@ -391,11 +565,18 @@ const HandsModel *gunModel(GunKind kind)
 
 bool gunComplete(GunKind kind)
 {
+	if ((int)kind >= OwnGuns)
+		return gunModel(kind) != nullptr;
 	return kind == GunKind::Arcade || (gunModel(kind) != nullptr && (slots[(int)kind].model.flags & 2) != 0);
 }
 
 const char *gunName(GunKind kind)
 {
+	if ((int)kind >= OwnGuns)
+	{
+		const int i = ownIndex(kind);
+		return i >= 0 ? ownGuns[i]->name.c_str() : "folder gun";
+	}
 	switch (kind)
 	{
 	case GunKind::Cabinet:
@@ -418,10 +599,13 @@ GunKind chosenGun()
 	// the GPU with them): at the pickup, mid-play, it could cost the headset a frame (Ruling S33)
 	if (config::VrGameHands)
 		gunModel(GunKind::Rifle);
-	// (a setting this build doesn't know is Auto, as the menu's row shows it)
+	// (a setting below 0 is Auto, as the menu's row shows it; 4 and on the player's own guns)
+	refreshOwn();
 	int setting = config::VrGun;
-	if (setting < 0 || setting > 3)
+	if (setting < 0)
 		setting = 0;
+	const int own = setting - OwnGuns;
+	const bool ownThere = own >= 0 && own < (int)ownGuns.size() && ownGuns[own]->loaded;
 	const GunKind wanted = setting == 1 ? GunKind::Pistol : setting == 2 ? GunKind::Cabinet : GunKind::Arcade;
 	GunKind kind = GunKind::Arcade;
 	std::string why;	// each gun passed over, and why
@@ -429,17 +613,22 @@ GunKind chosenGun()
 		why += std::string(why.empty() ? "" : ", ") + "the " + gunName(gun) + how;
 	};
 	auto notThere = [&](GunKind gun) { passOver(gun, slots[(int)gun].missing ? " is not made yet" : " can't be read"); };
-	if (setting == 3)
+	// a gun of the player's own not there (its file gone, skipped): as Auto, saying so
+	if (own >= 0 && !ownThere)
+		why = (own < (int)ownGuns.size() ? ownGuns[own]->name : "folder gun " + std::to_string(own + 1)) + " is not there";
+	if (ownThere)
+		kind = (GunKind)setting;
+	else if (setting == 3)
 		kind = GunKind::Arcade;
 	else if (!config::VrGameHands)
-		why = "the game's own models are off";
-	else if (setting != 0 && gunModel(wanted) != nullptr)
+		why += std::string(why.empty() ? "" : ", ") + "the game's own models are off";
+	else if (setting != 0 && own < 0 && gunModel(wanted) != nullptr)
 		kind = wanted;
 	else
 	{
 		// auto, or the one chosen isn't there: the agents' pistol if complete, else the cabinet
 		// gun if there, else the arcade gun
-		if (setting != 0)
+		if (setting != 0 && own < 0)
 			notThere(wanted);
 		if (wanted != GunKind::Pistol && gunModel(GunKind::Pistol) != nullptr && gunComplete(GunKind::Pistol))
 			kind = GunKind::Pistol;
@@ -488,6 +677,8 @@ GunKind handGun(int player)
 
 const HandsModel *handModel(GunKind kind)
 {
+	if ((int)kind >= OwnGuns)
+		return gunModel(kind);
 	if (!config::VrGameHands)
 		return nullptr;
 	return cmGuns() ? gunModel(kind) : handsModel();
@@ -500,12 +691,17 @@ std::vector<GunChoice> gunChoices()
 		return { { (int)config::VrGun, config::VrGameHands && handsModel() != nullptr ? "The game's own" : "Arcade gun", true, true } };
 	// (with the game's own models off, the hand holds the arcade gun: theirs aren't offered)
 	const bool own = config::VrGameHands;
-	return {
+	std::vector<GunChoice> choices {
 		{ 0, "Auto", true, true },
 		{ 1, "Agents' pistol", own && gunModel(GunKind::Pistol) != nullptr, gunComplete(GunKind::Pistol) },
 		{ 2, "Cabinet gun", own && gunModel(GunKind::Cabinet) != nullptr, gunComplete(GunKind::Cabinet) },
 		{ 3, "Arcade gun", true, true },
 	};
+	// the player's own guns, whatever vr.GameHands says (a skipped one isn't offered)
+	refreshOwn();
+	for (size_t i = 0; i < ownGuns.size(); i++)
+		choices.push_back({ OwnGuns + (int)i, ownGuns[i]->name.c_str(), ownGuns[i]->loaded, true });
+	return choices;
 }
 
 void drawHands(const glm::mat4& viewProj, const glm::vec3& eyePos, const HandsView& view)
@@ -514,6 +710,9 @@ void drawHands(const glm::mat4& viewProj, const glm::vec3& eyePos, const HandsVi
 	for (Slot& slot : slots)
 		if (slot.loaded && view.model == &slot.model.info)
 			found = &slot.model;
+	for (auto& gun : ownGuns)
+		if (gun->loaded && view.model == &gun->model.info)
+			found = &gun->model;
 	if (found == nullptr || !initGl())
 		return;
 	// every model loaded goes to the GPU at the first draw, not just this one: the assault
@@ -521,6 +720,9 @@ void drawHands(const glm::mat4& viewProj, const glm::vec3& eyePos, const HandsVi
 	for (Slot& slot : slots)
 		if (slot.loaded)
 			upload(slot.model);
+	for (auto& gun : ownGuns)
+		if (gun->loaded)
+			upload(gun->model);
 	Model& model = *found;
 	glcache.UseProgram(program);
 	glUniform3f(uEye, eyePos.x, eyePos.y, eyePos.z);
@@ -554,20 +756,9 @@ void termHands()
 		glcache.DeleteProgram(program);
 	program = 0;
 	for (Slot& slot : slots)
-	{
-		Model& model = slot.model;
-		if (model.vbo != 0)
-			glDeleteBuffers(1, &model.vbo);
-		if (model.vao != 0)
-			deleteVertexArray(model.vao);
-		model.vbo = model.vao = 0;
-		for (Texture& t : model.textures)
-			if (t.id != 0)
-			{
-				glcache.DeleteTextures(1, &t.id);
-				t.id = 0;
-			}
-	}
+		releaseGl(slot.model);
+	for (auto& gun : ownGuns)
+		releaseGl(gun->model);
 	uMvp = uModel = uEye = uSpecular = uShininess = uAlphaTest = uLight = uTex = -1;
 }
 

@@ -5,6 +5,7 @@
 */
 #include "xr_menu.h"
 #include "xr_hands.h"
+#include "xr_own.h"
 #include "xr_host.h"
 #include "xr_panel.h"
 #include "cfg/cfg.h"
@@ -87,7 +88,7 @@ std::string value(int row)
 		// a gun not made yet shows dimmed (only when vr.Gun names it: the row skips it)
 		const std::vector<GunChoice> choices = gunChoices();
 		const GunChoice& gun = choices[gunAt(choices)];
-		return std::string(gun.label) + (!gun.made ? (config::VrGameHands ? " (not made yet)" : " (game's models off)")
+		return std::string(gun.label) + (!gun.made ? (gun.setting >= 4 ? " (not there)" : config::VrGameHands ? " (not made yet)" : " (game's models off)")
 				: !gun.complete ? " (incomplete)" : "");
 	}
 	case Laser:
@@ -267,6 +268,8 @@ void open(const glm::mat4& head)
 	pointing[Left] = pointing[Right] = false;
 	fresh = true;
 	quitArmed = quitting = false;
+	// the player's own guns and controllers read again (xr_own.h): one put in the folder meanwhile is offered
+	own::scan();
 	const RowsLayout layout = rowsLayout(panel());
 	NOTICE_LOG(INPUT, "XR: menu at %.2f m, %d rows, row pitch %.3f m, top row %+.3f m, %.2f m wide",
 			Distance, (int)Rows, layout.rowPitch, layout.topRow, layout.width);

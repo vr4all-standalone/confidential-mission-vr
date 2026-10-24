@@ -1281,7 +1281,7 @@ if(NOT LIBRETRO)
 			target_sources(${PROJECT_NAME} PRIVATE core/rend/vr/xr_host.cpp core/rend/vr/xr_host.h
 			core/rend/vr/xr_gun.cpp core/rend/vr/xr_gun.h core/rend/vr/gun_model.h
 			core/rend/vr/xr_controllers.cpp core/rend/vr/xr_controllers.h core/rend/vr/controller_model.h
-			core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h
+			core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h core/rend/vr/xr_own.cpp core/rend/vr/xr_own.h
 			core/rend/vr/xr_hands.cpp core/rend/vr/xr_hands.h
 			core/rend/vr/xr_labels.cpp core/rend/vr/xr_labels.h
 			core/rend/vr/xr_menu.cpp core/rend/vr/xr_menu.h
@@ -1480,7 +1480,7 @@ if(NOT LIBRETRO)
 			target_sources(${PROJECT_NAME} PRIVATE core/rend/vr/xr_host.cpp core/rend/vr/xr_host.h
 				core/rend/vr/xr_gun.cpp core/rend/vr/xr_gun.h core/rend/vr/gun_model.h
 				core/rend/vr/xr_controllers.cpp core/rend/vr/xr_controllers.h core/rend/vr/controller_model.h
-				core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h
+				core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h core/rend/vr/xr_own.cpp core/rend/vr/xr_own.h
 				core/rend/vr/xr_hands.cpp core/rend/vr/xr_hands.h
 				core/rend/vr/xr_labels.cpp core/rend/vr/xr_labels.h
 				core/rend/vr/xr_menu.cpp core/rend/vr/xr_menu.h

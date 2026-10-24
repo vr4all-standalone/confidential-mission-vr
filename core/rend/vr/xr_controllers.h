@@ -46,7 +46,8 @@ bool retryWanted();
 // gun's model does). viewProj: room space -> this eye's clip space; eyePos: the eye in room
 // space. Draws whatever vr.ShowControllers says (the caller checks it). GL objects are made
 // on the first draw.
-void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const glm::mat4& grip);
+// (aim: the hand's aim pose, room space: where the player's own model, controllers/<hand>.glb, goes; xr_own.h)
+void draw(const glm::mat4& viewProj, const glm::vec3& eyePos, int hand, const glm::mat4& grip, const glm::mat4& aim);
 // Grip space, metres: where that button's label points, the middle of its part of the
 // built-in shape (also while the runtime's model is drawn: its parts aren't known by name).
 // hand: 0 left, 1 right.

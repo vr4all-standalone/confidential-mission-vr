@@ -1,7 +1,7 @@
 /*
 	A glTF 2.0 binary (GLB) read into one triangle mesh (hotd2-vr). See glb_mesh.h.
 
-	The data comes from the OpenXR runtime, so it is checked as untrusted: cgltf_validate (every
+	The data comes from the OpenXR runtime or the player's own files (xr_own.h), so it is checked as untrusted: cgltf_validate (every
 	accessor within its buffer), positions and indices only from buffer views (not sparse),
 	indices within their primitive's vertices, at most 1,000,000 vertices and 3,000,000 indices,
 	and images decoded only from the GLB's own buffer, at most 4096 pixels a side (asked before
@@ -19,7 +19,9 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
 #include <cstring>
+#include <map>
 
 namespace vr::xr
 {
@@ -52,14 +54,14 @@ constexpr int MaxImageSide = 4096;
 struct Reader
 {
 	GlbMesh& out;
-	const cgltf_image *textureImage = nullptr;	// the image the mesh's texture is from
-	const cgltf_image *triedImage = nullptr;	// the last image that couldn't be used
+	int maxImages = 1, fitSide = 0;
+	std::map<const cgltf_image *, int> imageAt;	// each image tried: its index in out.images (-1: not usable)
 	bool tooBig = false;		// over MaxVertices or MaxIndices: nothing is drawn
 };
 
 // The base colour image, decoded into out: from a buffer view of the GLB (or a data: URI cgltf
 // loaded into a buffer), PNG or JPEG. Else why not: its MIME type, or what was wrong.
-std::string loadImage(const cgltf_image *image, GlbMesh& out)
+std::string loadImage(const cgltf_image *image, GlbImage& out)
 {
 	const std::string mime = image->mime_type != nullptr ? image->mime_type : "no MIME type";
 	if (image->mime_type != nullptr && strcmp(image->mime_type, "image/png") && strcmp(image->mime_type, "image/jpeg"))
@@ -84,14 +86,35 @@ std::string loadImage(const cgltf_image *image, GlbMesh& out)
 	std::string why;
 	if (w > 0 && h > 0 && w <= MaxImageSide && h <= MaxImageSide)
 	{
-		out.texWidth = w;
-		out.texHeight = h;
+		out.width = w;
+		out.height = h;
 		out.rgba.assign(pixels, pixels + (size_t)w * h * 4);
 	}
 	else
 		why = mime + ", not decodable";
 	stbi_image_free(pixels);
 	return why;
+}
+
+// Halved, each 2 x 2 pixels averaged (an odd edge's last pixel twice), till no side is over maxSide.
+void fitImage(GlbImage& image, int maxSide)
+{
+	while (image.width > maxSide || image.height > maxSide)
+	{
+		const int w = std::max(1, image.width / 2), h = std::max(1, image.height / 2);
+		std::vector<u8> half((size_t)w * h * 4);
+		auto at = [&](int x, int y, int c) {
+			return (unsigned)image.rgba[((size_t)std::min(y, image.height - 1) * image.width + std::min(x, image.width - 1)) * 4 + c];
+		};
+		for (int y = 0; y < h; y++)
+			for (int x = 0; x < w; x++)
+				for (int c = 0; c < 4; c++)
+					half[((size_t)y * w + x) * 4 + c] = (u8)((at(x * 2, y * 2, c) + at(x * 2 + 1, y * 2, c)
+							+ at(x * 2, y * 2 + 1, c) + at(x * 2 + 1, y * 2 + 1, c) + 2) / 4);
+		image.width = w;
+		image.height = h;
+		image.rgba = std::move(half);
+	}
 }
 
 const cgltf_accessor *attribute(const cgltf_primitive& prim, cgltf_attribute_type type, int index = 0)
@@ -134,8 +157,8 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& r
 	const cgltf_accessor *uv = attribute(prim, cgltf_attribute_type_texcoord);
 	if (uv != nullptr && (uv->type != cgltf_type_vec2 || uv->count != position->count))
 		uv = nullptr;
-	// this primitive's base colour image (KHR_texture_basisu's when it has no other): the mesh's
-	// texture if it is the first one that decodes
+	// this primitive's base colour image (KHR_texture_basisu's when it has no other): one of the
+	// mesh's images if it decodes and fewer than maxImages came before it
 	const cgltf_image *image = nullptr;
 	if (prim.material != nullptr && prim.material->has_pbr_metallic_roughness)
 	{
@@ -145,19 +168,29 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& r
 		else if (view.texture != nullptr && out.untextured.empty())
 			out.untextured = "a texture on TEXCOORD_" + std::to_string(view.texcoord);
 	}
-	if (reader.textureImage == nullptr && image != nullptr && image != reader.triedImage)
+	int imageIndex = -1;
+	if (image != nullptr)
 	{
-		const std::string why = loadImage(image, out);
-		if (why.empty())
-			reader.textureImage = image;
-		else
+		const auto tried = reader.imageAt.find(image);
+		if (tried != reader.imageAt.end())
+			imageIndex = tried->second;
+		else if ((int)out.images.size() < reader.maxImages)
 		{
-			reader.triedImage = image;
-			if (out.untextured.empty())
+			GlbImage decoded;
+			const std::string why = loadImage(image, decoded);
+			if (why.empty())
+			{
+				if (reader.fitSide > 0)
+					fitImage(decoded, reader.fitSide);
+				imageIndex = (int)out.images.size();
+				out.images.push_back(std::move(decoded));
+			}
+			else if (out.untextured.empty())
 				out.untextured = why;
+			reader.imageAt[image] = imageIndex;
 		}
 	}
-	const bool textured = image != nullptr && image == reader.textureImage;
+	const bool textured = imageIndex >= 0;
 
 	const u32 base = (u32)(out.positions.size() / 3);
 	const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(world)));
@@ -199,6 +232,17 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& r
 	else
 		for (size_t k = 1; k + 1 < count; k++)
 			triangle(vertex(0), vertex(k), vertex(k + 1));
+	if (out.indices.size() > firstIndex)
+	{
+		GlbPart part;
+		part.firstIndex = (u32)firstIndex;
+		part.indexCount = (u32)(out.indices.size() - firstIndex);
+		part.image = imageIndex;
+		if (prim.material != nullptr && prim.material->has_pbr_metallic_roughness)
+			for (int k = 0; k < 4; k++)
+				part.color[k] = prim.material->pbr_metallic_roughness.base_color_factor[k];
+		out.parts.push_back(part);
+	}
 
 	if (normal == nullptr)
 	{
@@ -243,7 +287,7 @@ void addNode(const cgltf_node *node, Reader& reader, int depth)
 
 }	// namespace
 
-bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error)
+bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error, int maxImages, int fitSide)
 {
 	out = GlbMesh();
 	if (data == nullptr || size < 12 || memcmp(data, "glTF", 4) != 0)
@@ -266,7 +310,7 @@ bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error)
 		cgltf_free(gltf);
 		return false;
 	}
-	Reader reader { out };
+	Reader reader { out, std::max(maxImages, 0), fitSide };
 	const cgltf_scene *scene = gltf->scene != nullptr ? gltf->scene : gltf->scenes_count > 0 ? &gltf->scenes[0] : nullptr;
 	if (scene != nullptr)
 	{
@@ -287,7 +331,7 @@ bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error)
 		out = GlbMesh();
 		return false;
 	}
-	if (out.texWidth != 0)
+	if (!out.images.empty())
 		out.untextured.clear();
 	else if (out.untextured.empty())
 		out.untextured = "no base colour texture";

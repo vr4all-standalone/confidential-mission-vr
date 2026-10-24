@@ -21,6 +21,7 @@
 #include "xr_menu.h"
 #include "xr_panel.h"
 #include "xr_sim.h"
+#include "xr_own.h"
 #include "hands_rip.h"
 #include "rend/gles/gles.h"
 #ifdef __ANDROID__
@@ -153,6 +154,7 @@ struct Gun
 	// since the trigger was pulled (with the rifle logged once it's let go).
 	bool autoKick;
 	unsigned burstFlashes;
+	int muzzleLogged = -1;	// the gun whose muzzle was last logged (GunKind)
 	// When the last reload started (racked slide, gun pointed down; 0: done), and a
 	// trigger held through it.
 	XrTime reloadAt;
@@ -208,6 +210,7 @@ int modelRetries;
 std::chrono::steady_clock::time_point nextModelRetry;
 bool controllerShown[2];
 glm::mat4 controllerGrip[2];
+glm::mat4 controllerAim[2];		// (the aim pose: the player's own controller models go there, xr_own.h)
 // What each hand holds (holds()) and the how-to-play labels (xr_labels.h). A game starts with a
 // controller in each hand and the labels on; player 1's gun hand takes the gun at the first right
 // Start or trigger pull (p1Armed; that pull fires as usual) and the labels go. The left holds player
@@ -1559,6 +1562,13 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		// the game's pistol is in a right hand: mirrored for the left
 		const bool mirror = game && g.hand == Left;
 		const glm::mat4 placement = gunPlacement(game, gunScale, palm, mirror);
+		if (g.muzzleLogged != (int)kind)
+		{
+			// where shots leave, as the aim line and the flash start (Task 14b: a gun of the player's own)
+			g.muzzleLogged = (int)kind;
+			const glm::vec3 at = glm::vec3(placement * glm::vec4(muzzle, 1.f));
+			NOTICE_LOG(INPUT, "XR: P%d muzzle: %s at %.4f %.4f %.4f from the aim pose", g.player + 1, gunName(kind), at.x, at.y, at.z);
+		}
 		// Shots leave the muzzle along the barrel, so the aim line and the hit agree. Into
 		// rebuilt game eye space for the hit test.
 		const glm::vec3 o = glm::vec3(pose * placement * glm::vec4(muzzle, 1.f));
@@ -1786,6 +1796,11 @@ void updateControllers(XrTime time)
 			controllerGrip[hand] = glm::translate(glm::mat4(1.f), relativePosition(location.pose.position))
 					* glm::mat4_cast(relativeRotation(location.pose.orientation));
 			controllerShown[hand] = true;
+			controllerAim[hand] = controllerGrip[hand];		// (without an aim pose: the grip's)
+			XrSpaceLocation aim { XR_TYPE_SPACE_LOCATION };
+			if (XR_SUCCEEDED(XR(xrLocateSpace)(aimSpaces[hand], localSpace, time, &aim)) && (aim.locationFlags & valid) == valid)
+				controllerAim[hand] = glm::translate(glm::mat4(1.f), relativePosition(aim.pose.position))
+						* glm::mat4_cast(relativeRotation(aim.pose.orientation));
 		}
 	}
 }
@@ -2946,7 +2961,7 @@ bool frame()
 			}
 			for (int hand : { Left, Right })
 				if (controllerShown[hand])
-					controllers::draw(viewProj, eyePos, hand, controllerGrip[hand]);
+					controllers::draw(viewProj, eyePos, hand, controllerGrip[hand], controllerAim[hand]);
 			first = true;
 			for (const Gun& g : guns)
 				if (g.visible)
