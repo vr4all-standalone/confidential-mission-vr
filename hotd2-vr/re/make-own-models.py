@@ -3,7 +3,7 @@ Test fixtures for the player's own models and the bundled ones (Task 14b, S37; a
 cm-own-controllers, cm-bundled): self-made boxes written at test time, so no third-party model is ever in the repo.
 
   python -I make-own-models.py <root> [--guns] [--controllers] [--no-sidecar] [--only-right] [--early] [--only-box]
-                                [--no-buttons] [--bad-button]
+                                [--no-buttons] [--bad-button] [--namco-zapper]
 
 <root>\guns\boxgun.glb + boxgun.json: a box gun (grip, body, barrel), each its own base colour (red, green,
 blue), the body 8 slabs of the same green (10 primitives that make 3 parts), the barrel (a muzzle brake, wider
@@ -13,7 +13,9 @@ grid of 204,800 triangles, over the app's 200,000 (refused). bad-inf, bad-up, ba
 sidecars with a grip of 1e39, an up of 1e30, a muzzle 500 units away (each refused). tex-a, tex-b, tex-c: 8
 boxes, each with its own 2048 x 2048 PNG (128 MB of RGBA a gun, 384 MB in all: each is still offered, there is
 no total across the guns). --early: aa-early.glb + .json ("Early gun", the box gun's GLB), sorting before boxgun.
---only-box: the box gun alone (and aa-early with --early), none of the others. <root>\controllers\left.glb,
+--only-box: the box gun alone (and aa-early with --early), none of the others. --namco-zapper (CM 1.2's bundled
+guns, for <data>\models): namco.glb + .json ("Arcade gun", the box gun all yellow) and zapper.glb + .json ("Zapper",
+0.30 m long, the box gun all magenta), stand-ins for the bundled models, which no test draws. <root>\controllers\left.glb,
 right.glb + .json: a box controller in cm (3 primitives, 2 parts: dark grey in two halves, orange), its aim node
 2 cm up, 6 cm forward, tilted 30 degrees; its sidecar's "buttons" (the how-to-play labels' points, Task 15b) at
 known spots on the orange plate's top and the body's front (left: x, y, menu, stick, trigger; right: a, b, stick,
@@ -125,6 +127,8 @@ class Glb:
 # The box gun: the grip's top at the origin, the barrel along +x, up +z; 2 units from the body's back to the muzzle.
 GUN = {'name': 'Box gun', 'grip': [0.0, 0.0, 0.0], 'muzzle': [1.5, 0.0, 0.25], 'up': [0.0, 0.0, 1.0], 'length': 0.25}
 RED, GREEN, BLUE = (0.85, 0.08, 0.08), (0.10, 0.75, 0.12), (0.15, 0.25, 1.0)
+# --namco-zapper's two, each the box gun in one colour of its own (none of the box gun's three)
+YELLOW, MAGENTA = (0.95, 0.85, 0.10), (0.85, 0.15, 0.75)
 
 
 def gun_muzzle(side):
@@ -144,15 +148,26 @@ def gun_muzzle(side):
     return [s * sum(d[k] * a[k] for k in range(3)) for a in (x, u, [-c for c in f])]
 
 
-def box_gun():
+def box_gun(grip=RED, body=GREEN, barrel=BLUE):
     g = Glb()
-    g.primitive(box([-0.3, -0.15, -1.2], [0.1, 0.15, 0.0]), RED)
+    g.primitive(box([-0.3, -0.15, -1.2], [0.1, 0.15, 0.0]), grip)
     # the body in 8 slabs of one colour: merged into one part by the app
     for k in range(8):
-        g.primitive(box([-0.5 + 1.5 * k / 8, -0.17, 0.0], [-0.5 + 1.5 * (k + 1) / 8, 0.17, 0.45]), GREEN)
+        g.primitive(box([-0.5 + 1.5 * k / 8, -0.17, 0.0], [-0.5 + 1.5 * (k + 1) / 8, 0.17, 0.45]), body)
     checks = png(4, 4, lambda x, y: (255, 255, 255, 255) if (x + y) % 2 else (215, 215, 215, 255))
-    g.primitive(box([1.0, -0.25, -0.05], [1.5, 0.25, 0.55]), BLUE, checks)
+    g.primitive(box([1.0, -0.25, -0.05], [1.5, 0.25, 0.55]), barrel, checks)
     return g
+
+
+def write_namco_zapper(root):
+    # the bundled guns' stand-ins: namco (the Arcade gun) and zapper (the Zapper, 1.2x the box gun's length)
+    os.makedirs(os.path.join(root, 'guns'), exist_ok=True)
+    for stem, colour, side in (('namco', YELLOW, dict(GUN, name='Arcade gun')),
+                               ('zapper', MAGENTA, dict(GUN, name='Zapper', length=0.30))):
+        box_gun(colour, colour, colour).write(os.path.join(root, 'guns', stem + '.glb'))
+        with open(os.path.join(root, 'guns', stem + '.json'), 'w') as f:
+            json.dump(side, f, indent=1)
+        print('textures %s %d' % (stem, 4 * 4 * 4))
 
 
 def write_guns(root, sidecar, early, only_box=False):
@@ -258,9 +273,12 @@ def main():
     ap.add_argument('--only-box', action='store_true', help='guns: the box gun alone (and aa-early with --early)')
     ap.add_argument('--no-buttons', action='store_true', help='controllers: the sidecars without "buttons"')
     ap.add_argument('--bad-button', action='store_true', help='controllers: the left one\'s "menu" point 5 m off')
+    ap.add_argument('--namco-zapper', action='store_true', help='guns: namco ("Arcade gun") and zapper ("Zapper", 0.30 m)')
     a = ap.parse_args()
     if a.guns:
         write_guns(a.root, not a.no_sidecar, a.early, a.only_box)
+    if a.namco_zapper:
+        write_namco_zapper(a.root)
     if a.controllers:
         write_controllers(a.root, ['right'] if a.only_right else ['left', 'right'], not a.no_buttons, a.bad_button)
     print('muzzle %.4f %.4f %.4f' % tuple(gun_muzzle(GUN)))

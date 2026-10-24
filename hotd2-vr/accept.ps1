@@ -38,15 +38,15 @@
   cm-merge-unit plays nothing: it compiles re\hands_build_test.cpp with core\rend\vr\hands_build.cpp
   (the VS 2022 Build Tools, as build-win.cmd; into build-win\vrtest\cm-merge-unit, not the app),
   runs it (the pistol's merge on synthetic captures) and then vrcheck.py's selftest.
-  cm-gun plays accept-cm-gun and accept-cm-gun-nopistol (the gun choice, Task 13): it needs the cabinet
-  gun's and the pistol's files the rip scenarios leave (it comes after them in the list; without them it
-  fails and says so), and moves the pistol's away (.hold) for the second run, back when it's done.
+  cm-gun plays accept-cm-gun, -migrate-0, -2, -3, -upgrade, -builtin, -nopistol and -nofiles (the three guns,
+  CM VR 1.2 Task 1): it needs the pistol's file the rip scenarios leave (it comes after them in the list;
+  without it it fails and says so), and moves it away (.hold) for the last two runs, back when it's done.
   cm-rifle-sim plays accept-cm-rifle-sim and accept-cm-rifle-sim-arcade (the assault rifle, Task 14: poked
   into player 1's block, its knocks counted against the rounds the game fires): it needs gun-cm-rifle.bin
   (cm-rip-rifle's), moved away (.hold) for the second run and back when it's done; cm-rifle-p2 plays
   accept-cm-rifle-p2 (player 2's rifle, in the left hand).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
-  cm-own-gun and cm-own-controllers (Task 14b, the player's own models) play accept-cm-own-gun and -nosidecar,
+  cm-own-gun and cm-own-controllers (Task 14b, the player's own models) play accept-cm-own-gun, -nosidecar, -override,
   accept-cm-own-controllers and -right with re\make-own-models.py's fixtures (self-made boxes) written into
   build-win\guns\ and build-win\controllers\ meanwhile; they, cm-controllers, cm-controllers-rt and cm-bundled first move
   any guns\ and controllers\ folders aside (.accept-hold), next to build-win\flycast.exe and in $env:VRLGH_GAMES, and the
@@ -158,12 +158,12 @@ function Test-Mok {
 #
 function T([double]$t) { $t.ToString('0.0##', $inv) }
 $cmWiden = 'config:vr.FovScale=2,config:vr.WidenFov=yes'
-# The XR scenarios from before the game's own guns (Task 10) pin the arcade gun: their aim, muzzle
-# (vr.GunScale 0.68: cm-menu's Get-CmMenuAim) and shots assume it, and with vr.GameHands off a
-# run neither draws gun-cm-cabinet.bin nor makes it, whatever ran before. (Task 13: with it off the
-# hand holds the arcade gun whatever vr.Gun says, its Auto too: "XR: gun: arcade gun (auto: the
-# game's own models are off)".)
-$cmWidenArcade = "$cmWiden,config:vr.GameHands=no"
+# The XR scenarios from before the game's own guns (Task 10) pin the built-in gun (xr_gun.h's, v1's
+# arcade gun): their aim, muzzle (vr.GunScale 0.68: cm-menu's Get-CmMenuAim) and shots assume it, and
+# with vr.GameHands off a run neither draws the game's guns nor makes them, whatever ran before.
+# vr.BuiltInGun (PC, CM VR 1.2) holds it whatever vr.Gun says, so these runs never draw a bundled gun
+# (the user's own models in build-win\data\models): "XR: gun: built-in gun (chosen: vr.BuiltInGun)".
+$cmWidenArcade = "$cmWiden,config:vr.GameHands=no,config:vr.BuiltInGun=yes"
 $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000, 9000), @(5000, 1000), @(5000, 9000), @(1000, 5000), @(9000, 5000))
 
 function Get-CmStarts { for ($t = 30; $t -le 52; $t += 2) { "$t=start 0" } }
@@ -1018,7 +1018,7 @@ function Test-CmRipHand {
 	$why = Invoke-VrTest $params
 	if ($why) { return $why }
 	$arcade = 'accept-cm-rip-hand-arcade'
-	$params = Get-CmRipHandParams $arcade "$cmWiden,config:vr.GameHands=no"
+	$params = Get-CmRipHandParams $arcade $cmWidenArcade
 	$params.Reject += 'XR: the game''s own model from'
 	$why = Invoke-VrTest $params
 	if ($why) { return "arcade gun: $why" }
@@ -1171,46 +1171,97 @@ function Test-CmRipRifle {
 	return $null
 }
 
-# Task 13: the gun choice (vr.Gun, the menu's Gun row) through the simulator, widened, with the files
-# the rip scenarios leave (the cabinet gun and the agents' pistol). Auto at the start: the pistol, or
-# the cabinet gun when the pistol's file is flagged incomplete (HND1 v2 flags at byte 100, 2:
-# complete). The right hand in front of the left eye from 20 s, pointing down past the panel (its ray
-# off the rows: a gun change moves the muzzle, which would move the selection); the first A (30 s)
-# gives it the gun. The menu at 58 s, the stick down twice to Gun, then + three times: the pistol
-# (chosen; "(incomplete)" in the row when it is), the cabinet gun, the arcade gun, each shot with
-# the hand in view (g1-g3), which differ pairwise in the hand's part of the view. Then a start with
-# vr.Gun 1 and the pistol's file away (renamed .hold, back in finally): the cabinet gun.
+# The run's log has a line for each regex (case-sensitive), each one after the one before: $null, else why not.
+function Test-LogOrder([string]$name, [string[]]$regexes) {
+	$after = 0
+	foreach ($re in $regexes) {
+		$hit = Select-String -LiteralPath (Get-RunLog $name) -Pattern $re -CaseSensitive | Where-Object { $_.LineNumber -gt $after } | Select-Object -First 1
+		if (-not $hit) { return "no line '$re' after line $after" }
+		$after = $hit.LineNumber
+	}
+	Write-Host "  PASS in order: $($regexes -join ', ')"
+	return $null
+}
+
+# A setting's line in the run's emu.cfg.after (the settings it saved), the value after '='; $null without one.
+function Get-SavedSetting([string]$name, [string]$key, [string]$file = 'emu.cfg.after') {
+	$path = Join-Path $repo "build-win\vrtest\$name\$file"
+	if (-not (Test-Path -LiteralPath $path)) { return $null }
+	$hit = Select-String -LiteralPath $path -Pattern "^$([regex]::Escape($key))\s*=\s*(.*?)\s*$" | Select-Object -First 1
+	return $(if ($hit) { $hit.Matches[0].Groups[1].Value } else { $null })
+}
+
+# CM VR 1.2 (Task 1): the three guns. The Gun row, round and round: the in-game pistol (vr.Gun 1, the default), then
+# the folder guns, the bundled ones first in file-name order (re\make-own-models.py --namco-zapper in a bundled folder
+# of the harness's own: namco.glb "Arcade gun", zapper.glb "Zapper"; the user's bundled models held aside), then the
+# player's (the box gun alone). "list": the pistol in hand from the start; the right hand in front of the left eye from
+# 20 s, pointing down past the panel (its ray off the rows: a gun change moves the muzzle, which would move the
+# selection); the menu at 58 s, the stick down twice to Gun, then + three times (59.5, 60, 60.5 s): the Arcade gun, the
+# Zapper, the box gun, in that order, saved as vr.Gun 4, vr.GunFile boxgun. 1.1's saved choices 0 (Auto), 2 (the
+# cabinet gun) and 3 (the built-in arcade gun) read as the pistol, the setting not rewritten ("migrate-<n>"); vr.Gun 4
+# with vr.GunFile NAMCO (1.1's Namco gun, the case folded) is the Arcade gun ("upgrade", Review Focus 1). vr.BuiltInGun
+# (PC): the built-in gun, no gun file read ("builtin"). Without the pistol's file (renamed .hold, back in finally): the
+# Arcade gun ("nopistol"), and with no gun file either, the built-in gun ("nofiles").
 function Test-CmGun {
-	foreach ($file in $cmCabinetFile, $cmPistolFile) {
-		if (-not (Test-Path -LiteralPath $file)) { return "no ${file}: run cm-rip-rifle first (the rip scenarios make the guns; the full list does)" }
+	if (-not (Test-Path -LiteralPath $cmPistolFile)) { return "no ${cmPistolFile}: run cm-rip-pistol first (the rip scenarios make the guns; the full list does)" }
+	$why = Invoke-OwnFolders -Fixture '--guns', '--only-box' -Bundled '--namco-zapper' {
+		$name = 'accept-cm-gun'
+		$menu = @('XR: menu Gun -> Arcade gun$', 'XR: menu Gun -> Zapper$', 'XR: menu Gun -> Box gun$')
+		$plus = @('59.5', '60', '60.5' | ForEach-Object { "$_=stick right 1 0 150" })
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWiden
+			At = @('20=pose right 0.1 1.45 -0.3 0 -35') + @(Get-CmStartsXr) + '58=xr left/menu 1 150' +
+				@('58.5=stick right 0 -1 150', '59=stick right 0 -1 150') + $plus + '62=xr right/b 1 150'
+			Expect = @('XR: gun: in-game pistol \(chosen\)$') + $menu + 'XR: gun: Box gun \(chosen\)$'
+			Reject = @('XR: initialisation failed', 'XR: gun: .*\(auto', 'XR: menu (Recenter|Laser|Haptics)',
+				'XR: menu Gun -> (Auto|Cabinet gun|Agents)', 'bundled models.guns.boxgun') }
+		if ($why) { return $why }
+		$why = Test-LogOrder $name $menu
+		if ($why) { return $why }
+		foreach ($key in 'vr.Gun', 'vr.GunFile') {
+			$got = Get-SavedSetting $name $key
+			$want = @{ 'vr.Gun' = '4'; 'vr.GunFile' = 'boxgun' }[$key]
+			Write-Host "  emu.cfg.after: $key = $got (want $want)"
+			if ($got -cne $want) { return "the menu saved $key = $got, want $want" }
+		}
+		foreach ($n in 0, 2, 3) {
+			$run = "accept-cm-gun-migrate-$n"
+			$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $run; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=$n"
+				Expect = @('XR: gun: in-game pistol \(chosen\)$')
+				Reject = @('XR: initialisation failed', 'XR: gun: (?!in-game pistol \(chosen\)$)') }
+			if ($why) { return "vr.Gun ${n}: $why" }
+			# read as 1, nothing rewritten: the run's emu.cfg keeps vr.Gun as it was
+			$before = Get-SavedSetting $run 'vr.Gun' 'emu.cfg.before'
+			$after = Get-SavedSetting $run 'vr.Gun'
+			if ($before -cne $after) { return "vr.Gun ${n}: the run's emu.cfg had vr.Gun = $before, after it $after (rewritten)" }
+			Write-Host "  vr.Gun ${n}: emu.cfg's vr.Gun not rewritten ($(if ($null -eq $after) { 'none' } else { $after }))"
+		}
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-upgrade'; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=4,config:vr.GunFile=NAMCO"
+			Expect = @('XR: gun: Arcade gun \(chosen\)$')
+			Reject = @('XR: initialisation failed', 'XR: gun: (?!Arcade gun \(chosen\)$)') }
+		if ($why) { return "1.1's Namco gun (vr.GunFile NAMCO): $why" }
+		return $null
 	}
-	$complete = ([BitConverter]::ToUInt32([IO.File]::ReadAllBytes($cmPistolFile), 100) -band 2) -ne 0
-	Write-Host "  the agents' pistol's file is flagged $(if ($complete) { 'complete' } else { 'incomplete' })"
-	$name = 'accept-cm-gun'
-	$plus = @(60, 62, 64 | ForEach-Object { "$_=stick right 1 0 150" })
-	$shots = @(61, 63, 65 | ForEach-Object -Begin { $i = 0 } -Process { $i++; "$_=shot g$i" })
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 68; XrSim = $true; Config = $cmWiden
-		At = @('20=pose right 0.1 1.45 -0.3 0 -35') + @(Get-CmStartsXr) + '58=xr left/menu 1 150' +
-			@('58.5=stick right 0 -1 150', '59=stick right 0 -1 150') + $plus + $shots + '66=xr right/b 1 150'
-		Expect = @($(if ($complete) { 'XR: gun: agents'' pistol \(auto\)' } else { 'XR: gun: cabinet gun \(auto: the agents'' pistol is incomplete\)' }),
-			"XR: menu Gun -> Agents' pistol$(if ($complete) { '$' } else { ' \(incomplete\)' })", 'XR: gun: agents'' pistol \(chosen\)',
-			'XR: menu Gun -> Cabinet gun', 'XR: gun: cabinet gun \(chosen\)', 'XR: menu Gun -> Arcade gun', 'XR: gun: arcade gun \(chosen\)')
-		Reject = @('XR: initialisation failed', 'XR: gun: .*not made yet', 'XR: menu (Recenter|Laser|Haptics)') }
 	if ($why) { return $why }
-	$shotFiles = @('t061-g1.png', 't063-g2.png', 't065-g3.png')
-	$why = Test-RunShots $name $shotFiles
-	if ($why) { return $why }
-	$dir = Join-Path $repo "build-win\vrtest\$name"
-	foreach ($pair in @(0, 1), @(0, 2), @(1, 2)) {
-		$why = Invoke-VrCheck 'differ', (Join-Path $dir $shotFiles[$pair[0]]), (Join-Path $dir $shotFiles[$pair[1]]), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
-		if ($why) { return "g$($pair[0] + 1) and g$($pair[1] + 1) look alike: $why" }
-	}
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-builtin'; Seconds = 15; XrSim = $true; Config = $cmWidenArcade
+		Expect = @('XR: gun: built-in gun \(chosen: vr\.BuiltInGun\)$')
+		Reject = @('XR: initialisation failed', 'XR: gun: (?!built-in gun)', 'XR: own gun "') }
+	if ($why) { return "vr.BuiltInGun: $why" }
 	$held = "$cmPistolFile.hold"
 	try {
 		if (-not $Reuse) { Move-Item -LiteralPath $cmPistolFile -Destination $held -Force }
-		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-nopistol'; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=1"
-			Expect = @('XR: gun: cabinet gun \(chosen: the agents'' pistol is not made yet\)')
-			Reject = @('XR: initialisation failed', 'XR: gun: agents'' pistol') }
+		$why = Invoke-OwnFolders -Bundled '--namco-zapper' {
+			Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-nopistol'; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=1"
+				Expect = @('XR: gun: Arcade gun \(chosen: the in-game pistol is not made yet\)$')
+				Reject = @('XR: initialisation failed', 'XR: gun: in-game pistol') }
+		}
+		if ($why) { return "without the pistol's file: $why" }
+		# no bundled folder, no player's: no gun file at all
+		$why = Invoke-OwnFolders -Bundled @() {
+			Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-nofiles'; Seconds = 15; XrSim = $true; Config = $cmWiden
+				Expect = @('XR: gun: built-in gun \(chosen: no gun file loads\)$')
+				Reject = @('XR: initialisation failed', 'XR: gun: in-game pistol', 'XR: own gun ') }
+		}
+		if ($why) { return "without the pistol's file or a gun file: $why" }
 	}
 	finally {
 		if (Test-Path -LiteralPath $held) {
@@ -1219,7 +1270,6 @@ function Test-CmGun {
 			Move-Item -LiteralPath $held -Destination $cmPistolFile -Force
 		}
 	}
-	if ($why) { return "without the pistol's file: $why" }
 	return $null
 }
 
@@ -1443,20 +1493,22 @@ function Get-LogVec([string]$run, [string]$prefix) {
 
 # The player's own gun (Task 14b) through the simulator, widened, as cm-gun: re\make-own-models.py's box gun in guns\
 # (boxgun.glb + .json: 3 parts, red, green and blue, the barrel textured; in made-up units, the barrel along +x) and
-# zz-big.glb, over the cap of 200,000 triangles (skipped, why logged). The menu at 58 s, down twice to Gun, + four times:
-# the agents' pistol (the hand's window shot at 60.6 s), the cabinet gun, the arcade gun (63 s), the box gun after them as vr.Gun 4
-# (65 s); zz-big isn't offered. The muzzle the aim line and the flash start from (the hand's "XR: P1 muzzle: <gun> at
+# zz-big.glb, over the cap of 200,000 triangles (skipped, why logged), with the bundled guns' stand-ins in a bundled folder
+# of the harness's own (--namco-zapper: "Arcade gun", "Zapper"). The menu at 58 s, down twice to Gun, + three times from the
+# in-game pistol (the hand's window shot at 59.6 s): the Arcade gun (61 s), the Zapper, then the player's guns in file-name
+# order, the first one offered the box gun, as vr.Gun 4 (65 s); zz-big isn't offered. The muzzle the aim line and the flash start from (the hand's "XR: P1 muzzle: <gun> at
 # x y z from the aim pose") is within 1 cm of the hand ("XR: right hand at") + the sidecar's muzzle as the fixture
-# script turns and scales it (vr.HandScale 1). The box gun's shot differs from the arcade gun's, and has its 3 colours
-# (vrcheck hues, against the agents' pistol's shot at 60.6 s: the arcade gun is red too). Then without its sidecar (accept-cm-own-gun-nosidecar, vr.Gun=4): the
-# box gun skipped with why, the hand's gun as Auto's with "(chosen: boxgun is not there".
+# script turns and scales it (vr.HandScale 1). The box gun's shot differs from the Arcade gun's (all yellow), and has its 3
+# colours (vrcheck hues, against the in-game pistol's shot at 59.6 s). Then without its sidecar (accept-cm-own-gun-nosidecar,
+# vr.Gun=4): the box gun skipped with why, the hand's gun the pistol (or the Arcade gun) with "(chosen: boxgun is not there".
+# Then a player's guns\zapper.glb over the bundled one (accept-cm-own-gun-override, Review Focus 2).
 # Fix round 1: only the chosen gun is read and put on the GPU (mipmapped), the others only looked at ("offered");
 # tex-a, tex-b, tex-c (128 MB of textures each, 384 MB in all): each offered, there is no total across the guns (S40:
 # a gun's textures are capped on their own), and each gun's offered or skipped line logged once; the body's 8 green
 # slabs merged (10 primitives in 3 parts); the sidecars with 1e39, a huge up and a far muzzle skipped with why.
 $ownOldBudget = 256MB	# the folder total there was before S40
 function Test-CmOwnGun {
-	$why = Invoke-OwnFolders -Fixture '--guns' {
+	$why = Invoke-OwnFolders -Fixture '--guns' -Bundled '--namco-zapper' {
 		$name = 'accept-cm-own-gun'
 		$fixtureSum = [long]0
 		$offeredLines = @()
@@ -1468,19 +1520,22 @@ function Test-CmOwnGun {
 		}
 		if ($fixtureSum -le $ownOldBudget) { return "the fixture's textures ($fixtureSum bytes) aren't over the old folder total ($ownOldBudget)" }
 		Write-Host "  the fixture's textures: $fixtureSum bytes, over the old folder total of $($ownOldBudget): all offered"
-		$plus = @(60, 61, 62, 64 | ForEach-Object { "$_=stick right 1 0 150" })
+		$menu = @('XR: menu Gun -> Arcade gun$', 'XR: menu Gun -> Zapper$', 'XR: menu Gun -> Box gun$')
+		$plus = @(60, 62, 64 | ForEach-Object { "$_=stick right 1 0 150" })
 		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 68; XrSim = $true; Config = "$cmWiden,config:vr.HandScale=1"
 			At = @('20=pose right 0.1 1.45 -0.3 0 -35') + @(Get-CmStartsXr) + '58=xr left/menu 1 150' +
-				@('58.5=stick right 0 -1 150', '59=stick right 0 -1 150') + $plus + '60.6=shot pistol' + '63=shot arcade' + '65=shot own' + '66=xr right/b 1 150'
+				@('58.5=stick right 0 -1 150', '59=stick right 0 -1 150') + $plus + '59.6=shot pistol' + '61=shot arcade' + '65=shot own' + '66=xr right/b 1 150'
 			Expect = @('XR: own gun "Box gun" from guns.boxgun\.glb \(120 triangles, 10 primitives in 3 parts #d91414 #1abf1f #2640ff, 1 texture',
 				'XR: own gun "Box gun" on the GPU \(1 image, [\d.]+ MB, mipmapped\)$',
 				'XR: own gun guns.zz-big\.glb skipped: over 200000 triangles \(204800\)',
 				'XR: own gun guns.bad-inf\.glb skipped: "grip" is not 3 numbers from -1000000 to 1000000$',
 				'XR: own gun guns.bad-up\.glb skipped: "up" is not 3 numbers from -1000000 to 1000000$',
 				'XR: own gun guns.bad-far\.glb skipped: "muzzle" is [\d.]+ from the model, over twice its size \(2\)',
-				'XR: menu Gun -> Arcade gun$', 'XR: menu Gun -> Box gun$', 'XR: gun: Box gun \(chosen\)$', 'XR: P1 muzzle: Box gun at ') + $offeredLines
-			Reject = @('XR: initialisation failed', 'XR: menu Gun -> Big grid', 'XR: gun: Box gun \(auto', 'XR: menu (Recenter|Laser|Haptics)',
-				'XR: own gun "(?!Box gun")[^"]*" (from|on the GPU)', 'would take the folder''s guns over') }
+				'XR: gun: Box gun \(chosen\)$', 'XR: P1 muzzle: Box gun at ') + $menu + $offeredLines
+			Reject = @('XR: initialisation failed', 'XR: menu Gun -> (Big grid|Auto|Cabinet gun)', 'XR: gun: Box gun \(auto', 'XR: menu (Recenter|Laser|Haptics)',
+				'XR: own gun "(?!(Box gun|Arcade gun|Zapper)")[^"]*" (from|on the GPU)', 'would take the folder''s guns over') }
+		if ($why) { return $why }
+		$why = Test-LogOrder $name $menu
 		if ($why) { return $why }
 		# each gun's state logged once (a scan logs a gun again only when it changed; the menu's opening scans again)
 		foreach ($stem in @($ownTextures.Keys) + 'zz-big', 'bad-inf', 'bad-up', 'bad-far') {
@@ -1494,22 +1549,43 @@ function Test-CmOwnGun {
 		$off = [Math]::Sqrt((0..2 | ForEach-Object { [Math]::Pow($muzzle[$_] - ($palm[$_] + $ownMuzzle[$_]), 2) } | Measure-Object -Sum).Sum)
 		Write-Host ("  the aim line starts {0:0.0000} m from the sidecar's muzzle (hand {1}, sidecar muzzle {2}; at most 0.01)" -f $off, ($palm -join ' '), ($ownMuzzle -join ' '))
 		if ($off -gt 0.01) { return "the aim line starts $(T $off) m from the sidecar's muzzle" }
-		$why = Test-RunShots $name 't060.6-pistol.png', 't063-arcade.png', 't065-own.png'
+		$why = Test-RunShots $name 't059.6-pistol.png', 't061-arcade.png', 't065-own.png'
 		if ($why) { return $why }
 		$dir = Join-Path $repo "build-win\vrtest\$name"
-		$why = Invoke-VrCheck 'differ', (Join-Path $dir 't065-own.png'), (Join-Path $dir 't063-arcade.png'), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
-		if ($why) { return "the box gun looks like the arcade gun: $why" }
-		$why = Invoke-VrCheck 'hues', (Join-Path $dir 't065-own.png'), '--against', (Join-Path $dir 't060.6-pistol.png'), '--box', '0.4,0.4,0.9,1',
+		$why = Invoke-VrCheck 'differ', (Join-Path $dir 't065-own.png'), (Join-Path $dir 't061-arcade.png'), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
+		if ($why) { return "the box gun looks like the Arcade gun: $why" }
+		$why = Invoke-VrCheck 'hues', (Join-Path $dir 't065-own.png'), '--against', (Join-Path $dir 't059.6-pistol.png'), '--box', '0.4,0.4,0.9,1',
 			'--rgb', '217,20,20', '--rgb', '26,191,31', '--rgb', '38,64,255'
 		if ($why) { return "the box gun's 3 colours: $why" }
 		return $null
 	}
 	if ($why) { return $why }
-	return Invoke-OwnFolders -Fixture '--guns', '--no-sidecar' {
+	$why = Invoke-OwnFolders -Fixture '--guns', '--no-sidecar' -Bundled '--namco-zapper' {
 		Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-own-gun-nosidecar'; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=4,config:vr.GunFile=boxgun"
 			Expect = @('XR: own gun guns.boxgun\.glb skipped: no sidecar guns.boxgun\.json',
-				"XR: gun: (agents' pistol|cabinet gun) \(chosen: boxgun is not there")
-			Reject = @('XR: initialisation failed', 'XR: gun: Box gun', 'XR: gun: arcade gun') }
+				'XR: gun: (in-game pistol|Arcade gun) \(chosen: boxgun is not there')
+			Reject = @('XR: initialisation failed', 'XR: gun: Box gun', 'XR: gun: built-in gun') }
+	}
+	if ($why) { return "without its sidecar: $why" }
+	# Review Focus 2: a player's guns\zapper.glb (the bundled stand-in's files, its sidecar's name "My Zapper") goes instead
+	# of the bundled one and keeps the Zapper's place, right after the Arcade gun, not among the player's own by name (where
+	# it would come after boxgun.glb): + three times from the pistol reads Arcade gun, My Zapper, Box gun.
+	return Invoke-OwnFolders -Fixture '--guns', '--only-box' -Bundled '--namco-zapper' {
+		$guns = Join-Path $repo 'build-win\guns'
+		Copy-Item -LiteralPath (Join-Path $ownBundled 'guns\zapper.glb') -Destination $guns
+		$side = Get-Content -Raw -LiteralPath (Join-Path $ownBundled 'guns\zapper.json') | ConvertFrom-Json
+		$side.name = 'My Zapper'
+		[IO.File]::WriteAllText((Join-Path $guns 'zapper.json'), ($side | ConvertTo-Json -Compress))
+		$name = 'accept-cm-own-gun-override'
+		$menu = @('XR: menu Gun -> Arcade gun$', 'XR: menu Gun -> My Zapper$', 'XR: menu Gun -> Box gun$')
+		$plus = @('59.5', '60', '60.5' | ForEach-Object { "$_=stick right 1 0 150" })
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWiden
+			At = @('20=pose right 0.1 1.45 -0.3 0 -35') + @(Get-CmStartsXr) + '58=xr left/menu 1 150' +
+				@('58.5=stick right 0 -1 150', '59=stick right 0 -1 150') + $plus + '62=xr right/b 1 150'
+			Expect = @('XR: own gun guns.zapper\.glb offered: "My Zapper"') + $menu + 'XR: gun: Box gun \(chosen\)$'
+			Reject = @('XR: initialisation failed', 'bundled models.guns.zapper', 'XR: menu Gun -> Zapper$') }
+		if ($why) { return $why }
+		return Test-LogOrder $name $menu
 	}
 }
 
@@ -1670,7 +1746,7 @@ function Test-CmBundled {
 	# A player's file named in another case over a bundled one (Ruling S45): the player's BoxGun.glb over the bundled
 	# boxgun.glb, the choice saved as the bundled one's row saved it (vr.Gun 4, vr.GunFile boxgun). The scan folds the
 	# case (the player's file goes instead of the bundled one), and so does the vr.GunFile match: the player's box gun is
-	# the one chosen, not Auto's.
+	# the one chosen, not the in-game pistol.
 	return Invoke-OwnFolders -Fixture '--guns', '--only-box' -Bundled '--guns', '--only-box' {
 		$guns = Join-Path $repo 'build-win\guns'
 		foreach ($ext in 'glb', 'json') {

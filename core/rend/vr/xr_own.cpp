@@ -51,6 +51,7 @@ struct Root
 {
 	std::string dir;
 	std::string shown;
+	bool bundled = false;	// <data>/models
 };
 
 // Where the folders may be: the player's, next to flycast.exe (the PC) and next to the game's zip;
@@ -78,12 +79,12 @@ std::vector<Root> roots()
 		r.push_back(content);
 	std::vector<Root> all;
 	for (const std::string& dir : r)
-		all.push_back({ dir, "" });
+		all.push_back({ dir, "", false });
 	std::string bundled = get_writable_data_path("models");
 	while (!bundled.empty() && (bundled.back() == '/' || bundled.back() == '\\'))
 		bundled.pop_back();
 	if (!bundled.empty() && std::find(r.begin(), r.end(), bundled) == r.end())
-		all.push_back({ bundled, "bundled models/" });
+		all.push_back({ bundled, "bundled models/", true });
 	return all;
 }
 
@@ -340,12 +341,14 @@ bool readFile(const std::string& path, std::vector<u8>& data, size_t maxBytes)
 
 void scan()
 {
-	// Every root's guns/*.glb, a file name (case aside) from the first root that has it, then in
+	// Every root's guns/*.glb, a file name (case aside) from the first root that has it; the bundled
+	// names first (a player's file of a bundled one's name too, in its place), then the others, each in
 	// file-name order (at most 32); each hand's controller from the first root with its GLB. The
 	// folders there, for the log.
 	struct Found
 	{
 		std::string dir, name, shown;	// its folder, its file name, the log's prefix (bundled models/)
+		bool bundledSlot = false;	// the bundled root has a file of its name (this one, or one it goes instead of)
 	};
 	std::vector<Found> found;
 	Found hands[2];
@@ -368,8 +371,15 @@ void scan()
 					const std::string stem = lower(name.substr(0, name.size() - 4));
 					if (std::find(earlier.begin(), earlier.end(), stem) == earlier.end())
 					{
-						found.push_back({ gunsDir, name, root.shown });
+						found.push_back({ gunsDir, name, root.shown, root.bundled });
 						stems.push_back(stem);
+					}
+					else if (root.bundled)
+					{
+						// a player's file goes instead of this one, in its place
+						for (Found& f : found)
+							if (lower(f.name.substr(0, f.name.size() - 4)) == stem)
+								f.bundledSlot = true;
 					}
 				}
 				flycast::closedir(dir);
@@ -384,7 +394,9 @@ void scan()
 					hands[hand] = { controllersDir, hand == 0 ? "left" : "right", root.shown };
 		}
 	}
-	std::sort(found.begin(), found.end(), [](const Found& a, const Found& b) { return lower(a.name) < lower(b.name); });
+	std::sort(found.begin(), found.end(), [](const Found& a, const Found& b) {
+		return a.bundledSlot != b.bundledSlot ? a.bundledSlot : lower(a.name) < lower(b.name);
+	});
 	if (found.size() > 32)
 		found.resize(32);
 	// each kind on its own: a change in the guns doesn't read the controllers again, nor the other way

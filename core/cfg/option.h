@@ -473,6 +473,7 @@ extern Option<bool> VrXr;
 extern Option<bool> VrXrSim;
 extern Option<std::string> VrXrSimProfile;
 extern Option<std::string> VrXrSimRenderModel;
+extern Option<bool> VrBuiltInGun;
 extern Option<std::string> VrWatchRam;
 extern Option<std::string> VrWatchTex;
 #endif

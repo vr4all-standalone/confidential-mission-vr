@@ -108,6 +108,7 @@ Option<bool> VrXr("vr.Xr", false);			// PCVR (OpenXR), when asked: the PCVR zip'
 Option<bool> VrXrSim("vr.XrSim", false);	// PC test harness: vr.Xr against the built-in OpenXR simulator (rend/vr/xr_sim.h)
 Option<std::string> VrXrSimProfile("vr.XrSimProfile", "oculus/touch_controller");	// its controllers: /interaction_profiles/<this>
 Option<std::string> VrXrSimRenderModel("vr.XrSimRenderModel", "");	// its XR_FB_render_model: this GLB file as both controllers' model ("": none)
+Option<bool> VrBuiltInGun("vr.BuiltInGun", false);	// PC test harness: Confidential Mission's hand holds the built-in gun (xr_gun.h) whatever vr.Gun says, never a gun file
 Option<std::string> VrWatchRam("vr.WatchRam", "");	// PC test aid: "addr[:size],..." RAM values logged when they change (vr_reproject.cpp)
 Option<std::string> VrWatchTex("vr.WatchTex", "");	// PC test aid: "tex,..." textures logged when they come into the passes and go
 #endif
@@ -137,7 +138,7 @@ Option<bool> VrWidenFov("vr.WidenFov", true);	// widen through the game's field 
 Option<bool> VrDropShotMarker("vr.DropShotMarker", true);	// hide the game's own 2D shot marker after shots into 3D
 Option<bool> VrDropShotFlash("vr.DropShotFlash", true);	// hide a bright full-screen flash right after any shot
 Option<int> VrHaptics("vr.Haptics", 2);	// the knock in the hand: 0 off, 1 low, 2 normal, 3 strong
-Option<int> VrGun("vr.Gun", 0);	// the gun drawn: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun, 4 (and over) the player's own that vr.GunFile names (guns/; xr_own.h) (the VR menu)
+Option<int> VrGun("vr.Gun", 1);	// the gun drawn: 1 the in-game pistol, 4 (and over) a folder gun, the one vr.GunFile names (guns/: the bundled Arcade gun and Zapper, the player's own; xr_own.h); any other (1.1's 0 auto, 2 the cabinet gun, 3 the arcade gun) reads as 1 (the VR menu)
 Option<std::string> VrGunFile("vr.GunFile", "");	// with vr.Gun 4: the player's own gun, its file name in guns/ without .glb (the VR menu)
 Option<bool> CustomTextures("rend.CustomTextures");
 Option<bool> PreloadCustomTextures("rend.PreloadCustomTextures");

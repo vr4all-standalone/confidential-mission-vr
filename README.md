@@ -152,7 +152,7 @@ even with the laser off.
 |---|---|
 | Resume | closes the menu |
 | Recenter | the view goes where you face; the menu stays open, in front of you |
-| Gun | the gun in your hand: Auto, Agents' pistol, Cabinet gun or Arcade gun, then any of your own (`vr.Gun`, `vr.GunFile`; see The guns below, and Your own models). A gun not made yet is skipped; an agents' pistol made without all of it says "(incomplete)" and can still be chosen. The new gun shows at once, while the game is paused |
+| Gun | the gun in your hand: In-game pistol, Arcade gun, Zapper, then any of your own (`vr.Gun`, `vr.GunFile`; see The guns below, and Your own models). There is no Auto: the in-game pistol is the default. A gun not made yet is skipped; an in-game pistol made without all of it says "(incomplete)" and can still be chosen. If the chosen gun isn't there, the hand takes the in-game pistol; without that (the first start skipped, or not done yet), the Arcade gun; and if no gun file loads at all, a plain built-in gun. The new gun shows at once, while the game is paused |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
@@ -167,14 +167,14 @@ Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
 
 Sega's NAOMI light-gun game from 2000, with its own profile:
 
-- **The guns.** The agents' own pistol in your hand, or the game's cabinet gun, or the red
-  arcade gun: the menu's Gun row. The pistol and the cabinet gun (and the assault rifle) are
+- **The guns.** The agents' own pistol in your hand (the menu's "In-game pistol", the default),
+  or the Arcade gun, or the Zapper: the menu's Gun row. The pistol (and the assault rifle) are
   made from your own copy of the game, on the first start (a minute or two, only once: B skips
   it, and the guns not made by then stay out of the hand that session); nothing of the game
   comes with this app.
-  Auto takes the agents' pistol when all of it was made, else the cabinet gun, else the arcade
-  gun; a gun chosen that isn't made yet falls back the same way. While the game gives you the
-  assault rifle, the hand holds it (the arcade gun in olive if its model isn't made yet), and
+  Without the pistol (the first start skipped) the hand holds the Arcade gun. A choice saved by
+  1.1 (Auto, the cabinet gun or the arcade gun) now means the in-game pistol. While the game gives you the
+  assault rifle, the hand holds it (the built-in gun in olive if its model isn't made yet), and
   the chosen gun comes back when it runs dry. Reload by shooting away from
   the view, or with B (the cabinet's second button reloads in this game).
 - **A wider view, inside the game.** The game draws and culls a wider view itself: stage 1
@@ -211,8 +211,8 @@ the same name beside it (its sidecar). **You are responsible for the rights to t
 add.**
 
 The release builds come with four made by others, under their own licences (Credits and
-licences below, and `CREDITS.txt`): two guns (`namco.glb`, "Namco gun", and `zapper.glb`,
-"Zapper", in the Gun row after the arcade gun) and the Quest's two controllers. They sit in the
+licences below, and `CREDITS.txt`): two guns (`namco.glb`, the menu's "Arcade gun", and `zapper.glb`,
+"Zapper", in the Gun row right after the in-game pistol) and the Quest's two controllers. They sit in the
 app's data folder (`data\models\` next to `flycast.exe`; on the Quest the app copies them to its
 `files/data/models/` when it is installed or updated) and are looked at last, file by file: a
 gun of yours with the same file name goes instead (your `guns/zapper.glb`), and your
@@ -234,12 +234,15 @@ models come last. On the Quest the app already has the access to all files it ne
 ### Guns
 
 `guns/<name>.glb` + `guns/<name>.json`. Each one is a choice of its own in the menu's Gun row,
-after the arcade gun, in file-name order; Auto never picks one. The choice is kept by file name
+after the in-game pistol: the bundled guns first (Arcade gun, Zapper), then yours, each in
+file-name order. A file of yours with a bundled gun's name (your `guns/zapper.glb`) replaces that
+gun in its place, right after the Arcade gun, not among your others. The choice is kept by file name
 (`vr.Gun` 4 and `vr.GunFile` the file's name without `.glb`), so adding a file doesn't change it.
 Only the gun you choose is read and put on the GPU (its textures mipmapped). It is held
-like the agents' pistol (its size with `vr.HandScale`, the same kick); the assault rifle still
+like the in-game pistol (its size with `vr.HandScale`, the same kick); the assault rifle still
 takes over while the game gives it to you, and your gun comes back after. If the chosen gun's
-file is gone, the hand falls back as Auto does (the log says "(chosen: <name> is not there)").
+file is gone, the hand takes the in-game pistol, or the Arcade gun without it (the log says
+"(chosen: <name> is not there)").
 
 ```json
 { "name": "Zapper", "grip": [0, 0, 0], "muzzle": [0, 0.03, -0.18], "up": [0, 1, 0], "length": 0.22 }
@@ -332,7 +335,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.GunScale` | 0.68 | size of the gun, times the 25 cm arcade gun it is modelled on (also set with grip + thumbstick) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
 | `vr.Haptics` | 2 | the knock in the hand: 0 off, 1 low, 2 normal, 3 strong |
-| `vr.Gun` | 0 | the gun in your hand: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun, 4 one of your own, the one `vr.GunFile` names (The guns, below; Your own models) |
+| `vr.Gun` | 1 | the gun in your hand: 1 the in-game pistol, 4 a folder gun, the one `vr.GunFile` names (the bundled `namco` Arcade gun and `zapper`, or one of your own; Your own models). 1.1's 0 (auto), 2 (the cabinet gun) and 3 (the arcade gun) read as 1 |
 | `vr.GunFile` | (none) | with `vr.Gun` 4: your gun's file name in `guns/`, without `.glb` (set by the menu) |
 | `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
 | `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |

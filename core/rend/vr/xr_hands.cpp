@@ -97,7 +97,7 @@ struct Model
 	GLuint vbo = 0, vao = 0;	// (and the textures' ids) once drawn
 };
 // The running game's models: its own (handsModel()), and Confidential Mission's guns, each in
-// the slot of its GunKind (the arcade gun's, 0, is the game's own model's).
+// the slot of its GunKind (the built-in gun's, 0, is the game's own model's; 1 is no kind's now).
 struct Slot
 {
 	Model model;
@@ -635,7 +635,7 @@ const HandsModel *gunModel(GunKind kind)
 	if (!slot.tried)
 	{
 		slot.tried = true;
-		// (GunKind's order is the profile's guns[], the cabinet gun first)
+		// (a kind's file is the profile's guns[kind - 1]: guns[0], the cabinet gun's, is no kind's now)
 		const hands::GunTarget& gun = gameModelSource()->guns[(int)kind - 1];
 		slot.missing = true;
 		if (gun.used())
@@ -665,14 +665,12 @@ const char *gunName(GunKind kind)
 	}
 	switch (kind)
 	{
-	case GunKind::Cabinet:
-		return "cabinet gun";
 	case GunKind::Pistol:
-		return "agents' pistol";
+		return "in-game pistol";
 	case GunKind::Rifle:
 		return "assault rifle";
 	default:
-		return "arcade gun";
+		return "built-in gun";
 	}
 }
 
@@ -685,66 +683,59 @@ GunKind chosenGun()
 	// the GPU with them): at the pickup, mid-play, it could cost the headset a frame (Ruling S33)
 	if (config::VrGameHands)
 		gunModel(GunKind::Rifle);
-	// (a setting below 0 is Auto, as the menu's row shows it; 4 and over the player's own gun that
-	// vr.GunFile names: its file name without .glb, in any case, as the scan folds it)
+	// vr.Gun 4 and over: the folder gun vr.GunFile names, its file name without .glb in any case, as the
+	// scan folds it; any other setting the in-game pistol (1.1's 0 Auto, 2 the cabinet gun, 3 the arcade
+	// gun and below 0 too: read so, not rewritten)
 	refreshOwn();
-	int setting = config::VrGun;
-	if (setting < 0)
-		setting = 0;
-	const bool folder = setting >= OwnGuns;
-	int own = -1;
-	for (size_t i = 0; folder && i < ownGuns.size() && own < 0; i++)
-		if (own::sameStem(ownGuns[i]->file.stem, config::VrGunFile.get()))
-			own = (int)i;
-	const bool ownThere = own >= 0 && readOwn(own);
-	// only the chosen one held (its textures can be big)
-	for (size_t i = 0; i < ownGuns.size(); i++)
-		if (ownGuns[i]->loaded && !(ownThere && (int)i == own))
-			unloadOwn(*ownGuns[i]);
-	const GunKind wanted = setting == 1 ? GunKind::Pistol : setting == 2 ? GunKind::Cabinet : GunKind::Arcade;
-	GunKind kind = GunKind::Arcade;
-	std::string why;	// each gun passed over, and why
-	auto passOver = [&](GunKind gun, const char *how) {
-		why += std::string(why.empty() ? "" : ", ") + "the " + gunName(gun) + how;
+	auto folderGun = [](const std::string& stem) {
+		for (size_t i = 0; i < ownGuns.size(); i++)
+			if (own::sameStem(ownGuns[i]->file.stem, stem))
+				return (int)i;
+		return -1;
 	};
-	auto notThere = [&](GunKind gun) { passOver(gun, slots[(int)gun].missing ? " is not made yet" : " can't be read"); };
-	// a gun of the player's own not there (its file gone, skipped): as Auto, saying so
-	if (folder && !ownThere)
-		why = (own >= 0 ? ownGuns[own]->name : !config::VrGunFile.get().empty() ? config::VrGunFile.get() : std::string("the folder gun"))
-				+ " is not there";
-	if (ownThere)
-		kind = GunKind(OwnGuns + own);
-	else if (setting == 3)
-		kind = GunKind::Arcade;
-	else if (!config::VrGameHands)
-		why += std::string(why.empty() ? "" : ", ") + "the game's own models are off";
-	else if (setting != 0 && !folder && gunModel(wanted) != nullptr)
-		kind = wanted;
-	else
+	GunKind kind = GunKind::Arcade;
+	int own = -1;		// the folder gun held (read; the others let go)
+	std::string why;	// why not the one chosen
+	bool builtIn = false;
+#ifndef __ANDROID__
+	if (config::VrBuiltInGun)
 	{
-		// auto, or the one chosen isn't there: the agents' pistol if complete, else the cabinet
-		// gun if there, else the arcade gun
-		if (setting != 0 && !folder)
-			notThere(wanted);
-		if (wanted != GunKind::Pistol && gunModel(GunKind::Pistol) != nullptr && gunComplete(GunKind::Pistol))
-			kind = GunKind::Pistol;
-		else
-		{
-			if (wanted != GunKind::Pistol)
-			{
-				if (gunModel(GunKind::Pistol) != nullptr)
-					passOver(GunKind::Pistol, " is incomplete");
-				else
-					notThere(GunKind::Pistol);
-			}
-			if (wanted != GunKind::Cabinet && gunModel(GunKind::Cabinet) != nullptr)
-				kind = GunKind::Cabinet;
-			else if (wanted != GunKind::Cabinet)
-				notThere(GunKind::Cabinet);
-		}
+		builtIn = true;
+		why = "vr.BuiltInGun";
 	}
-	const std::string line = std::string(gunName(kind)) + " (" + (setting == 0 ? "auto" : "chosen")
-			+ (why.empty() ? "" : ": " + why) + ")";
+#endif
+	if (!builtIn && config::VrGun >= OwnGuns)
+	{
+		const int i = folderGun(config::VrGunFile.get());
+		if (i >= 0 && readOwn(i))
+			own = i;
+		else
+			why = (i >= 0 ? ownGuns[i]->name : !config::VrGunFile.get().empty() ? config::VrGunFile.get() : std::string("the folder gun"))
+					+ " is not there";
+	}
+	// the in-game pistol (one made without all of it too), else the Arcade gun's file, else the built-in gun
+	if (!builtIn && own < 0 && config::VrGameHands && gunModel(GunKind::Pistol) != nullptr)
+		kind = GunKind::Pistol;
+	else if (!builtIn && own < 0)
+	{
+		const int i = folderGun(ArcadeGunStem);
+		if (i >= 0 && readOwn(i))
+		{
+			own = i;
+			if (why.empty())
+				why = !config::VrGameHands ? "the game's models are off"
+						: slots[(int)GunKind::Pistol].missing ? "the in-game pistol is not made yet" : "the in-game pistol can't be read";
+		}
+		else
+			why += std::string(why.empty() ? "" : ", ") + "no gun file loads";
+	}
+	if (own >= 0)
+		kind = GunKind(OwnGuns + own);
+	// only the one held stays read (its textures can be big)
+	for (size_t i = 0; i < ownGuns.size(); i++)
+		if (ownGuns[i]->loaded && (int)i != own)
+			unloadOwn(*ownGuns[i]);
+	const std::string line = std::string(gunName(kind)) + " (chosen" + (why.empty() ? "" : ": " + why) + ")";
 	if (line != gunLogged)
 	{
 		gunLogged = line;
@@ -785,15 +776,11 @@ std::vector<GunChoice> gunChoices()
 	// another game's own model takes no choosing: one choice, the row locked (vr.Gun kept)
 	if (!cmGuns())
 		return { { (int)config::VrGun, config::VrGameHands && handsModel() != nullptr ? "The game's own" : "Arcade gun", true, true } };
-	// (with the game's own models off, the hand holds the arcade gun: theirs aren't offered)
-	const bool own = config::VrGameHands;
+	// (with the game's own models off the pistol isn't made: the row passes it)
 	std::vector<GunChoice> choices {
-		{ 0, "Auto", true, true },
-		{ 1, "Agents' pistol", own && gunModel(GunKind::Pistol) != nullptr, gunComplete(GunKind::Pistol) },
-		{ 2, "Cabinet gun", own && gunModel(GunKind::Cabinet) != nullptr, gunComplete(GunKind::Cabinet) },
-		{ 3, "Arcade gun", true, true },
+		{ 1, "In-game pistol", config::VrGameHands && gunModel(GunKind::Pistol) != nullptr, gunComplete(GunKind::Pistol) },
 	};
-	// the player's own guns, whatever vr.GameHands says (a skipped one isn't offered)
+	// the folder guns, whatever vr.GameHands says: the bundled ones first (a skipped one isn't made)
 	refreshOwn();
 	for (size_t i = 0; i < ownGuns.size(); i++)
 		choices.push_back({ OwnGuns, ownGuns[i]->name.c_str(), ownGuns[i]->valid, true, ownGuns[i]->file.stem.c_str() });

@@ -10,11 +10,12 @@
 	bundled set, <data>/models (get_writable_data_path: data\models next to flycast.exe, the app's
 	files/data/models on the Quest). Merged file by file: a gun by its file name (case aside), a
 	controller by its hand, each from the first root that has it, so a player's guns/zapper.glb goes
-	before the bundled one and a player's controllers/left.glb replaces only the left. The log names a
+	instead of the bundled one, in its place, and a player's controllers/left.glb replaces only the left. The log names a
 	bundled file "bundled models/guns/<file>".
 
-	guns/<name>.glb + guns/<name>.json, in file-name order, the menu's choices after the arcade gun; the one
-	chosen is vr.Gun 4 with vr.GunFile its file name without .glb (xr_hands.h):
+	guns/<name>.glb + guns/<name>.json, the menu's choices after the in-game pistol: bundled guns first, in
+	file-name order (a player's file of a bundled one's name in its place), then the others, in file-name
+	order; the one chosen is vr.Gun 4 with vr.GunFile its file name without .glb (xr_hands.h):
 		{ "name": "Zapper",			the menu's label, at most 24 bytes of UTF-8 (else the file name, cut to 24)
 		  "grip": [x, y, z],		the top of the grip, in the GLB's space: the hand's point
 		  "muzzle": [x, y, z],		the end of the barrel, in the GLB's space
@@ -100,6 +101,8 @@ void scan();
 // Each folder's own count of changes: 0 until the first scan().
 unsigned gunsGeneration();
 unsigned controllersGeneration();
+// The guns, in the menu's order: those whose name the bundled root has first, then the others, each in
+// file-name order (case aside).
 const std::vector<GunFile>& guns();
 // The same gun file name (a stem, without .glb) in any case, as scan() folds the names: vr.GunFile against a
 // gun's stem (a player's Zapper.glb goes instead of the bundled zapper.glb, and keeps its choice)
