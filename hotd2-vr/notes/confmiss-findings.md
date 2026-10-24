@@ -264,3 +264,27 @@ Task 4b's runs (`vr-test.ps1 -Config "$cmWiden,config:vr.WatchRam=..."`, the act
     - `lengthM = 0.88` (an AK's length; the model's own scale was not measured);
     - no W skip band.
   - Captures: the attract demo at ~315.6 s with no presses (`vr.WatchTex=662000`, `-On 'VR: tex 662000 shown|0|rip 2 20 1'`), or the swap pokes above. The game never draws the item while the rifle is held.
+
+## Guns
+
+- the agents' pistol (Task 11, 2026-10-23): `GunTarget` guns[1] in vr_reproject.cpp.
+  - Textures: body **7e2800**, suppressor **6cc400**, **82f800**, **76a800**.
+  - Whole: **91 polys**, **78/10/2/1** by texture.
+  - Where: the stage 1 intro, reached by Start every 2 s for 16 s after the cabinet gun.
+  - accept-cm-rip-pistol captured **403 passes** with 10 or more of its polys.
+    - Every one was fitted onto the fullest: **0 dropped**.
+    - Worst rms: **0.26-0.53 %** of the body's length over three runs, each with 403 passes.
+  - The fullest capture was the first, with all 91 (78/10/2/1).
+    - Passes 1-3, 100, 200 and 400 each held 91.
+    - Pass 300 held 88 (78/10/0/0).
+    - One capture alone (`vr.HandsCaptureLimit=1`) comes out complete.
+  - The projection's focal went from 1128.9 to 536.9 px over the captures. Vertex colours were 74..254.
+  - Merged:
+    - 91 polys, 78/10/2/1;
+    - the body has **30 open edges**;
+    - its extents are **1 : 0.761 : 0.137** (the research's 1.92 : 1.46 : 0.26 is 1 : 0.760 : 0.135).
+  - The run was done after **84 s of game**, 20 s after the last pass that held it.
+  - Built at 0.30 m:
+    - 210 triangles;
+    - x -0.014..0.014, y -0.097..0.026, z -0.243..0.057;
+    - muzzle (0, 0.012, -0.243).

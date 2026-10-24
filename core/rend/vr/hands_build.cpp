@@ -35,6 +35,7 @@
 #include <iterator>
 #include <map>
 #include <numeric>
+#include <set>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -138,7 +139,10 @@ dvec3 centre(const Rip& rip, const Polys& polys)
 // The polygons' triangles in game eye space, all wound outwards. White, or with
 // vertexColours each the mean of its corners' colours (a gun drawn in the game's vertex
 // colours over a plain texture: Confidential Mission's cabinet gun).
-Tris triangles(const Rip& rip, const Polys& polys, bool vertexColours = false)
+// byCull: by the cull mode alone, not by how each triangle faces this view (a gun's polygons may
+// come from other views, merged, and the game sends some that face away: the cull mode says
+// which side of each is its front whichever way it faces).
+Tris triangles(const Rip& rip, const Polys& polys, bool vertexColours = false, bool byCull = false)
 {
 	struct Item { Tri t; int sign, outward; };
 	std::vector<Item> items;
@@ -157,7 +161,7 @@ Tris triangles(const Rip& rip, const Polys& polys, bool vertexColours = false)
 				continue;
 			const RipVertex *v = poly->v.data();
 			const double area = ((double)v[b].x - v[a].x) * ((double)v[c].y - v[a].y) - ((double)v[c].x - v[a].x) * ((double)v[b].y - v[a].y);
-			const int sign = (area > 0 ? 1 : -1) * (cull == 2 ? 1 : cull == 3 ? -1 : 0);
+			const int sign = (byCull || area > 0 ? 1 : -1) * (cull == 2 ? 1 : cull == 3 ? -1 : 0);
 			const int outward = glm::dot(n, (e[a] + e[b] + e[c]) / 3.0 - mid) > 0 ? 1 : -1;
 			if (sign != 0)
 				votes += sign * outward;
@@ -1045,6 +1049,389 @@ bool staffFrom(const Rip& rip, const Polys& rodPolys, const Polys& glovePolys, c
 	return write(muzzle, dvec3(0.0), 0.0, onSlide, meshes, textures, out, error);
 }
 
+
+// The eigenvector of a symmetric 4x4 matrix with the largest eigenvalue (Jacobi, as principalAxes).
+void largestEigen4(double a[4][4], double out[4])
+{
+	double v[4][4] {};
+	for (int i = 0; i < 4; i++)
+		v[i][i] = 1.0;
+	for (int sweep = 0; sweep < 64; sweep++)
+	{
+		double off = 0.0, diag = 0.0;
+		for (int p = 0; p < 4; p++)
+		{
+			diag += a[p][p] * a[p][p];
+			for (int q = p + 1; q < 4; q++)
+				off += a[p][q] * a[p][q];
+		}
+		if (off <= diag * 1e-30)
+			break;
+		for (int p = 0; p < 4; p++)
+			for (int q = p + 1; q < 4; q++)
+			{
+				if (std::abs(a[p][q]) < 1e-300)
+					continue;
+				const double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+				const double t = (theta >= 0 ? 1.0 : -1.0) / (std::abs(theta) + std::sqrt(theta * theta + 1.0));
+				const double c = 1.0 / std::sqrt(t * t + 1.0), s = t * c;
+				for (int k = 0; k < 4; k++)
+				{
+					const double kp = a[k][p], kq = a[k][q];
+					a[k][p] = c * kp - s * kq;
+					a[k][q] = s * kp + c * kq;
+				}
+				for (int k = 0; k < 4; k++)
+				{
+					const double pk = a[p][k], qk = a[q][k];
+					a[p][k] = c * pk - s * qk;
+					a[q][k] = s * pk + c * qk;
+				}
+				for (int k = 0; k < 4; k++)
+				{
+					const double kp = v[k][p], kq = v[k][q];
+					v[k][p] = c * kp - s * kq;
+					v[k][q] = s * kp + c * kq;
+				}
+			}
+	}
+	int best = 0;
+	for (int i = 1; i < 4; i++)
+		if (a[i][i] > a[best][best])
+			best = i;
+	for (int k = 0; k < 4; k++)
+		out[k] = v[k][best];
+}
+
+// A rigid move: the rotation r (rows), then t.
+struct Rigid
+{
+	double r[3][3] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+	dvec3 t { 0.0 };
+	dvec3 operator()(const dvec3& p) const {
+		return dvec3(r[0][0] * p.x + r[0][1] * p.y + r[0][2] * p.z, r[1][0] * p.x + r[1][1] * p.y + r[1][2] * p.z,
+				r[2][0] * p.x + r[2][1] * p.y + r[2][2] * p.z) + t;
+	}
+};
+
+// The rigid move that best takes points onto others (least squares; Kabsch in Horn's quaternion
+// form, so always a rotation, never a mirror), and its rms.
+double fitRigid(const std::vector<dvec3>& from, const std::vector<dvec3>& to, Rigid& out)
+{
+	const dvec3 cf = mean(from), ct = mean(to);
+	double s[3][3] {};
+	for (size_t k = 0; k < from.size(); k++)
+	{
+		const dvec3 a = from[k] - cf, b = to[k] - ct;
+		for (int i = 0; i < 3; i++)
+			for (int j = 0; j < 3; j++)
+				s[i][j] += a[i] * b[j];
+	}
+	double n[4][4] {
+		{ s[0][0] + s[1][1] + s[2][2], s[1][2] - s[2][1], s[2][0] - s[0][2], s[0][1] - s[1][0] },
+		{ s[1][2] - s[2][1], s[0][0] - s[1][1] - s[2][2], s[0][1] + s[1][0], s[2][0] + s[0][2] },
+		{ s[2][0] - s[0][2], s[0][1] + s[1][0], -s[0][0] + s[1][1] - s[2][2], s[1][2] + s[2][1] },
+		{ s[0][1] - s[1][0], s[2][0] + s[0][2], s[1][2] + s[2][1], -s[0][0] - s[1][1] + s[2][2] } };
+	double q[4];
+	largestEigen4(n, q);
+	const double w = q[0], x = q[1], y = q[2], z = q[3];
+	const double r[3][3] {
+		{ w * w + x * x - y * y - z * z, 2 * (x * y - w * z), 2 * (x * z + w * y) },
+		{ 2 * (x * y + w * z), w * w - x * x + y * y - z * z, 2 * (y * z - w * x) },
+		{ 2 * (x * z - w * y), 2 * (y * z + w * x), w * w - x * x - y * y + z * z } };
+	std::copy(&r[0][0], &r[0][0] + 9, &out.r[0][0]);
+	out.t = dvec3(0.0);
+	out.t = ct - out(cf);
+	double sum = 0.0;
+	for (size_t k = 0; k < from.size(); k++)
+	{
+		const dvec3 d = out(from[k]) - to[k];
+		sum += glm::dot(d, d);
+	}
+	return from.empty() ? 0.0 : std::sqrt(sum / (double)from.size());
+}
+
+// A polygon's corner, the same in every capture: its texture and its texture coordinates (to
+// 1/1024).
+struct UvKey
+{
+	uint32_t tex;
+	long u, v;
+	bool operator<(const UvKey& o) const { return std::tie(tex, u, v) < std::tie(o.tex, o.u, o.v); }
+};
+
+// A merged gun's captures (GunTarget::merge) brought together in the eye space of the one with
+// the most of its body (textures[0]): every other one fitted onto that by the corners both have
+// (UvKey, each in one place in each), at least 8 of them and rms 1 % of the body's length at
+// most (else dropped); its polygons moved by the fit. The corners are welded: the fullest
+// capture's where they meet, another's onto the nearest one so far with its UvKey (within 5 % of
+// the length: a texture can be used twice, on the gun's two sides), else where they meet (to the
+// fit's error), so that a corner a frame's projection or the fit moved a little is still the same
+// one. A polygon is one by its texture and its welded corners: the first one seen of each is
+// kept, the fullest capture's first. Out: those polygons re-projected into
+// that capture's view (merged), so that the rest goes as for one capture, and the checks.
+bool mergeCaptures(const std::vector<Rip>& captures, const std::vector<Polys>& picks, const GunTarget& target,
+		Rip& merged, Polys& polys, GunReport& report, std::string& error)
+{
+	const uint32_t body = target.textures[0];
+	size_t ref = 0, refBody = 0;
+	for (size_t c = 0; c < captures.size(); c++)
+	{
+		size_t n = 0;
+		for (const RipPoly *p : picks[c])
+			n += p->texture() == body;
+		if (c == 0 || n > refBody || (n == refBody && picks[c].size() > picks[ref].size()))
+		{
+			ref = c;
+			refBody = n;
+		}
+	}
+	report.captures = (uint32_t)captures.size();
+	report.reference = (uint32_t)ref;
+	report.referencePolys = captures.empty() ? 0 : (uint32_t)picks[ref].size();
+	if (captures.empty() || picks[ref].size() < target.minPolys)
+	{
+		error = "only " + std::to_string(report.referencePolys) + " of its " + std::to_string(target.wholePolys) + " polygons";
+		return false;
+	}
+	// the body's length (its extent along its longest axis) in the fullest capture
+	Polys refBodyPolys;
+	for (const RipPoly *p : picks[ref])
+		if (p->texture() == body || refBody < 3)
+			refBodyPolys.push_back(p);
+	double length = 0.0;
+	{
+		const std::vector<dvec3> pts = uniquePoints(captures[ref], refBodyPolys);
+		const dvec3 mid = mean(pts);
+		dvec3 axes[3];
+		principalAxes(pts, mid, axes);
+		double lo = 1e300, hi = -1e300;
+		for (const dvec3& p : pts)
+		{
+			lo = std::min(lo, glm::dot(p - mid, axes[0]));
+			hi = std::max(hi, glm::dot(p - mid, axes[0]));
+		}
+		length = hi - lo;
+	}
+	if (!(length > 1e-9))
+	{
+		error = "it has no length";
+		return false;
+	}
+	auto keyed = [&](size_t c) {
+		std::map<UvKey, std::pair<dvec3, bool>> keys;	// where, and in one place only
+		for (const RipPoly *p : picks[c])
+		{
+			const std::vector<dvec3> e = eye(captures[c], *p);
+			for (size_t k = 0; k < e.size(); k++)
+			{
+				const UvKey key { p->texture(), std::lround(p->v[k].u * 1024.0), std::lround(p->v[k].v * 1024.0) };
+				auto [it, fresh] = keys.try_emplace(key, e[k], true);
+				if (!fresh && glm::length(it->second.first - e[k]) > 0.002 * length)
+					it->second.second = false;
+			}
+		}
+		return keys;
+	};
+	// the welded corners, found through a grid of cells a hundredth of the body's length
+	std::vector<dvec3> corner;
+	std::unordered_map<PointKey, std::vector<uint32_t>, PointHash> grid;
+	const double cell = 0.01 * length;
+	auto weld = [&](const dvec3& p, double tol) {
+		const PointKey k = pointKey(p, 1.0 / cell);
+		uint32_t best = UINT32_MAX;
+		double bestD = tol;
+		for (long long dx = -1; dx <= 1; dx++)
+			for (long long dy = -1; dy <= 1; dy++)
+				for (long long dz = -1; dz <= 1; dz++)
+				{
+					const auto it = grid.find({ k.x + dx, k.y + dy, k.z + dz });
+					if (it != grid.end())
+						for (uint32_t id : it->second)
+						{
+							const double d = glm::length(corner[id] - p);
+							if (d <= bestD)
+							{
+								best = id;
+								bestD = d;
+							}
+						}
+				}
+		if (best == UINT32_MAX)
+		{
+			best = (uint32_t)corner.size();
+			corner.push_back(p);
+			grid[k].push_back(best);
+		}
+		return best;
+	};
+	std::map<UvKey, std::vector<uint32_t>> byKey;	// the welded corners with each UvKey
+	struct Kept { const RipPoly *src; std::vector<dvec3> pos; std::vector<uint32_t> ids; };
+	std::vector<Kept> kept;
+	std::set<std::pair<uint32_t, std::vector<uint32_t>>> seen;
+	auto add = [&](size_t c, const Rigid *fit, double tol) {
+		for (const RipPoly *p : picks[c])
+		{
+			Kept k { p, eye(captures[c], *p), {} };
+			for (size_t i = 0; i < k.pos.size(); i++)
+			{
+				dvec3& e = k.pos[i];
+				if (fit != nullptr)
+					e = (*fit)(e);
+				const UvKey key { p->texture(), std::lround(p->v[i].u * 1024.0), std::lround(p->v[i].v * 1024.0) };
+				std::vector<uint32_t>& same = byKey[key];
+				uint32_t id = UINT32_MAX;
+				double bestD = 0.05 * length;
+				if (fit != nullptr)
+					for (uint32_t s : same)
+					{
+						const double d = glm::length(corner[s] - e);
+						if (d <= bestD)
+						{
+							id = s;
+							bestD = d;
+						}
+					}
+				if (id == UINT32_MAX)
+				{
+					id = weld(e, tol);
+					if (std::find(same.begin(), same.end(), id) == same.end())
+						same.push_back(id);
+				}
+				k.ids.push_back(id);
+			}
+			std::vector<uint32_t> sorted = k.ids;
+			std::sort(sorted.begin(), sorted.end());
+			if (seen.emplace(p->texture(), std::move(sorted)).second)
+				kept.push_back(std::move(k));
+		}
+	};
+	add(ref, nullptr, 1e-6 * length);
+	report.merged = 1;
+	const auto refKeys = keyed(ref);
+	for (size_t c = 0; c < captures.size(); c++)
+	{
+		if (c == ref)
+			continue;
+		std::vector<dvec3> from, to;
+		for (const auto& [key, at] : keyed(c))
+		{
+			const auto it = refKeys.find(key);
+			if (at.second && it != refKeys.end() && it->second.second)
+			{
+				from.push_back(at.first);
+				to.push_back(it->second.first);
+			}
+		}
+		Rigid fit;
+		const double rms = from.size() >= 8 ? fitRigid(from, to, fit) / length : 1e300;
+		if (!(rms <= 0.01))
+		{
+			report.dropped++;
+			continue;
+		}
+		report.merged++;
+		report.rms = std::max(report.rms, rms);
+		add(c, &fit, std::clamp(4.0 * rms, 0.002, 0.01) * length);
+	}
+
+	// the checks: the polygons by texture, the body's open edges and its extents
+	std::map<std::pair<uint32_t, uint32_t>, int> edges;
+	std::vector<dvec3> bodyCorners;
+	std::unordered_set<uint32_t> inBody;
+	report.polys = (uint32_t)kept.size();
+	for (const Kept& k : kept)
+	{
+		for (int t = 0; t < 4; t++)
+			report.texturePolys[t] += target.textures[t] != 0 && k.src->texture() == target.textures[t];
+		if (k.src->texture() != body)
+			continue;
+		for (size_t i = 0; i < k.ids.size(); i++)
+			if (inBody.insert(k.ids[i]).second)
+				bodyCorners.push_back(k.pos[i]);
+		for (size_t i = 0; i + 2 < k.ids.size(); i++)
+		{
+			const uint32_t a = k.ids[i], b = k.ids[i + 1], c = k.ids[i + 2];
+			if (a == b || b == c || a == c)
+				continue;
+			for (const auto [p, q] : { std::pair(a, b), std::pair(b, c), std::pair(a, c) })
+				edges[{ std::min(p, q), std::max(p, q) }]++;
+		}
+	}
+	for (const auto& [edge, n] : edges)
+		report.openEdges += n == 1;
+	if (bodyCorners.size() >= 3)
+	{
+		const dvec3 mid = mean(bodyCorners);
+		dvec3 axes[3];
+		principalAxes(bodyCorners, mid, axes);
+		for (int a = 0; a < 3; a++)
+		{
+			double lo = 1e300, hi = -1e300;
+			for (const dvec3& p : bodyCorners)
+			{
+				lo = std::min(lo, glm::dot(p - mid, axes[a]));
+				hi = std::max(hi, glm::dot(p - mid, axes[a]));
+			}
+			report.extents[a] = hi - lo;
+		}
+		std::sort(std::begin(report.extents), std::end(report.extents), std::greater<double>());
+		for (int a = 2; a >= 0; a--)
+			report.extents[a] /= report.extents[0];
+	}
+	char why[200] {};
+	bool split = true;
+	for (int t = 0; t < 4; t++)
+		split = split && (target.texturePolys[t] == 0 || report.texturePolys[t] == target.texturePolys[t]);
+	const auto off = [&](int a) {
+		const double want = target.extents[a] / target.extents[0];
+		return std::abs(report.extents[a] - want) > target.extentsOff * want;
+	};
+	if (report.polys != target.wholePolys || !split)
+		snprintf(why, sizeof(why), "%u of its %u polygons, %u/%u/%u/%u by texture, want %u/%u/%u/%u", report.polys,
+				(uint32_t)target.wholePolys, report.texturePolys[0], report.texturePolys[1], report.texturePolys[2],
+				report.texturePolys[3], (uint32_t)target.texturePolys[0], (uint32_t)target.texturePolys[1],
+				(uint32_t)target.texturePolys[2], (uint32_t)target.texturePolys[3]);
+	else if (target.maxOpenEdges != 0 && report.openEdges > target.maxOpenEdges)
+		snprintf(why, sizeof(why), "the body has %u open edges, at most %u", report.openEdges, (uint32_t)target.maxOpenEdges);
+	else if (target.extents[0] > 0.f && (off(1) || off(2)))
+		snprintf(why, sizeof(why), "the body's extents are 1 : %.3f : %.3f, want 1 : %.3f : %.3f within %.0f %%",
+				report.extents[1], report.extents[2], target.extents[1] / target.extents[0],
+				target.extents[2] / target.extents[0], target.extentsOff * 100.0);
+	report.incomplete = why;
+
+	// into the fullest capture's view
+	const Rip& view = captures[ref];
+	merged.fbWidth = view.fbWidth;
+	merged.fbHeight = view.fbHeight;
+	merged.focalX = view.focalX;
+	merged.focalY = view.focalY;
+	merged.polys.clear();
+	merged.polys.reserve(kept.size());
+	for (const Kept& k : kept)
+	{
+		RipPoly p = *k.src;
+		bool inFront = true;
+		for (size_t i = 0; i < p.v.size(); i++)
+		{
+			const dvec3& e = k.pos[i];
+			const double w = -e.z;
+			inFront = inFront && w > 1e-9;
+			if (!inFront)
+				break;
+			p.v[i].x = (float)(e.x / w * view.focalX + view.fbWidth * 0.5);
+			p.v[i].y = (float)(-e.y / w * view.focalY + view.fbHeight * 0.5);
+			p.v[i].z = (float)(1.0 / w);
+		}
+		if (inFront)
+			merged.polys.push_back(std::move(p));
+	}
+	polys.clear();
+	for (const RipPoly& p : merged.polys)
+		polys.push_back(&p);
+	return true;
+}
+
 }	// namespace
 
 bool decodeTexture(const uint8_t *vram, size_t vramSize, const uint32_t *palette, uint32_t palCtrl,
@@ -1283,10 +1670,12 @@ bool buildStaff(const Rip& rip, const StaffParts& parts, const TextureSource& te
 }
 
 bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const TextureSource& textures,
-		std::vector<uint8_t>& out, std::string& error, bool *complete)
+		std::vector<uint8_t>& out, std::string& error, bool *complete, GunReport *report)
 {
 	if (complete != nullptr)
 		*complete = false;
+	GunReport scratch;
+	GunReport& rep = report != nullptr ? *report : scratch;
 	// its polygons in each capture: its textures, in front of the camera, not the sights
 	auto pick = [&](const Rip& rip) {
 		Polys polys;
@@ -1305,24 +1694,43 @@ bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const T
 		}
 		return polys;
 	};
-	// (Task 11 merges the captures in the gun's own space; until then the fullest one)
 	const Rip *rip = nullptr;
 	Polys polys;
-	for (const Rip& r : captures)
+	Rip merged;
+	if (target.merge)
 	{
-		Polys p = pick(r);
-		if (p.size() > polys.size())
+		// all of them, in the gun's own space
+		std::vector<Polys> picks;
+		for (const Rip& r : captures)
+			picks.push_back(pick(r));
+		if (!mergeCaptures(captures, picks, target, merged, polys, rep, error))
+			return false;
+		rip = &merged;
+	}
+	else
+	{
+		// the fullest one
+		for (const Rip& r : captures)
 		{
-			polys = std::move(p);
-			rip = &r;
+			Polys p = pick(r);
+			if (p.size() > polys.size())
+			{
+				polys = std::move(p);
+				rip = &r;
+			}
 		}
+		rep.captures = (uint32_t)captures.size();
+		rep.merged = rip != nullptr;
+		rep.polys = rep.referencePolys = (uint32_t)polys.size();
+		if (polys.size() < target.wholePolys)
+			rep.incomplete = "only " + std::to_string(polys.size()) + " of its " + std::to_string(target.wholePolys) + " polygons";
 	}
 	if (rip == nullptr || polys.size() < target.minPolys)
 	{
 		error = "only " + std::to_string(polys.size()) + " of its " + std::to_string(target.wholePolys) + " polygons";
 		return false;
 	}
-	const Tris eyeT = triangles(*rip, polys, true);
+	const Tris eyeT = triangles(*rip, polys, true, true);
 
 	// gun space as for the pistol: the barrel along -z, y away from the grip; first in game
 	// units around its middle
@@ -1338,35 +1746,83 @@ bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const T
 		error = "it has no length";
 		return false;
 	}
-	// The grip: under the barrel's underside (the lowest point of the front third). Its lower
-	// half is the grip alone (a trigger guard doesn't hang that low): the line through the
-	// middles of two slices across it (front to back), up to the underside, is the grip's
-	// top. In the middle across (it's symmetric).
+	// The grip: under the barrel's underside (the lowest point of the front third). Across it at
+	// ten heights from a quarter to 70 % of the way up it (above a rounded butt, below where a
+	// trigger guard or the frame joins it), its rear-most piece (a trigger guard is in front)
+	// gives the grip's front and back, where its sides cross that height (so a height a little
+	// up or down moves them a little, not a vertex in or out of a slice). A line along each (the
+	// median of every pair's slope, then of the offsets, so that one odd height doesn't move
+	// it), up to the underside: the grip's top is the middle between them. In the middle across
+	// (it's symmetric).
 	const std::vector<dvec3> pts = corners(g);
 	double under = hi.y;
 	for (const dvec3& p : pts)
 		if (p.z < lo.z + length / 3)
 			under = std::min(under, p.y);
-	const double half = (under + lo.y) / 2, drop = half - lo.y;
-	auto slice = [&](double from, double to, double& y, double& z) {
-		double zLo = 1e300, zHi = -1e300;
-		for (const dvec3& p : pts)
-			if (p.y >= from && p.y <= to)
+	auto rearPiece = [&](double y, double& front, double& back) {
+		std::vector<std::pair<double, double>> spans;
+		for (const Tri& t : g)
+		{
+			double zLo = 1e300, zHi = -1e300;
+			for (int k = 0; k < 3; k++)
 			{
-				zLo = std::min(zLo, p.z);
-				zHi = std::max(zHi, p.z);
+				const dvec3& a = t.p[k];
+				const dvec3& b = t.p[(k + 1) % 3];
+				const double da = a.y - y, db = b.y - y;
+				if (da == 0.0 || da * db < 0.0)
+				{
+					const double at = da == 0.0 ? a.z : a.z + (b.z - a.z) * (da / (da - db));
+					zLo = std::min(zLo, at);
+					zHi = std::max(zHi, at);
+				}
 			}
-		y = (from + to) / 2;
-		z = (zLo + zHi) / 2;
-		return zLo <= zHi;
+			if (zLo <= zHi)
+				spans.emplace_back(zLo, zHi);
+		}
+		if (spans.empty())
+			return false;
+		std::sort(spans.begin(), spans.end());
+		front = spans[0].first;
+		back = spans[0].second;
+		for (const auto& [from, to] : spans)
+			if (from > back + 0.01 * length)
+			{
+				// a piece further back
+				front = from;
+				back = to;
+			}
+			else
+				back = std::max(back, to);
+		return true;
 	};
-	double y1, z1, y2, z2;
-	if (under - lo.y < 0.1 * length || !slice(half - 0.2 * drop, half, y1, z1) || !slice(lo.y + 0.2 * drop, lo.y + 0.4 * drop, y2, z2))
+	std::vector<double> ys, fronts, backs;
+	for (int k = 0; k < 10; k++)
+	{
+		const double y = lo.y + (0.25 + 0.45 * k / 9.0) * (under - lo.y);
+		double front, back;
+		if (rearPiece(y, front, back))
+		{
+			ys.push_back(y);
+			fronts.push_back(front);
+			backs.push_back(back);
+		}
+	}
+	if (under - lo.y < 0.1 * length || ys.size() < 4)
 	{
 		error = "no grip under the barrel";
 		return false;
 	}
-	const double gripZ = z1 + (z1 - z2) / (y1 - y2) * (under - y1);
+	auto atTop = [&](const std::vector<double>& z) {
+		std::vector<double> slopes, offsets;
+		for (size_t i = 0; i < ys.size(); i++)
+			for (size_t j = i + 1; j < ys.size(); j++)
+				slopes.push_back((z[j] - z[i]) / (ys[j] - ys[i]));
+		const double slope = median(slopes);
+		for (size_t i = 0; i < ys.size(); i++)
+			offsets.push_back(z[i] - slope * ys[i]);
+		return median(offsets) + slope * under;
+	};
+	const double gripZ = (atTop(fronts) + atTop(backs)) / 2;
 	const dvec3 top((lo.x + hi.x) / 2, under, gripZ);
 	const dvec3 origin = mid + top.x * axes[0] + top.y * axes[1] + top.z * axes[2];
 	const Tris gun = toSpace(eyeT, origin, axes, target.lengthM / length);
@@ -1390,7 +1846,7 @@ bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const T
 		error = why;
 		return false;
 	}
-	const bool whole = polys.size() >= target.wholePolys;
+	const bool whole = target.merge ? rep.incomplete.empty() : polys.size() >= target.wholePolys;
 	if (complete != nullptr)
 		*complete = whole;
 	float onSlide[16] {};

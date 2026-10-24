@@ -491,6 +491,7 @@ extern Option<float> VrHandScale;
 extern Option<bool> VrSlideReload;
 extern Option<bool> VrStaffHand;
 extern Option<bool> VrHandsPrep;
+extern Option<int> VrHandsCaptureLimit;
 extern Option<bool> VrHideP2Prompt;
 extern Option<bool> VrDualWield;
 extern Option<int> VrDebugShots;

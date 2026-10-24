@@ -77,3 +77,10 @@ Before these, delete `gun-cm-cabinet.bin` from the app's data folder (or reinsta
 - [ ] The cabinet gun in the hand faces the right way (barrel forward, grip down in your hand), at about the right size (about 27 cm long), with the muzzle flash and the laser starting at its muzzle.
 - [ ] The second start has no panel ("VR hands: the guns, made before" in the log), and the cabinet gun is in the hand again.
 - [ ] The cabinet gun's colours look even, not blotchy or faceted (its colours are one frame's lit vertex colours, averaged per triangle).
+
+## Task 11
+
+Before these, delete `gun-cm-cabinet.bin` and `gun-cm-pistol.bin` from the app's data folder (or reinstall), so the first start makes both.
+
+- [ ] After the first start, the menu's Gun row offers the agents' pistol (Task 13). The log says "VR hands: the agents' pistol from this game (complete)".
+- [ ] In the hand the agents' pistol looks whole: suppressor, slide, grip and trigger guard, with no holes and nothing inside-out (no faces you see through to the inside, from any side).

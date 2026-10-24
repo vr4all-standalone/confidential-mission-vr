@@ -129,6 +129,7 @@ Option<int> VrDebugShots("vr.DebugShots", 0);	// PC test aid: a screenshot every
 Option<bool> VrDualWield("vr.DualWield", true);	// the left controller's Start: player 2 joins, a gun in each hand
 Option<bool> VrHideP2Prompt("vr.HideP2Prompt", true);	// no "PRESS START BUTTON" for player 2 floating in the room
 Option<bool> VrHandsPrep("vr.HandsPrep", false);	// PC: with no hands model, run the game to its game over scene for one (the headset always does)
+Option<int> VrHandsCaptureLimit("vr.HandsCaptureLimit", 0);	// PC test aid: the gun run merges at most this many captures of a gun (the first ones; 0: all)
 Option<float> VrComfortStart("vr.ComfortStart", 0.8f);	// metres; closer things get pulled back (0: off)
 Option<float> VrComfortMin("vr.ComfortMin", 0.4f);	// metres; ...but never closer than this
 Option<bool> VrAimWidened("vr.AimWidened", false);	// aim on the widened view (the game's hit test uses its stock view)

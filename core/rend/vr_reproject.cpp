@@ -500,6 +500,14 @@ static std::vector<GameProfile> makeProfiles()
 	// at W 0.965-1.00003 (A2).
 	p.model.kind = hands::Source::CmGuns;
 	p.model.guns[0] = { "cabinet gun", "gun-cm-cabinet.bin", { 0x400000 }, 279, 200, 0.27f, 0.95f, 1.005f, false };
+	// The agents' pistol (Task 11; A1 candidate 1, A2): a suppressed black automatic in the stage
+	// 1 intro, never drawn whole for long (small, run off-screen, the game culls parts), so the
+	// passes it's in are merged. OP list; body (slide, frame and grip) tex 7e2800, its suppressor
+	// 6cc400, two more parts 82f800 and 76a800: 91 polygons, 78/10/2/1; the body has 30 open edges
+	// of 282 (seams, open ends) and extents 1.92 x 1.46 x 0.26. Howard's hand (tex 6ca000) on its
+	// grip is not part of it. 0.30 m along the barrel and the suppressor.
+	p.model.guns[1] = { "agents' pistol", "gun-cm-pistol.bin", { 0x7e2800, 0x6cc400, 0x82f800, 0x76a800 }, 91, 10, 0.30f, 0, 0, true,
+			{ 78, 10, 2, 1 }, 30, { 1.92f, 1.46f, 0.26f }, 0.10f };
 	list.push_back(p);
 	return list;
 }

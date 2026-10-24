@@ -24,6 +24,9 @@
   accept-cm-rip-skip and -skip2 (it deletes the files again). A CM run that starts a game with
   vr.GameHands on and no gun-cm-cabinet.bin makes the file while watching (the reload tutorial
   after Start); the XR scenarios from before it pin the arcade gun ($cmWidenArcade).
+  cm-rip-pistol plays accept-cm-rip-pistol (it deletes the files, the run goes on from the cabinet
+  gun to the agents' pistol in the stage 1 intro and leaves both files there), cm-rip-pistol-one
+  accept-cm-rip-pistol-one (the same with one capture merged; each pass draws all of it, so it's whole too).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -952,6 +955,50 @@ function Test-CmRipSkip {
 	return $null
 }
 
+# Task 11: the same run goes on from the cabinet gun to the agents' pistol (body tex 7e2800, its
+# suppressor 6cc400, 82f800, 76a800; 91 polygons when whole, 78/10/2/1): Start every 2 s for 16 s
+# after the cabinet gun, the stage 1 intro, every pass with 10 or more of its polygons captured and
+# merged (hands_build.h buildGun) into gun-cm-pistol.bin, flagged complete when all of it came
+# together; the run done by 150 s of game. -one merges the first capture only
+# (vr.HandsCaptureLimit=1). Every pass of the intro draws all 91 (Task 11's runs), so one capture
+# is whole as well and it comes out complete; it shows the limit holds (1 capture merged) and that
+# the log's verdict and the file's flag agree (PF12: the flag 3 only with "complete", else 1 and
+# the first check that failed).
+$cmPistolFile = Join-Path $cmGunData 'gun-cm-pistol.bin'
+$cmPistolLine = 'VR hands: the agents'' pistol from this game \((complete|incomplete: [^)]*)\), \d+ bytes to .*gun-cm-pistol\.bin'
+function Invoke-CmRipPistol([string]$name, [string]$config, [string]$want) {
+	if (-not $Reuse) { Remove-CmGuns }
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 240; Config = $config
+		Expect = 'VR hands: no model yet, taking the guns from the game',
+			'VR hands: the cabinet gun from this game, \d+ bytes to .*gun-cm-cabinet\.bin', $want, 'VR hands: done after \d+ s of game'
+		Reject = @('VR hands: .*, but ') }
+	if ($why) { return $why }
+	$hit = Select-String -LiteralPath (Get-RunLog $name) -Pattern 'VR hands: done after (\d+) s of game' -CaseSensitive | Select-Object -First 1
+	$n = [int]$hit.Matches[0].Groups[1].Value
+	Write-Host "  done after $n s of game (want 150 or less)"
+	if ($n -gt 150) { return "the gun run took $n s of game, over 150" }
+	if (-not (Test-Path -LiteralPath $cmPistolFile)) { return "no $cmPistolFile" }
+	return $null
+}
+function Test-CmRipPistol {
+	$why = Invoke-CmRipPistol 'accept-cm-rip-pistol' 'config:vr.HandsPrep=yes' `
+		'VR hands: the agents'' pistol from this game \(complete\), \d+ bytes to .*gun-cm-pistol\.bin'
+	if ($why) { return $why }
+	return Invoke-VrCheck 'hnd', $cmPistolFile, '--polys', '91', '--length', '0.30', '--gun-only', '--complete'
+}
+function Test-CmRipPistolOne {
+	$name = 'accept-cm-rip-pistol-one'
+	$why = Invoke-CmRipPistol $name 'config:vr.HandsPrep=yes,config:vr.HandsCaptureLimit=1' `
+		'VR hands: the agents'' pistol: 1 captures, 1 merged '
+	if ($why) { return $why }
+	# the log's verdict and the file's flag agree: --complete (and flags 3) only when the log says complete
+	$line = Select-String -LiteralPath (Get-RunLog $name) -Pattern $cmPistolLine -CaseSensitive | Select-Object -First 1
+	if (-not $line) { return "no line matching $cmPistolLine" }
+	$complete = $line.Matches[0].Groups[1].Value -eq 'complete'
+	$check = @('hnd', $cmPistolFile, '--polys', '10', '--length', '0.30', '--gun-only') + @(if ($complete) { '--complete' })
+	return Invoke-VrCheck $check -Want @(if ($complete) { 'flags 3 ' } else { 'flags 1 \(gun only\)' })
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
@@ -961,6 +1008,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-controllers' = 'Test-CmControllers'; 'cm-controllers-rt' = 'Test-CmControllersRt'
 	'cm-hands' = 'Test-CmHands'; 'cm-hands-shot' = 'Test-CmHandsShot'
 	'cm-rip-cabinet' = 'Test-CmRipCabinet'; 'cm-rip-hand' = 'Test-CmRipHand'; 'cm-rip-skip' = 'Test-CmRipSkip'
+	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

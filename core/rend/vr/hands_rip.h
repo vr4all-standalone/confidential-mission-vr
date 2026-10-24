@@ -16,9 +16,12 @@
 	Confidential Mission draws its guns by themselves, with no hand on them (Source::CmGuns,
 	gun-cm-*.bin, gun only): Start once at 30 s of game takes its SEGA logo to the reload
 	tutorial, where its cabinet gun is turned about on screen; the first frame with all of it
-	is the cabinet gun (Task 11 goes on from there to the agents' pistol in the stage 1 intro).
-	The run gives up at 120 s of game, with the fullest capture it saw if it has one. It runs
-	while any of the guns' files is missing; B skips it here too.
+	is the cabinet gun (given up at 120 s of game, with the fullest capture seen if there is
+	one). Then Start every 2 s for 16 s takes it to the stage 1 intro, where the agents hold
+	their pistol, never whole for long: every pass with enough of it is captured, and 20 s of
+	game after the last (or at 150 s) they're merged into the agents' pistol, flagged complete
+	when all of it came together. It runs while any of the guns' files is missing; B skips it
+	here too, and nothing more is made that session.
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */

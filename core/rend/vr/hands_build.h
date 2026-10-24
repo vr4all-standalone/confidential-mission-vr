@@ -48,7 +48,8 @@ struct StaffParts
 constexpr uint32_t StaffRodPolys = 66;
 
 // A gun the game draws by itself, with no hand on it (Confidential Mission's: its cabinet gun in
-// the reload tutorial), per game's profile (vr_reproject.cpp), made into a gun-only model.
+// the reload tutorial, the agents' pistol in the stage 1 intro), per game's profile
+// (vr_reproject.cpp), made into a gun-only model.
 struct GunTarget
 {
 	const char *name;			// "cabinet gun"
@@ -58,7 +59,15 @@ struct GunTarget
 	uint16_t minPolys;			// a capture needs at least this many
 	float lengthM;				// the built model's length along the barrel, metres
 	float skipWMin, skipWMax;	// polygons with every corner's W in this band are not the gun (HUD sights)
-	bool merge;					// merge captures across frames (Task 11)
+	bool merge;					// merge captures across frames, in the gun's own space (buildGun)
+	// Merged, all of it is there (and so flagged) when its polygons number wholePolys, so many
+	// of each of its textures (texturePolys, as textures[]); its body (textures[0]) has at most
+	// maxOpenEdges edges with one polygon on them; and the body's extents along its own axes,
+	// longest first, are within extentsOff of the ratio extents. 0: not checked.
+	uint16_t texturePolys[4];
+	uint16_t maxOpenEdges;
+	float extents[3];
+	float extentsOff;
 
 	bool used() const { return file != nullptr && file[0] != 0; }
 	bool has(uint32_t tex) const {
@@ -68,6 +77,21 @@ struct GunTarget
 		return false;
 	}
 	bool skips(float w) const { return w >= skipWMin && w <= skipWMax; }
+};
+
+// What buildGun made of the captures, for the log.
+struct GunReport
+{
+	uint32_t captures = 0;		// given
+	uint32_t reference = 0;		// the one the others were fitted onto (the most of the body)...
+	uint32_t referencePolys = 0;	// ...and its polygons
+	uint32_t merged = 0;		// fitted (that one too)
+	uint32_t dropped = 0;		// that didn't fit: under 8 corners shared, or rms over 1 % of the body's length
+	double rms = 0.0;			// the worst fit kept, of the body's length
+	uint32_t polys = 0, texturePolys[4] {};	// the model's polygons, and by texture
+	uint32_t openEdges = 0;		// the body's
+	double extents[3] {};		// the body's along its own axes, longest first, that one 1
+	std::string incomplete;		// the first check that failed; empty: all of it is there
 };
 
 // HND1 version 2's flags
@@ -124,10 +148,14 @@ bool buildStaff(const Rip& rip, const StaffParts& parts, const TextureSource& te
 // slide (it travels 0). Gun space as for the pistol (barrel along -z, found by its longest
 // edges; +y away from the grip), the origin at the top of the grip, in the middle, the length
 // along the barrel the target's lengthM, the muzzle the middle of its front face. Without
-// merge (target.merge) the capture with the most of its polygons is the model. *complete:
-// all of it was there (wholePolys), and so flagged. False with a reason when the captures
-// don't have enough of it or its shape doesn't come out as a gun.
+// merge (target.merge) the capture with the most of its polygons is the model; merged, the
+// captures come together in the eye space of the one with the most of its body: each other
+// one fitted onto it (Kabsch on the corners both have, by texture and texture coordinates),
+// and each of its polygons not there yet added. *complete: all of it was there (wholePolys;
+// merged, the target's other checks too), and so flagged; report->incomplete says what wasn't.
+// False with a reason when the captures don't have enough of it or its shape doesn't come out
+// as a gun.
 bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const TextureSource& textures,
-		std::vector<uint8_t>& out, std::string& error, bool *complete);
+		std::vector<uint8_t>& out, std::string& error, bool *complete, GunReport *report = nullptr);
 
 }

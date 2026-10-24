@@ -57,10 +57,20 @@ constexpr double StaffGiveUpAfter = 150.0;
 
 // The run for Confidential Mission's guns: Start once at 30 s of game (findings startOk), its
 // SEGA logo's; the reload tutorial with the cabinet gun comes a second later (measured on the
-// PC). (Task 11: on to the stage 1 intro for the agents' pistol.)
+// PC); the cabinet gun is given up at 120 s.
 constexpr double CmStartAt = 30.0;
-constexpr double CmRun = 32.0;
+constexpr double CmRun = 90.0;
 constexpr double CmGiveUpAfter = 120.0;
+// Then the merged guns (GunTarget::merge, the agents' pistol): from the cabinet gun (or from 90 s
+// without it), Start every 2 s for 16 s, as v1's presses from 30 to 46 s did, through the gun
+// adjustment screen and the briefing to the stage 1 intro (about 50-66 s of game), where the
+// agents hold it; every pass with minPolys of it or more is captured, and 20 s of game after the
+// last one (or at 150 s) they're merged (buildGun). Never while watching in play.
+constexpr double CmMergedBy = 90.0;
+constexpr double CmPressFor = 16.0;
+constexpr double CmQuietFor = 20.0;
+constexpr double CmLastAt = 150.0;
+constexpr size_t CmMaxCaptures = 1200;	// 20 s of passes (about 15 kB each)
 
 enum State { Off, Watching, Preparing };
 std::atomic<int> state { Off };
@@ -74,6 +84,16 @@ std::atomic<bool> gunDone[3];
 std::mutex gunMutex;
 std::vector<u8> gunBest[3];
 u32 gunBestPolys[3], gunFailedAt[3];
+// the merged guns' captures, and the textures they use, decoded when captured (VRAM moves on)
+std::vector<Rip> gunCaptures[3];
+struct CachedTexture { u32 tcw, size; bool ok; Image image; };
+std::vector<CachedTexture> textureCache;
+std::atomic<bool> gunSeen[3];	// a pass with minPolys of it since the last vblank
+std::atomic<bool> gunOver[3];	// given up (or merged) in this run
+double gunLastSeen[3];			// game seconds (run time)
+std::atomic<bool> cmCapturing;	// the merged guns' part of the run is on
+double cmMergedAt;				// ...since then (run time; < 0 not yet)
+bool cmBestSaved, cmSaved;
 bool cmStartLogged;
 double startedAt;			// game seconds at the start
 bool fastForwardWas;
@@ -113,7 +133,9 @@ bool haveModel()
 	return file_exists(modelPath()) || (!legacyModelPath().empty() && file_exists(legacyModelPath()));
 }
 
-bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete);
+bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete,
+		const std::string *verdict = nullptr);
+void finishMerged(const GunTarget& gun, int i);
 
 // The run over: back to the game as it was, still watching for the scene in play (next), or not.
 void stopPrep(const char *why, State next = Watching)
@@ -154,7 +176,15 @@ void onStart()
 			gunDone[i] = !cmRun || !gun.used() || file_exists(gunPath(gun));
 			gunBest[i].clear();
 			gunBestPolys[i] = gunFailedAt[i] = 0;
+			std::vector<Rip>().swap(gunCaptures[i]);
+			gunSeen[i] = false;
+			gunOver[i] = false;
+			gunLastSeen[i] = -1.0;
 		}
+		textureCache.clear();
+		cmCapturing = false;
+		cmMergedAt = -1.0;
+		cmBestSaved = cmSaved = false;
 	}
 	cmStartLogged = false;
 	{
@@ -206,28 +236,77 @@ void onVBlank()
 	if (cmRun)
 	{
 		progress = (float)std::min(t / CmRun, 0.97);
-		if (t > CmGiveUpAfter)
-		{
-			// what there is: each gun not seen whole, from the fullest capture of it
-			bool saved = false;
-			const Source *source = gameModelSource();
-			if (source != nullptr && source->kind == Source::CmGuns)
-			{
-				std::lock_guard<std::mutex> lock(gunMutex);
-				for (int i = 0; i < 3; i++)
-					if (!gunDone[i] && !gunBest[i].empty())
-						saved = saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i], false) || saved;
-			}
-			if (saved)
-				progress = 1.f;
-			stopPrep(saved ? "done" : "no gun came up whole (gave up)");
-			return;
-		}
-		const bool start = t >= CmStartAt && t < CmStartAt + PressHold;
+		bool start = t >= CmStartAt && t < CmStartAt + PressHold;
 		if (start && !cmStartLogged)
 		{
 			cmStartLogged = true;
 			INFO_LOG(RENDERER, "VR hands: Start at %.1f s", t);
+		}
+		const Source *source = gameModelSource();
+		if (source == nullptr || source->kind != Source::CmGuns)
+		{
+			stopPrep("stopped");
+			return;
+		}
+		std::lock_guard<std::mutex> lock(gunMutex);
+		// at 120 s, each gun seen whole or not at all from the fullest capture of it, if any
+		if (t > CmGiveUpAfter && !cmBestSaved)
+		{
+			cmBestSaved = true;
+			for (int i = 0; i < 3; i++)
+				if (!source->guns[i].merge && !gunDone[i])
+				{
+					if (!gunBest[i].empty())
+						saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i], false);
+					gunOver[i] = true;
+				}
+		}
+		// the merged ones once the others are made (or at 90 s)
+		bool othersDone = true, merging = false;
+		for (int i = 0; i < 3; i++)
+		{
+			if (gunSeen[i].exchange(false))
+				gunLastSeen[i] = t;
+			if (!gunDone[i] && !gunOver[i])
+			{
+				if (source->guns[i].merge)
+					merging = true;
+				else
+					othersDone = false;
+			}
+		}
+		if (cmMergedAt < 0.0 && merging && t >= CmStartAt && (othersDone || t >= CmMergedBy))
+		{
+			cmMergedAt = t;
+			cmCapturing = true;
+			INFO_LOG(RENDERER, "VR hands: on to the merged guns at %.1f s", t);
+		}
+		if (cmMergedAt >= 0.0)
+		{
+			const double since = t - cmMergedAt;
+			start = start || (since < CmPressFor + PressHold && std::fmod(since, PressEvery) < PressHold);
+			for (int i = 0; i < 3; i++)
+				if (source->guns[i].merge && !gunDone[i] && !gunOver[i]
+						&& ((gunLastSeen[i] >= 0.0 && t - gunLastSeen[i] >= CmQuietFor) || t >= CmLastAt))
+				{
+					finishMerged(source->guns[i], i);
+					gunOver[i] = true;
+				}
+		}
+		// over when each gun is made or given up
+		bool over = true, all = true;
+		for (int i = 0; i < 3; i++)
+		{
+			over = over && (gunDone[i] || gunOver[i]);
+			all = all && gunDone[i];
+		}
+		if (over)
+		{
+			cmCapturing = false;
+			if (cmSaved)
+				progress = 1.f;
+			stopPrep(cmSaved ? "done" : "no gun came up whole (gave up)", all ? Off : Watching);
+			return;
 		}
 		lightgunSet(0, OffScreen, OffScreen, start ? 4 : 0);
 		return;
@@ -332,9 +411,10 @@ bool save(const std::vector<u8>& data, const std::string& path)
 	return nowide::rename(temp.c_str(), path.c_str()) == 0;
 }
 
-// One of Confidential Mission's guns made (complete: all of it, as buildGun flagged it): into
-// its file, and drawn from now on.
-bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete)
+// One of Confidential Mission's guns made (complete: all of it, as buildGun flagged it; a merged
+// one says so either way, verdict): into its file, and drawn from now on.
+bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete,
+		const std::string *verdict)
 {
 	const std::string path = gunPath(gun);
 	if (!save(model, path))
@@ -342,7 +422,11 @@ bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 poly
 		WARN_LOG(RENDERER, "VR hands: can't write %s", path.c_str());
 		return false;
 	}
-	if (complete)
+	cmSaved = true;
+	if (verdict != nullptr)
+		NOTICE_LOG(RENDERER, "VR hands: the %s from this game (%s), %zu bytes to %s", gun.name, verdict->c_str(),
+				model.size(), path.c_str());
+	else if (complete)
 		NOTICE_LOG(RENDERER, "VR hands: the %s from this game, %zu bytes to %s", gun.name, model.size(), path.c_str());
 	else
 		NOTICE_LOG(RENDERER, "VR hands: the %s from this game, %zu bytes to %s (%u of its %u polygons)", gun.name,
@@ -354,6 +438,74 @@ bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 poly
 
 u32 textureOf(const PolyParam& pp) {
 	return pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
+}
+
+// A merged gun's captures (gunMutex held, emu thread): put together into its model and saved,
+// complete or not, with what the merge did in the log.
+void finishMerged(const GunTarget& gun, int i)
+{
+	std::vector<Rip> captures;
+	captures.swap(gunCaptures[i]);
+	if (captures.empty())
+	{
+		WARN_LOG(RENDERER, "VR hands: the %s never came up", gun.name);
+		return;
+	}
+	const TextureSource textures = [](u32 tcw, u32 size, Image& image) {
+		for (const CachedTexture& c : textureCache)
+			if (c.tcw == tcw && c.size == (size & 0x3F))
+			{
+				image = c.image;
+				return c.ok;
+			}
+		return false;
+	};
+	std::vector<u8> model;
+	std::string error;
+	bool complete = false;
+	GunReport r;
+	const bool built = buildGun(captures, gun, textures, model, error, &complete, &r);
+	NOTICE_LOG(RENDERER, "VR hands: the %s: %u captures, %u merged onto the fullest (no. %u, %u polygons; %u didn't fit, "
+			"worst rms %.4f %% of its length): %u polygons %u/%u/%u/%u, the body's open edges %u, extents 1 : %.3f : %.3f",
+			gun.name, r.captures, r.merged, r.reference + 1, r.referencePolys, r.dropped, r.rms * 100.0, r.polys,
+			r.texturePolys[0], r.texturePolys[1], r.texturePolys[2], r.texturePolys[3], r.openEdges, r.extents[1], r.extents[2]);
+	textureCache.clear();
+	if (!built)
+	{
+		WARN_LOG(RENDERER, "VR hands: the %s, but %s", gun.name, error.c_str());
+		return;
+	}
+	const std::string verdict = complete ? std::string("complete") : "incomplete: " + r.incomplete;
+	saveGun(gun, i, model, r.polys, complete, &verdict);
+}
+
+// The game's camera and framebuffer of a pass, for a capture.
+Rip passRip(const rend_context& ctx)
+{
+	Rip rip;
+	int fbWidth, fbHeight;
+	getPvrFramebufferSize(ctx, fbWidth, fbHeight);
+	rip.fbWidth = fbWidth;
+	rip.fbHeight = fbHeight;
+	const GameCamera cam = gameCamera(ctx);
+	rip.focalX = cam.dcSize.x * 0.5f / cam.tanHalf.x;
+	rip.focalY = cam.dcSize.y * 0.5f / cam.tanHalf.y;
+	return rip;
+}
+
+void addRipPoly(const rend_context& ctx, const PolyParam& pp, Rip& rip)
+{
+	RipPoly& p = rip.polys.emplace_back();
+	p.isp = pp.isp.full;
+	p.tsp = pp.tsp.full;
+	p.tcw = pp.tcw.full;
+	p.pcw = pp.pcw.full;
+	p.v.reserve(pp.count);
+	for (u32 v = pp.first; v < pp.first + pp.count; v++)
+	{
+		const Vertex& vx = ctx.verts[v];
+		p.v.push_back({ vx.x, vx.y, vx.z, vx.u, vx.v, { vx.col[0], vx.col[1], vx.col[2], vx.col[3] } });
+	}
 }
 
 // A polygon of the gun: its texture, and not flat in the sights' band.
@@ -368,6 +520,43 @@ bool gunPoly(const rend_context& ctx, const PolyParam& pp, const GunTarget& gun)
 			return true;
 	}
 	return false;
+}
+
+// A merged gun in a pass (gunMutex held): all of its polygons there, if minPolys or more,
+// captured (the first vr.HandsCaptureLimit, if set), and their textures decoded while they're
+// in VRAM.
+void captureMerged(const rend_context& ctx, const RenderPass& pass, const RenderPass& prev, const GunTarget& gun, int i)
+{
+	std::vector<const PolyParam *> found;
+	auto scan = [&](const std::vector<PolyParam>& polys, u32 from, u32 to) {
+		for (u32 k = from; k < to && k < polys.size(); k++)
+			if (gunPoly(ctx, polys[k], gun))
+				found.push_back(&polys[k]);
+	};
+	scan(ctx.global_param_op, std::max(prev.op_count, 1u), pass.op_count);
+	scan(ctx.global_param_pt, prev.pt_count, pass.pt_count);
+	scan(ctx.global_param_tr, prev.tr_count, pass.tr_count);
+	if (found.size() < gun.minPolys)
+		return;
+	gunSeen[i] = true;
+	const int limit = config::VrHandsCaptureLimit;
+	if ((limit > 0 && gunCaptures[i].size() >= (size_t)limit) || gunCaptures[i].size() >= CmMaxCaptures)
+		return;
+	Rip& rip = gunCaptures[i].emplace_back(passRip(ctx));
+	for (const PolyParam *pp : found)
+	{
+		addRipPoly(ctx, *pp, rip);
+		if (!pp->pcw.Texture)
+			continue;
+		const u32 tcw = pp->tcw.full, size = pp->tsp.full & 0x3F;
+		if (std::none_of(textureCache.begin(), textureCache.end(), [&](const CachedTexture& c) { return c.tcw == tcw && c.size == size; }))
+		{
+			CachedTexture& c = textureCache.emplace_back();
+			c.tcw = tcw;
+			c.size = size;
+			c.ok = decodeTexture(&vram[0], VRAM_SIZE, PALETTE_RAM, PAL_RAM_CTRL, tcw, size, c.image);
+		}
+	}
 }
 
 // Confidential Mission's guns, each pass: for each gun still to get, its longest run of
@@ -385,7 +574,16 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 	for (int i = 0; i < 3; i++)
 	{
 		const GunTarget& gun = source.guns[i];
-		if (gunDone[i] || (gunFailedAt[i] != 0 && passes - gunFailedAt[i] < 30))
+		if (gunDone[i])
+			continue;
+		if (gun.merge)
+		{
+			// only in the run, from the stage 1 intro's part of it on
+			if (state == Preparing && cmCapturing && !gunOver[i])
+				captureMerged(ctx, pass, prev, gun, i);
+			continue;
+		}
+		if (gunFailedAt[i] != 0 && passes - gunFailedAt[i] < 30)
 			continue;
 		const std::vector<PolyParam> *runList = nullptr;
 		u32 runFrom = 0, runCount = 0;
@@ -415,30 +613,9 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 		if (runCount < gun.minPolys || (!whole && runCount <= gunBestPolys[i]))
 			continue;
 
-		std::vector<Rip> captures(1);
-		Rip& rip = captures[0];
-		int fbWidth, fbHeight;
-		getPvrFramebufferSize(ctx, fbWidth, fbHeight);
-		rip.fbWidth = fbWidth;
-		rip.fbHeight = fbHeight;
-		const GameCamera cam = gameCamera(ctx);
-		rip.focalX = cam.dcSize.x * 0.5f / cam.tanHalf.x;
-		rip.focalY = cam.dcSize.y * 0.5f / cam.tanHalf.y;
+		std::vector<Rip> captures { passRip(ctx) };
 		for (u32 k = runFrom; k < runFrom + runCount; k++)
-		{
-			const PolyParam& pp = (*runList)[k];
-			RipPoly& p = rip.polys.emplace_back();
-			p.isp = pp.isp.full;
-			p.tsp = pp.tsp.full;
-			p.tcw = pp.tcw.full;
-			p.pcw = pp.pcw.full;
-			p.v.reserve(pp.count);
-			for (u32 v = pp.first; v < pp.first + pp.count; v++)
-			{
-				const Vertex& vx = ctx.verts[v];
-				p.v.push_back({ vx.x, vx.y, vx.z, vx.u, vx.v, { vx.col[0], vx.col[1], vx.col[2], vx.col[3] } });
-			}
-		}
+			addRipPoly(ctx, (*runList)[k], captures[0]);
 		std::vector<u8> model;
 		std::string error;
 		bool complete = false;
