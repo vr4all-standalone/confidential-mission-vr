@@ -41,6 +41,10 @@
   cm-gun plays accept-cm-gun and accept-cm-gun-nopistol (the gun choice, Task 13): it needs the cabinet
   gun's and the pistol's files the rip scenarios leave (it comes after them in the list; without them it
   fails and says so), and moves the pistol's away (.hold) for the second run, back when it's done.
+  cm-rifle-sim plays accept-cm-rifle-sim and accept-cm-rifle-sim-arcade (the assault rifle, Task 14: poked
+  into player 1's block, its knocks counted against the rounds the game fires): it needs gun-cm-rifle.bin
+  (cm-rip-rifle's), moved away (.hold) for the second run and back when it's done; cm-rifle-p2 plays
+  accept-cm-rifle-p2 (player 2's rifle, in the left hand).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -1155,6 +1159,126 @@ function Test-CmGun {
 	return $null
 }
 
+# Task 14: the assault rifle (the findings' ## Rifle). Task 4b's setMode(p, 2) as six pokes at $t into player p's
+# block (0x0C1557B8 + 276 p): the rifle's per-frame and trigger handlers (+0x80, +0x88), its auto-fire countdown
+# (+0x78 = 8), 45 rounds in a 45-round magazine (+0x4C, +0x50), the mode (+0x48 = 2) last. -Pistol: setMode(p, 0)'s
+# (the pistol's handlers, 6 rounds of 6, mode 0). With the rifle's the game fires on its own, 12 a second while the
+# trigger is held, and gives the pistol back itself at 0 rounds (4b's t4b-p2). POKE is absolute.
+function Get-CmRiflePoke([double]$t, [int]$player = 0, [switch]$Pistol) {
+	$b = 0x0C1557B8 + 276 * $player
+	$writes = if ($Pistol) { @(@(0x80, '0c02b5a4'), @(0x88, '0c02bbfa'), @(0x78, '0'), @(0x50, '6'), @(0x4C, '6'), @(0x48, '0')) }
+		else { @(@(0x80, '0c02b5c8'), @(0x88, '0c02bc64'), @(0x78, '8'), @(0x50, '2d'), @(0x4C, '2d'), @(0x48, '2')) }
+	foreach ($w in $writes) { "$(T $t)=poke $('{0:x8}' -f ($b + $w[0])) 4 $($w[1])" }
+}
+
+# The log-clock times (seconds, as Get-LogCount's -From / -To) of the lines matching a regex.
+function Get-LogTimes([string]$run, [string]$regex, [double]$From = 0, [double]$To = 1e9) {
+	@(Select-String -LiteralPath (Get-RunLog $run) -Pattern $regex -CaseSensitive | ForEach-Object {
+		if ($_.Line -match '^(\d+):(\d\d):(\d{3}) ') { [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000 }
+	} | Where-Object { $_ -ge $From -and $_ -lt $To })
+}
+
+# One held burst with the rifle, from -From to -To of a run's log: the rounds the game fired (player p's shot counter
+# +0x60 watched with vr.WatchRam, a "VR: ram" line per rise) against the knocks in $hand: the pull's Shot (0.030 s,
+# 1.0) once, then Auto knocks (0.020 s, 0.6), at least $minAuto, each knock over before the next (the gaps between
+# the simulator's lines over the longest knock's 30 ms, 35 ms with a margin). $null when so (knocks = rounds +-1).
+function Test-RifleBurst([string]$run, [string]$hand, [int]$player, [double]$From, [double]$To, [int]$minAuto) {
+	$counter = '{0:x8}' -f (0x0C1557B8 + 276 * $player + 0x60)
+	$rounds = @(Get-LogTimes $run "VR: ram $counter " $From $To).Count
+	$shots = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.030 1\.000" $From $To).Count
+	$auto = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.020 0\.600" $From $To).Count
+	$all = @(Get-LogTimes $run "XRSIM: haptic $hand " $From $To)
+	$gaps = @(for ($i = 1; $i -lt $all.Count; $i++) { $all[$i] - $all[$i - 1] })
+	$min = if ($gaps.Count) { ($gaps | Measure-Object -Minimum).Minimum } else { 0 }
+	$median = if ($gaps.Count) { @($gaps | Sort-Object)[[int][Math]::Floor($gaps.Count / 2)] } else { 0 }
+	Write-Host ("  {0} {1}-{2} s: {3} rounds, {4} knocks in the {5} hand ({6} Shot, {7} Auto), gaps min {8:0.000} s, median {9:0.000} s" -f
+		$run, (T $From), (T $To), $rounds, $all.Count, $hand, $shots, $auto, $min, $median)
+	if ($shots -ne 1) { return "$shots Shot knocks, want 1 (the pull)" }
+	if ($all.Count -ne $shots + $auto) { return "$($all.Count - $shots - $auto) other knocks" }
+	if ([Math]::Abs($all.Count - $rounds) -gt 1) { return "$($all.Count) knocks for $rounds rounds" }
+	if ($auto -lt $minAuto) { return "$auto Auto knocks, want $minAuto or more" }
+	if ($all.Count -gt 1 -and $min -lt 0.035) { return "two knocks $(T $min) s apart: they run into each other" }
+	return $null
+}
+
+# The rifle in player 1's hand, through the simulator: the rifle poked at 52.6 s (stage 1's first room), the right
+# hand in view pointing ahead; the trigger held 2 s from 53.5 s (24 rounds: a Shot and Auto knocks, at least
+# floor(1.5 x 12) = 18) and 2.5 s from 57.5 s (the 21 left: the game gives the pistol back at ~59.3 s, the hand the
+# chosen gun), then a pull at 61 s (the pistol's Shot). Window shots of the hand at 56 s (the rifle) and 62 s.
+function Get-CmRifleSimParams([string]$name, [double]$seconds) {
+	@{ Game = 'confmiss'; Name = $name; Seconds = $seconds; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c155818:2"
+		At = @('20=pose right 0.1 1.45 -0.3 0 0') + @(Get-CmStartsXr) + @(Get-CmRiflePoke 52.6) +
+			'53.5=xr right/trigger 1 2000', '56=shot rifle', '57.5=xr right/trigger 1 2500', '61=xr right/trigger 1 100', '62=shot pistol'
+		Reject = @('XR: initialisation failed', 'XRSIM: haptic right 0\.012') }
+}
+# With the rifle's file: its model in the hand ("XR: P1 hand: assault rifle (gun-cm-rifle.bin)"), the knocks, the
+# pistol's feel back after; the two window shots differ in the hand's box. Without it (moved to .hold, back after):
+# the arcade gun recoloured, which differs from the model at 56 s.
+function Test-CmRifleSim {
+	if (-not (Test-Path -LiteralPath $cmRifleFile)) { return "no ${cmRifleFile}: run cm-rip-rifle first (the full list does)" }
+	$name = 'accept-cm-rifle-sim'
+	$params = Get-CmRifleSimParams $name 64
+	$params.Expect = @('VR: P1 weapon pistol -> rifle', 'XR: P1 hand: assault rifle \(gun-cm-rifle\.bin\)',
+		'VR: P1 weapon rifle -> pistol', 'XR: P1 hand: back to the ')
+	$why = Invoke-VrTest $params
+	if ($why) { return $why }
+	# (none before: the RAM's noise at boot, before the game clears it, is no rifle)
+	$weapon = Get-LogCount $name 'VR: P[12] weapon '
+	Write-Host "  $weapon weapon lines (want 2: player 1's pistol -> rifle and back)"
+	if ($weapon -ne 2) { return "$weapon weapon lines, want 2" }
+	foreach ($burst in @(53.2, 56.3), @(57.2, 60.8)) {
+		$why = Test-RifleBurst $name 'right' 0 $burst[0] $burst[1] 18
+		if ($why) { return "the burst from $(T $burst[0]) s: $why" }
+	}
+	$shot = @(Get-LogTimes $name 'XRSIM: haptic right 0\.030 1\.000' 60.8).Count
+	$auto = @(Get-LogTimes $name 'XRSIM: haptic right 0\.020 0\.600' 60.8).Count
+	Write-Host "  after the rifle: $shot Shot knocks (want 1), $auto Auto (want 0)"
+	if ($shot -ne 1 -or $auto -ne 0) { return "after the rifle: $shot Shot and $auto Auto knocks, want 1 and 0" }
+	$dir = Join-Path $repo "build-win\vrtest\$name"
+	$why = Test-RunShots $name 't056-rifle.png', 't062-pistol.png'
+	if ($why) { return $why }
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't056-rifle.png'), (Join-Path $dir 't062-pistol.png'), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
+	if ($why) { return "the rifle and the pistol look alike: $why" }
+	$arcade = 'accept-cm-rifle-sim-arcade'
+	$held = "$cmRifleFile.hold"
+	try {
+		if (-not $Reuse) { Move-Item -LiteralPath $cmRifleFile -Destination $held -Force }
+		$params = Get-CmRifleSimParams $arcade 57
+		$params.Expect = @('XR: P1 hand: assault rifle \(arcade gun, recoloured\)')
+		$params.Reject += 'XR: P1 hand: assault rifle \(gun-cm-rifle'
+		$why = Invoke-VrTest $params
+	}
+	finally {
+		if (Test-Path -LiteralPath $held) {
+			# (a rifle the run made meanwhile goes: the one held is put back)
+			Remove-Item -LiteralPath $cmRifleFile -Force -ErrorAction SilentlyContinue
+			Move-Item -LiteralPath $held -Destination $cmRifleFile -Force
+		}
+	}
+	if ($why) { return "without the rifle's file: $why" }
+	$why = Test-RunShots $arcade 't056-rifle.png'
+	if ($why) { return $why }
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't056-rifle.png'), (Join-Path $repo "build-win\vrtest\$arcade\t056-rifle.png"), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
+	if ($why) { return "the rifle's model and the recoloured arcade gun look alike: $why" }
+	return $null
+}
+
+# Player 2's rifle: X at 60 s (a gun in each hand), the rifle poked into player 2's block at 61 s, the left trigger
+# held 2 s from 62 s (a Shot and Auto knocks in the left hand only, one per round), the pistol poked back at 65 s.
+function Test-CmRifleP2 {
+	$name = 'accept-cm-rifle-p2'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 67; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c15592c:2"
+		At = @(Get-CmStartsXr) + '60=xr left/x 1 200' + @(Get-CmRiflePoke 61 1) + '62=xr left/trigger 1 2000' + @(Get-CmRiflePoke 65 1 -Pistol)
+		Expect = 'XR: player 2 joins: a gun in each hand', 'VR: P2 weapon pistol -> rifle',
+			'XR: P2 hand: assault rifle \((gun-cm-rifle\.bin|arcade gun, recoloured)\)', 'VR: P2 weapon rifle -> pistol', 'XR: P2 hand: back to the '
+		Reject = @('XR: initialisation failed', 'XRSIM: haptic (left|right) 0\.012', 'XRSIM: haptic right 0\.020', 'XR: P1 hand: assault rifle') }
+	if ($why) { return $why }
+	$weapon = Get-LogCount $name 'VR: P[12] weapon '
+	Write-Host "  $weapon weapon lines (want 2: player 2's pistol -> rifle and back)"
+	if ($weapon -ne 2) { return "$weapon weapon lines, want 2" }
+	return Test-RifleBurst $name 'left' 1 61.7 64.6 18
+}
+
 # The merge of a gun's captures (hands_build.cpp's mergeCaptures) on synthetic captures, built and run
 # on its own (re\hands_build_test.cmd), then vrcheck.py's selftest; -Reuse changes nothing here.
 function Test-CmMergeUnit {
@@ -1182,6 +1306,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'
 	# cm-gun after the rip scenarios: it needs the guns' files they leave
 	'cm-gun' = 'Test-CmGun'
+	'cm-rifle-sim' = 'Test-CmRifleSim'; 'cm-rifle-p2' = 'Test-CmRifleP2'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File

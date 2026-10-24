@@ -102,3 +102,11 @@ Before these, delete every `gun-cm-*.bin` from the app's data folder (or reinsta
 - [ ] Shoot with each gun: the muzzle flash sits at the muzzle, and shots land on the dot.
 - [ ] After a trigger change on the Gun row, the dot stays on the row (the new gun's muzzle moves it a few cm; rows are 6.3 cm apart).
 - [ ] Delete only `gun-cm-pistol.bin` and start again: the Gun row skips the agents' pistol, and with it chosen before, the cabinet gun is in the hand ("(chosen: the agents' pistol is not made yet)").
+
+## Task 14
+
+- [ ] Shooting a dropped assault rifle puts it in the hand: the game's rifle ("XR: P1 hand: assault rifle (gun-cm-rifle.bin)"), or with that file deleted the arcade gun in olive ("(arcade gun, recoloured)"). Its laser leaves its muzzle, and shots land on the dot.
+- [ ] Holding the trigger with the rifle gives rapid lighter knocks: one sharp knock per bullet while you hold the trigger, not a constant buzz; the first, on the pull, is the full Shot.
+- [ ] With Haptics on Low the rifle's knocks are lighter; on Off there are none.
+- [ ] When it runs out or the stage changes, the chosen gun comes back ("XR: P1 hand: back to the ..."), and its pull gives the pistol's knock again.
+- [ ] Player 2 with the rifle: it shows in the left hand, and the knocks are in the left controller only.

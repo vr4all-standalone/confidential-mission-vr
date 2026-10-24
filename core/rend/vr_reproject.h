@@ -100,11 +100,14 @@ GameCamera gameCamera(const rend_context& ctx);
 // pistol, the hero's staff), or nullptr when its profile has none.
 const hands::Source *gameModelSource();
 
-// A player's gun as the game being played keeps it (its profile's GunRam): the rounds left,
-// the magazine's size, and the shots it has fired (+1 per shot, through reloads).
-struct GunState { bool valid; u8 ammo, magazine; u16 shots; };
-// Read now from the running profile's gun RAM: false when the profile has none; true with
-// out.valid false when it has one but the emulator isn't running (nothing read).
+// A player's gun as the game being played keeps it (its profile's GunRam), read at the last
+// VBlank: the rounds left, the magazine's size, the shots it has fired (+1 per shot, through
+// reloads), how many of those fired a round (a running count like shots: the ammo went down, or
+// any shot with the rifle held, its last too), and whether the player holds the assault rifle
+// (the weapon field at the profile's rifle value, while the player is in play).
+struct GunState { bool valid; u8 ammo, magazine; u16 shots, fired; bool rifle; };
+// The running profile's gun state, as read at the last VBlank: false when the profile has none;
+// true with out.valid false when it has one but the emulator isn't running or hasn't been read.
 bool gunState(int player, GunState& out);
 
 // The game asks for player 2 in its corner (its start prompt): player 2 isn't playing.

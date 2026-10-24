@@ -35,6 +35,10 @@ constexpr glm::vec3 ModelPalm { 0.f, -0.018f, 0.062f };
 // 1.1.49; this app asks for 1.0.34).
 constexpr glm::vec3 HandPalm { 0.f, -0.078f, 0.068f };
 
+// The assault rifle without its model (no gun-cm-rifle.bin, or vr.GameHands off): the arcade gun
+// in olive (the spec's "changed in colour"; drawGunModel's tint).
+constexpr glm::vec3 RifleTint { 0.42f, 0.50f, 0.30f };
+
 // Whether a hand holding `kind` (handGun()) draws a model from the game (xr_hands.h
 // handModel(): the agent's own pistol, in The Maze of the Kings the hero's staff, in
 // Confidential Mission the gun of that kind) rather than the arcade gun. Model space is then
@@ -86,7 +90,8 @@ float gunKick(float sinceShot);
 // then every gun's glow (aim line and dot, flash; the smoke of all guns with the first), so
 // one gun's model never covers the other's dot or flash.
 // viewProj: room space -> this eye's clip space; eyePos: the eye, in room space.
-void drawGunModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunView& gun, bool clearDepth);
+// tint: the arcade gun's colours ({1,1,1}: its own red; a game's model keeps its own).
+void drawGunModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunView& gun, bool clearDepth, const glm::vec3& tint);
 void drawGunGlow(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunView& gun, bool withSmoke);
 // The GL context is going away.
 void termGun();

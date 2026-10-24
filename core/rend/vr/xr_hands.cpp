@@ -95,6 +95,7 @@ struct Slot
 constexpr int GameSlot = 0, Slots = 4;
 Slot slots[Slots];
 std::string gunLogged;	// chosenGun()'s line, as last logged
+bool rifleHeld[2];		// each player's hand holds the assault rifle (handGun()), as last logged
 
 GLuint program;
 GLint uMvp = -1, uModel = -1, uEye = -1, uSpecular = -1, uShininess = -1, uAlphaTest = -1, uLight = -1, uTex = -1;
@@ -341,6 +342,7 @@ void refresh()
 	for (Slot& slot : slots)
 		slot = Slot();
 	gunLogged.clear();
+	rifleHeld[0] = rifleHeld[1] = false;
 }
 
 bool cmGuns()
@@ -464,8 +466,20 @@ GunKind chosenGun()
 
 GunKind handGun(int player)
 {
-	(void)player;
-	return chosenGun();
+	if (player < 0 || player > 1 || !cmGuns())
+		return chosenGun();
+	// (not read: the emulator stopped, the VR menu open: the hand keeps what it holds)
+	vr::GunState gun;
+	if (vr::gunState(player, gun) && gun.valid && gun.rifle != rifleHeld[player])
+	{
+		rifleHeld[player] = gun.rifle;
+		if (gun.rifle)
+			NOTICE_LOG(RENDERER, "XR: P%d hand: assault rifle (%s)", player + 1, handModel(GunKind::Rifle) != nullptr
+					? gameModelSource()->guns[(int)GunKind::Rifle - 1].file : "arcade gun, recoloured");
+		else
+			NOTICE_LOG(RENDERER, "XR: P%d hand: back to the %s", player + 1, gunName(chosenGun()));
+	}
+	return rifleHeld[player] ? GunKind::Rifle : chosenGun();
 }
 
 const HandsModel *handModel(GunKind kind)

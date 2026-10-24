@@ -107,6 +107,8 @@ fired with.
 
 The knock in the hand comes when the game fires, one for each shot it counts; a pull on an
 empty gun gives a light click instead, and a reload none. `vr.Haptics` sets how strong it is.
+With the assault rifle (shoot one a fallen enemy drops) the trigger held keeps firing: a sharp
+knock for the first bullet, then a short lighter one for each bullet after, 12 a second.
 
 **Two guns.** Press X and player 2 joins, as at the cabinet: the right hand holds player 1's
 gun (red aim), the left player 2's (blue aim), both lives and scores on screen. When player 2
@@ -171,7 +173,9 @@ Sega's NAOMI light-gun game from 2000, with its own profile:
   it, and the guns not made by then stay out of the hand that session); nothing of the game
   comes with this app.
   Auto takes the agents' pistol when all of it was made, else the cabinet gun, else the arcade
-  gun; a gun chosen that isn't made yet falls back the same way. Reload by shooting away from
+  gun; a gun chosen that isn't made yet falls back the same way. While the game gives you the
+  assault rifle, the hand holds it (the arcade gun in olive if its model isn't made yet), and
+  the chosen gun comes back when it runs dry. Reload by shooting away from
   the view, or with B (the cabinet's second button reloads in this game).
 - **A wider view, inside the game.** The game draws and culls a wider view itself: stage 1
   goes from about 61 by 48 degrees to 111 by 95, the story scenes from about 70 degrees across

@@ -271,8 +271,10 @@ void main()
 	return true;
 }
 
-void drawModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const glm::mat4& pose, const glm::vec4& muzzleLight)
+void drawModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const glm::mat4& pose, const glm::vec4& muzzleLight,
+		const glm::vec3& tint)
 {
+	const bool tinted = tint != glm::vec3(1.f);
 	glcache.UseProgram(modelProgram);
 	const glm::mat4 mvp = viewProj * pose;
 	glUniformMatrix4fv(mMvp, 1, GL_FALSE, &mvp[0][0]);
@@ -288,7 +290,10 @@ void drawModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const glm::ma
 		for (const PartMaterial& pm : Materials)
 			if (!strcmp(pm.name, part.name))
 				m = &pm.material;
-		glUniform3f(mColor, m->color.r, m->color.g, m->color.b);
+		// Tinted, each part takes the tint's hue at its own brightness next to the shell's (the
+		// red shell the tint itself): multiplying the candy red by olive would only darken it.
+		const glm::vec3 color = tinted ? tint * (std::max({ m->color.r, m->color.g, m->color.b }) / Materials[0].material.color.r) : m->color;
+		glUniform3f(mColor, color.r, color.g, color.b);
 		glUniform1f(mSpecular, m->specular);
 		glUniform1f(mShininess, m->shininess);
 		glUniform3f(mEmissive, m->emissive.r, m->emissive.g, m->emissive.b);
@@ -378,7 +383,7 @@ static void muzzleNow(const GunView& gun, glm::vec3& muzzle, glm::vec3& forward,
 			: std::max(0.f, 1.f - (gun.sinceShot - 0.02f) / 0.05f);
 }
 
-void drawGunModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunView& gun, bool clearDepth)
+void drawGunModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunView& gun, bool clearDepth, const glm::vec3& tint)
 {
 	const HandsModel *model = handModel(gun.kind);
 	const bool game = model != nullptr;
@@ -420,7 +425,7 @@ void drawGunModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunV
 		drawHands(viewProj, eyePos, hands);
 	}
 	else
-		drawModel(viewProj, eyePos, gun.pose, muzzleLight);
+		drawModel(viewProj, eyePos, gun.pose, muzzleLight, tint);
 	logGlErrors("gun");
 }
 

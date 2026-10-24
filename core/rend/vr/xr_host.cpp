@@ -166,6 +166,12 @@ struct Gun
 	bool gunKnown;
 	XrTime pullAt;
 	XrTime heldAt;
+	// The knocks still to give (Shots, the rifle's Auto knocks, clicks), one at a time: the next
+	// once the last has ended (knockEnds). A trigger pulled since the last Shot (freshPull): the
+	// rifle's next round is a Shot, the rest of the burst Auto knocks.
+	int shotsDue, autosDue, clicksDue;
+	XrTime knockEnds;
+	bool freshPull;
 };
 Gun guns[2] { { 0 }, { 1, Left } };
 bool dualWield;
@@ -1200,13 +1206,13 @@ float floatAction(XrAction action, int hand)
 
 // A buzz in a hand, at vr.Haptics' strength (read on each call: the menu changes it live): 0
 // off, 1 low (0.45 of the amplitude), 2 normal, 3 strong (1.6 times as long).
-void haptic(int hand, float seconds, float amplitude)
+float haptic(int hand, float seconds, float amplitude)
 {
 	static constexpr float amplitudes[4] { 0.f, 0.45f, 1.f, 1.f };
 	static constexpr float durations[4] { 0.f, 1.f, 1.f, 1.6f };
 	const int strength = std::clamp((int)config::VrHaptics, 0, 3);
 	if (strength == 0)
-		return;
+		return 0.f;
 	seconds *= durations[strength];
 	amplitude *= amplitudes[strength];
 	XrHapticActionInfo info { XR_TYPE_HAPTIC_ACTION_INFO };
@@ -1217,18 +1223,26 @@ void haptic(int hand, float seconds, float amplitude)
 	vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
 	vibration.amplitude = amplitude;
 	XR(xrApplyHapticFeedback)(session, &info, (const XrHapticBaseHeader *)&vibration);
+	return seconds;
 }
 
-// A shot: a sharp knock.
-void recoil(int hand)
+// A shot: a sharp knock. (Each returns how long it lasts: haptic().)
+float recoil(int hand)
 {
-	haptic(hand, 0.03f, 1.f);
+	return haptic(hand, 0.03f, 1.f);
 }
 
 // A pull on an empty gun: a light click.
-void emptyClick(int hand)
+float emptyClick(int hand)
 {
-	haptic(hand, 0.012f, 0.35f);
+	return haptic(hand, 0.012f, 0.35f);
+}
+
+// A round of the assault rifle fired with the trigger still held (12 a second, 83 ms apart):
+// a short lighter knock, over long before the next, so a burst is a row of knocks, not a buzz.
+float autoKnock(int hand)
+{
+	return haptic(hand, 0.02f, 0.6f);
 }
 
 glm::vec2 stickAction2()
@@ -1408,24 +1422,30 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 	gunView.slide = slide.back;
 }
 
-// The knocks from the game's own gun (vr::gunState), each frame: each shot it fires (its shot
-// counter goes up) is a Shot when a round went, else (a pull on an empty gun counted) a click;
-// several in one read are several knocks (an automatic). A pull on the screen it hasn't fired
-// for within 0.1 s (an empty gun) is a click. Only shots of this hand's trigger knock: held, or
-// let go under 0.25 s ago (the counter also moves when the game clears its RAM at boot, and its
-// attract demo's players shoot). Without a GunRam in the game's profile (gunRam false) the
-// knock comes on the pull instead, as in v1 (updateGun); with one but the emulator stopped
-// (loading, Flycast's own GUI), there is none.
+// The knocks from the game's own gun (vr::gunState, read at the game's last VBlank), each frame:
+// each shot it fires (its shot counter goes up) that fired a round (vr::GunState::fired: the ammo
+// went down, or the rifle is held) is a Shot, else (a pull on an empty gun counted) a click. With
+// the assault rifle, the first round after a pull is a Shot and the rest of the burst Auto knocks
+// (autoKnock), one per round. A pull on the screen it hasn't fired for within 0.1 s (an empty
+// gun) is a click. Only shots of this hand's trigger knock: held, or let go under 0.25 s ago (the
+// counter also moves when the game clears its RAM at boot, and its attract demo's players shoot).
+// The knocks go to the hand one at a time, each once the one before has ended (two haptic calls
+// closer than that feel as one: the second cuts the first short). Without a GunRam in the game's
+// profile (gunRam false) the knock comes on the pull instead, as in v1 (updateGun); with one but
+// the emulator stopped (loading, Flycast's own GUI), there is none.
 void gunKnocks(Gun& g, XrTime time, bool trigger)
 {
 	if (trigger)
 		g.heldAt = time;
+	if (trigger && !g.triggerWas)
+		g.freshPull = true;
 	vr::GunState now;
 	g.gunRam = vr::gunState(g.player, now);
 	if (!now.valid)
 	{
 		g.gunKnown = false;
 		g.pullAt = 0;
+		g.shotsDue = g.autosDue = g.clicksDue = 0;
 		return;
 	}
 	const int rises = g.gunKnown ? (s16)(u16)(now.shots - g.gunWas.shots) : 0;
@@ -1433,25 +1453,50 @@ void gunKnocks(Gun& g, XrTime time, bool trigger)
 	if (rises != 0)
 	{
 		// (a drop, or more than 8 in one read: the counter reset, a new game; no knock)
-		// a round went: the ammo's low byte down (signed: a shot is -1, a refill at most +45, and
-		// the scope view's 10000 rounds, 0x2710, wrap the byte at its 17th shot)
-		const bool fired = (s8)(now.ammo - g.gunWas.ammo) < 0;
-		for (int i = 0; pulled && rises <= 8 && i < rises; i++)
+		if (pulled && rises > 0 && rises <= 8)
 		{
-			if (fired)
-				recoil(g.hand);
-			else
-				emptyClick(g.hand);
+			const int fired = std::clamp((int)(s16)(u16)(now.fired - g.gunWas.fired), 0, rises);
+			const bool rifle = now.rifle || g.gunWas.rifle;
+			for (int i = 0; i < fired; i++)
+			{
+				if (!rifle || g.freshPull)
+					g.shotsDue++;
+				else
+					g.autosDue++;
+				g.freshPull = false;
+			}
+			g.clicksDue += rises - fired;
 		}
 		g.pullAt = 0;
 	}
 	else if (g.pullAt != 0 && time - g.pullAt > 100'000'000LL)
 	{
-		emptyClick(g.hand);
+		g.clicksDue++;
 		g.pullAt = 0;
 	}
 	g.gunWas = now;
 	g.gunKnown = true;
+	// the next knock once the last has ended (and 10 ms more)
+	if (time >= g.knockEnds && g.shotsDue + g.autosDue + g.clicksDue > 0)
+	{
+		float lasts;
+		if (g.shotsDue > 0)
+		{
+			g.shotsDue--;
+			lasts = recoil(g.hand);
+		}
+		else if (g.autosDue > 0)
+		{
+			g.autosDue--;
+			lasts = autoKnock(g.hand);
+		}
+		else
+		{
+			g.clicksDue--;
+			lasts = emptyClick(g.hand);
+		}
+		g.knockEnds = time + (XrTime)((lasts + 0.01f) * 1e9f);
+	}
 }
 
 // Whether a gun's trigger is held at this pull: a clean click, pulled past 60%, let go below 35%,
@@ -1588,6 +1633,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		g.triggerWas = true;
 		g.triggerWait = true;
 		g.pullAt = 0;
+		g.shotsDue = g.autosDue = g.clicksDue = 0;
 		return;
 	}
 	gunKnocks(g, time, trigger);
@@ -2868,7 +2914,8 @@ bool frame()
 			for (const Gun& g : guns)
 				if (g.visible)
 				{
-					drawGunModel(viewProj, eyePos, g.view, first);
+					// (the assault rifle without its model: the arcade gun in olive)
+					drawGunModel(viewProj, eyePos, g.view, first, g.view.kind == GunKind::Rifle ? RifleTint : glm::vec3(1.f));
 					first = false;
 				}
 			if (first)

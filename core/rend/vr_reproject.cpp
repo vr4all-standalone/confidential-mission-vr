@@ -266,8 +266,14 @@ struct GameProfile
 	hands::Source model {};
 	// Each player's gun in RAM, for the knocks in the hand (gunState): the first player's
 	// block, the step to the next player's, and the offsets in it of the rounds left, the
-	// magazine's size (a byte each) and the shots fired (16 bits). base 0: none.
-	struct GunRam { u32 base = 0, stride = 0; u8 ammo = 0, magazine = 0, shots = 0; } gunRam;
+	// magazine's size (a byte each) and the shots fired (16 bits). base 0: none. The assault
+	// rifle (Task 14): the offset of the weapon field (its low byte; -1: no rifle) and the
+	// rifle's value there, held only while the player is in play: the player's bit (1 << p) in
+	// the byte at `playing` (0: no such check).
+	struct GunRam {
+		u32 base = 0, stride = 0; u8 ammo = 0, magazine = 0, shots = 0;
+		s16 weapon = -1; u8 rifleValue = 0; u32 playing = 0;
+	} gunRam;
 };
 
 static std::vector<GameProfile> makeProfiles()
@@ -491,8 +497,13 @@ static std::vector<GameProfile> makeProfiles()
 	// player 2's 276 bytes on (0x0C1558CC). +0x4C the rounds left (the pistol's 6 down to 0, a
 	// reload fills it again), +0x50 the magazine's size (6 for the pistol, 45 for the rifle),
 	// both u32 whose low byte is read; +0x60 the shots fired, a u16 that goes up once per shot
-	// the game fires, through reloads, but not for a pull on an empty gun.
-	p.gunRam = { 0x0C1557B8, 276, 0x4C, 0x50, 0x60 };
+	// the game fires, through reloads, but not for a pull on an empty gun. +0x48 the weapon:
+	// 2 the assault rifle (findings' Rifle, profile:; only an item's pickup sets it, and the
+	// game gives the pistol back at 0 rounds). A poked or stale 2 outlives the continue countdown
+	// and game over (4b), so it counts only while the player's bit is set in 0x0C15A494 (bit 0
+	// player 1, bit 1 player 2: set when the player starts or joins, cleared when the player goes
+	// out; Task 14's t14-play: 1 from P1's start, 0 at P1's out, 2 at P2's join).
+	p.gunRam = { 0x0C1557B8, 276, 0x4C, 0x50, 0x60, 0x48, 2, 0x0C15A494 };
 	// Its guns, from the player's own game (hands_rip.h): the red cabinet gun in the reload
 	// tutorial after the first Start (v11-research-game.md, A1 candidate 2): tex 400000 (plain,
 	// red from its vertex colours), 279 polygons when whole (both windings, so all of it), at W
@@ -530,14 +541,20 @@ const hands::Source *gameModelSource()
 
 static u32 markerTextures[4];	// the active profile's GameProfile::markerTextures
 static u32 p2PromptTextures[4];	// ...and GameProfile::p2PromptTextures
-static int gunMagazines[2] { -1, -1 };	// each player's magazine size as last logged (-1: not read yet)
+// Each player's gun as read at the last VBlank (snapGuns, the emulator's thread), for gunState()
+// (the headset's); valid false: not read yet.
+static std::mutex gunMutex;
+static GunState gunSnaps[2];
 
 static void applyGameProfile(Event, void *)
 {
 	std::fill(std::begin(fovLiterals), std::end(fovLiterals), 0u);
 	std::fill(std::begin(markerTextures), std::end(markerTextures), 0u);
 	std::fill(std::begin(p2PromptTextures), std::end(p2PromptTextures), 0u);
-	gunMagazines[0] = gunMagazines[1] = -1;
+	{
+		std::lock_guard<std::mutex> lock(gunMutex);
+		gunSnaps[0] = gunSnaps[1] = GunState {};
+	}
 	activeProfile = nullptr;
 	// Online (GGPO), what the VR mod writes into a game it has a profile for must be the
 	// same on both sides, whatever each player's settings or machine (a Quest, PCVR, a PC
@@ -692,22 +709,22 @@ static u32 gunBlock(const GameProfile *prof, int player)
 bool gunState(int player, GunState& out)
 {
 	out = GunState {};
-	const GameProfile *prof = activeProfile;
-	const u32 block = gunBlock(prof, player);
-	if (block == 0)
+	if (gunBlock(activeProfile, player) == 0)
 		return false;
 	if (!emu.running())
 		return true;
-	out.ammo = ReadMem8_nommu(block + prof->gunRam.ammo);
-	out.magazine = ReadMem8_nommu(block + prof->gunRam.magazine);
-	out.shots = ReadMem16_nommu(block + prof->gunRam.shots);
-	out.valid = true;
+	std::lock_guard<std::mutex> lock(gunMutex);
+	out = gunSnaps[player];
 	return true;
 }
 
-// Each VBlank: a player's magazine size changing is logged ("VR: P1 magazine 6 -> 45": a
-// pickup, a scripted sequence's own gun). The first read after the game starts only notes it.
-static void logGunMagazines(Event, void *)
+// Each VBlank, between two of the game's frames: each player's gun state (gunState), all of it
+// at once so its fields agree. A shot fired a round when the ammo went down, and every shot does
+// while the rifle is held, at this read or the one before (its last, 1 -> 0, is followed by the
+// pistol's 6 the next frame). Logged: the magazine's size changing ("VR: P1 magazine 6 -> 45": a
+// pickup, a scripted sequence's own gun) and the rifle coming and going ("VR: P1 weapon pistol ->
+// rifle", "rifle -> pistol"); the first read after the game starts only notes them.
+static void snapGuns(Event, void *)
 {
 	const GameProfile *prof = activeProfile;
 	for (int player = 0; player < 2; player++)
@@ -715,19 +732,43 @@ static void logGunMagazines(Event, void *)
 		const u32 block = gunBlock(prof, player);
 		if (block == 0)
 			continue;
-		const int now = ReadMem8_nommu(block + prof->gunRam.magazine);
-		if (gunMagazines[player] >= 0 && now != gunMagazines[player])
-			NOTICE_LOG(RENDERER, "VR: P%d magazine %d -> %d", player + 1, gunMagazines[player], now);
-		gunMagazines[player] = now;
+		const GameProfile::GunRam& ram = prof->gunRam;
+		GunState now {};
+		now.valid = true;
+		now.ammo = ReadMem8_nommu(block + ram.ammo);
+		now.magazine = ReadMem8_nommu(block + ram.magazine);
+		now.shots = ReadMem16_nommu(block + ram.shots);
+		// (the players' byte holds their two bits only: before the game clears its RAM at boot,
+		// ~11 s, it's noise that can read as a rifle in play: fb, with P2's weapon 02, in t14-play)
+		const u8 playing = ram.playing != 0 ? ReadMem8_nommu(0x8C000000u | (ram.playing & 0x01FFFFFFu)) : 0;
+		now.rifle = ram.weapon >= 0 && ReadMem8_nommu(block + ram.weapon) == ram.rifleValue
+				&& (ram.playing == 0 || ((playing & ~3) == 0 && ((playing >> player) & 1) != 0));
+		std::lock_guard<std::mutex> lock(gunMutex);
+		const GunState was = gunSnaps[player];
+		now.fired = was.fired;
+		if (was.valid)
+		{
+			// (a drop, or more than 8 at once: the game cleared its RAM, a new game; the ammo's low
+			// byte compared signed: a shot is -1, a refill at most +45, and the scope view's 10000
+			// rounds, 0x2710, wrap the byte at its 17th shot)
+			const int rises = (s16)(u16)(now.shots - was.shots);
+			if (rises > 0 && rises <= 8 && (now.rifle || was.rifle || (s8)(now.ammo - was.ammo) < 0))
+				now.fired += rises;
+			if (now.magazine != was.magazine)
+				NOTICE_LOG(RENDERER, "VR: P%d magazine %d -> %d", player + 1, was.magazine, now.magazine);
+			if (now.rifle != was.rifle)
+				NOTICE_LOG(RENDERER, "VR: P%d weapon %s -> %s", player + 1, was.rifle ? "rifle" : "pistol", now.rifle ? "rifle" : "pistol");
+		}
+		gunSnaps[player] = now;
 	}
 }
 
-static struct GunMagazineRegistration
+static struct GunSnapRegistration
 {
-	GunMagazineRegistration() {
-		EventManager::listen(Event::VBlank, logGunMagazines);
+	GunSnapRegistration() {
+		EventManager::listen(Event::VBlank, snapGuns);
 	}
-} gunMagazineRegistration;
+} gunSnapRegistration;
 
 #ifndef __ANDROID__
 //

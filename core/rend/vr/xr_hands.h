@@ -50,7 +50,10 @@ bool gunComplete(GunKind kind);
 // without these guns. Logs "XR: gun: <gun> (<auto|chosen>[: <why the fallback>])" at the
 // start and at each change.
 GunKind chosenGun();
-// The gun in a player's (0, 1) hand: chosenGun() now (Task 14 adds the rifle).
+// The gun in a player's (0, 1) hand: the assault rifle while the game says the player holds it
+// (vr::gunState's rifle; its model, or the arcade gun recoloured without one), else chosenGun().
+// Logs "XR: P1 hand: assault rifle (gun-cm-rifle.bin)" or "(arcade gun, recoloured)", and "XR: P1
+// hand: back to the <gun>".
 GunKind handGun(int player);
 // "agents' pistol", "cabinet gun", "arcade gun", "assault rifle"
 const char *gunName(GunKind kind);
