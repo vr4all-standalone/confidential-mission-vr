@@ -18,7 +18,10 @@ namespace vr::xr::labels
 // viewProj: room space -> this eye's clip space; grip: that hand's grip space -> room space, as for
 // controllers::draw; profile: that hand's interaction profile ("", or one not known here: Quest
 // Touch's words). hand: 0 left, 1 right. Laid out in a plane facing the eye, once for each grip pose
-// (the frame's first eye; the other eye gets the same places), each label turned to face its eye.
+// and eye (the frame's first eye; the other eye, a few cm off, gets the same places), each label
+// turned to face its eye. The pictures are looked up as drawn (xr_panel.h textTexture).
 void draw(const glm::mat4& viewProj, int hand, const glm::mat4& grip, const char *profile);
+// Forget the layouts (the session's end, with termPanel). Render thread.
+void term();
 
 }

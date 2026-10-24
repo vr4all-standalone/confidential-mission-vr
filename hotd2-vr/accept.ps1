@@ -780,7 +780,7 @@ function Test-CmControllersRt {
 }
 
 # What each hand holds and the how-to-play labels (Task 9) through the simulator, widened: the
-# right hand in front of the left eye from 20 s, a controller with its labels (shot at 25 s); the
+# right hand in front of the left eye from 20 s, a controller with its labels (shots at 25, 27 s); the
 # first A (30 s) gives it the gun and the labels go (shot at 35 s). X lets player 2 join at 60 s
 # (the left hand takes its gun), player 2 idles out at ~70 s (findings p2out: a controller
 # again). The menu at 90 s, the right stick up twice (from Resume it wraps to Quit, then Show
@@ -791,7 +791,7 @@ function Test-CmControllersRt {
 function Test-CmHands {
 	$name = 'accept-cm-hands'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 102; XrSim = $true; Config = $cmWiden
-		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
+		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '27=shot labels2') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
 			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150',
 			'94=xr right/trigger 1 100', '96=xr left/menu 1 150', "96.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 8 -U 0.5)",
 			'97=xr right/trigger 1 800')
@@ -806,21 +806,47 @@ function Test-CmHands {
 	$offs = Get-LogCount $name 'XR: labels off \(shot\)'
 	Write-Host "  $shows lines 'XR: show controls' (want 2), $offs lines 'XR: labels off (shot)' (want 1)"
 	if ($shows -ne 2 -or $offs -ne 1) { return "Show controls by the trigger: $shows show controls, $offs labels off (shot)" }
-	$why = Test-RunShots $name 't025-labels.png', 't035-gun.png'
+	$why = Test-RunShots $name 't025-labels.png', 't027-labels2.png', 't035-gun.png'
 	if ($why) { return $why }
 	$dir = Join-Path $repo "build-win\vrtest\$name"
 	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-labels.png'), (Join-Path $dir 't035-gun.png'), '--box', '0.3,0.3,0.9,0.95'
 	if ($why) { return "the labels and the gun look the same: $why" }
+	# The game's screen changes between those two as well. The left hand's part of the view: its
+	# controller the same in both, only its labels go (around them: their dark plates are near the
+	# room's black, the letters do it); and with nothing done (25, 27 s) the same.
+	$left = '0.25,0.74,0.43,0.9'
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-labels.png'), (Join-Path $dir 't035-gun.png'), '--box', $left
+	if ($why) { return "the left hand's labels didn't go: $why" }
+	$why = Invoke-VrCheck 'same', (Join-Path $dir 't025-labels.png'), (Join-Path $dir 't027-labels2.png'), '--box', $left
+	if ($why) { return "the left hand's labels changed with nothing done: $why" }
+	return Test-ArmingShot $name
+}
+
+# The pull that gives back the gun ('labels off (shot)') fires too: player 1's shot logged within
+# 0.2 s of each such line.
+function Test-ArmingShot([string]$name) {
+	$offs = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XR: labels off \(shot\)' -CaseSensitive)
+	if (-not $offs) { return "no 'XR: labels off (shot)' in $name" }
+	foreach ($off in $offs) {
+		if ($off.Line -notmatch '^(\d+):(\d\d):(\d{3}) ') { return "no time on '$($off.Line)'" }
+		$t = [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000
+		$n = Get-LogCount $name 'XR: player 1 shot' -From $t -To ($t + 0.2)
+		Write-Host "  $n lines 'XR: player 1 shot' within 0.2 s of 'labels off (shot)' at $t s (want 1 or more)"
+		if ($n -lt 1) { return "the pull that gave back the gun at $t s didn't fire" }
+	}
 	return $null
 }
 
 # The first trigger pull (28 s, no Start before it) gives the right hand the gun and fires; the
 # labels go with it.
 function Test-CmHandsShot {
-	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-hands-shot'; Seconds = 34; XrSim = $true; Config = $cmWiden
+	$name = 'accept-cm-hands-shot'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 34; XrSim = $true; Config = $cmWiden
 		At = @('28=xr right/trigger 1 100')
 		Expect = 'XR: right hand: controller -> gun \(shot\)', 'XR: labels off \(shot\)'
 		Reject = @('XR: initialisation failed') }
+	if ($why) { return $why }
+	return Test-ArmingShot $name
 }
 
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'

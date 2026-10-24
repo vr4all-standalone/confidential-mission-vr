@@ -69,18 +69,25 @@ constexpr float LineWidth = 0.0012f, Dot = 0.0024f;
 const glm::vec3 TextColour(0.96f);
 const glm::vec4 LineColour(0.92f, 0.92f, 0.92f, 0.85f);
 
-// A label as laid out (room space): its picture, its middle and half sizes, and its line from the
-// button (from) to the label's near edge (to).
+// The frame's two eyes, 6-7 cm apart, share one layout: laid out again once the eye it was made for
+// is further than this (or the grip moved).
+constexpr float EyeMoves = 0.1f;
+
+// A label as laid out (room space): its text (its picture, textTexture's, looked up when drawn: a
+// session's pictures go with termPanel), its middle and half sizes, and its line from the button
+// (from) to the label's near edge (to).
 struct Placed
 {
-	unsigned texture;
+	std::string text;
 	glm::vec3 centre;
 	float hx, hy;
 	glm::vec3 from, to;
 };
+// One hand's labels as laid out for a grip pose, seen from an eye
 struct Layout
 {
 	glm::mat4 grip { 0.f };
+	glm::vec3 eye { 0.f };
 	const Words *words = nullptr;
 	std::vector<Placed> placed;
 };
@@ -178,7 +185,7 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 		if (texture == 0 || h == 0)
 			return;
 		const float hy = Height * 0.5f, hx = hy * w / h;
-		layout.placed.push_back({ texture, room(x + alignX * hx, y), hx, hy, at[i], to });
+		layout.placed.push_back({ list[i].text, room(x + alignX * hx, y), hx, hy, at[i], to });
 	};
 	for (size_t k = 0; k < column.size(); k++)
 		place(column[k], columnX, ys[k], side, room(columnX, ys[k]));
@@ -208,9 +215,10 @@ void draw(const glm::mat4& viewProj, int hand, const glm::mat4& grip, const char
 	const glm::vec3 eye = eyeOf(viewProj);
 	const Words& words = wordsFor(profile);
 	Layout& layout = layouts[hand];
-	if (layout.grip != grip || layout.words != &words || layout.placed.empty())
+	if (layout.grip != grip || layout.words != &words || layout.placed.empty() || glm::length(eye - layout.eye) > EyeMoves)
 	{
 		layout.grip = grip;
+		layout.eye = eye;
 		layout.words = &words;
 		layOut(layout, hand, grip, words, eye);
 	}
@@ -234,7 +242,18 @@ void draw(const glm::mat4& viewProj, int hand, const glm::mat4& grip, const char
 		drawTexture(viewProj, billboard(p.from, eye), 0, Dot * 0.5f, Dot * 0.5f, LineColour);
 	}
 	for (const Placed& p : layout.placed)
-		drawTexture(viewProj, billboard(p.centre, eye), p.texture, p.hx, p.hy);
+	{
+		int w, h;
+		const unsigned texture = textTexture(p.text, Px, TextColour, w, h);
+		if (texture != 0)
+			drawTexture(viewProj, billboard(p.centre, eye), texture, p.hx, p.hy);
+	}
+}
+
+void term()
+{
+	for (Layout& layout : layouts)
+		layout = Layout();
 }
 
 }

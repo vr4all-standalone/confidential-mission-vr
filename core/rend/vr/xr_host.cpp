@@ -1550,7 +1550,8 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		view.aimPoint = o + d * (dist > 0.f ? dist * s : 5.f);
 		// (a hand that holds its controller shows that instead: before play, after Show controls)
 		g.visible = config::VrShowGun && holds(g.hand) == Holds::Gun;
-		if (game && slide)
+		// (the slide and the open hand only for a gun that's held: not while the hand holds its controller)
+		if (game && slide && holds(g.hand) == Holds::Gun)
 			updateOtherHand(time, 1 - g.hand, tracked[1 - g.hand], locations[1 - g.hand], pose * placement, gunScale, mirror);
 		else
 		{
@@ -1558,8 +1559,8 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 			view.slide = 0.f;
 		}
 		// A gun in each hand leaves no hand for the slide: pointing a gun at the floor
-		// reloads it instead.
-		if (!slide && live)
+		// reloads it instead (a gun that's held: not while the hand holds its controller).
+		if (!slide && live && holds(g.hand) == Holds::Gun)
 		{
 			if (!g.pointedDown && d.y < -0.75f)
 			{
@@ -2020,6 +2021,7 @@ void updateLightgun(XrTime time)
 		{
 			gun.hand = otherHand;
 			NOTICE_LOG(INPUT, "XR: the gun is in the %s hand", gun.hand == Right ? "right" : "left");
+			noteHolds("gun moves");
 		}
 	}
 
@@ -2049,6 +2051,13 @@ void updateLightgun(XrTime time)
 	}
 	else if (rightStart && !rightStartWas && !p1Armed)
 	{
+		// the right Start's gun is the right hand's, though the single gun went to the left above (the
+		// right controller untracked then, the left tracked)
+		if (!dualWield && tracked[Right] && guns[0].hand != Right)
+		{
+			guns[0].hand = Right;
+			NOTICE_LOG(INPUT, "XR: the gun is in the right hand");
+		}
 		p1Armed = true;
 		noteHolds("start");
 	}
@@ -2538,6 +2547,7 @@ void term()
 		// still on the render thread with the context current: our own GL objects first
 		termGun();
 		termPanel();
+		labels::term();
 		controllers::term();
 		controllersReady = controllerShown[Left] = controllerShown[Right] = false;
 		modelRetries = 0;
