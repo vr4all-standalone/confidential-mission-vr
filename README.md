@@ -144,8 +144,8 @@ nothing.
 
 Point at a row with either hand and pull the trigger, or move with a thumbstick (up and down,
 round from the bottom to the top) and press A. On a row with - and +, the left half of the row
-is - and the right half +; the thumbstick left and right are - and +, and A is +. A click
-anywhere on an On/Off row flips it. The pointer's line and dot show while the menu is open,
+is - and the right half +; the thumbstick left and right are - and +, and A is +. On an On/Off
+row (Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it. The pointer's line and dot show while the menu is open,
 even with the laser off.
 
 | Row | Does |

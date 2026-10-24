@@ -305,6 +305,12 @@ function Get-LogCount([string]$run, [string]$regex, [double]$From = -1, [double]
 		($t = [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000) -ge $From -and $t -lt $To }).Count
 }
 
+# The log's clock (seconds from Flycast's start) at each line of a run's log matching a regex (case-sensitive), in order.
+function Get-LogClocks([string]$run, [string]$regex) {
+	return @(Select-String -LiteralPath (Get-RunLog $run) -Pattern $regex -CaseSensitive | ForEach-Object {
+		if ($_.Line -match '^(\d+):(\d\d):(\d{3}) ') { [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000 } })
+}
+
 # Lines matching a regex in a run's log, at most $max: $null when so.
 function Test-LogCount([string]$name, [string]$re, [int]$max) {
 	$n = Get-LogCount $name $re
@@ -838,17 +844,19 @@ function Test-CmControllersRtRun {
 # player 2 join at 60 s (the left hand takes its gun), player 2 idles out at ~70 s (findings p2out: the left hand
 # without a gun again). The menu at 90 s, the right stick up twice (from Resume it wraps to Quit, then How to play) and
 # A at 91.5 s: how to play on (both hands controllers with labels), the menu still open; A again at 92.5 s turns it
-# off, at 93.5 s on. The menu button closes the menu at 95 s, which ends it: the gun back, nothing drawn in the left
-# hand. The trigger's pull at 96 s is the game's: it fires. The menu again at 97 s, How to play chosen with the right
-# trigger at 98.5 s (held 1 s) and the menu closed by B at 99 s while it is held: that pull is the menu's, nothing
-# fires; the next pull (101 s, the hand back on the game) does. The log's clock runs ~0.2 s behind these times.
-# (From 89.5 s to 95.5 s the right hand points down, off the panel: its pointer would take the row from the stick.)
+# off, the stick's right at 93.5 s on (it's an On/Off row). The right hand's ray stays on the panel: from the arcade
+# gun's muzzle on Haptics, from the controller 4.4 cm lower on World size. So each swap moves it to another row, and
+# the selection must stay on How to play: every press lands there and no other row changes. The menu button closes
+# the menu at 95 s, which ends it: the gun back, nothing drawn in the left hand. The trigger's pull at 96 s is the
+# game's: it fires. The menu again at 97 s, How to play chosen with the right trigger at 98.5 s (held 1 s) and the
+# menu closed by B at 99 s while it is held: that pull is the menu's, nothing fires; the next pull (101 s, the hand
+# back on the game) does. The checks count lines between the menu's own open and close lines in the log.
 function Test-CmHands {
 	$name = 'accept-cm-hands'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 104; XrSim = $true; Config = $cmWidenArcade
 		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '27=shot labels2') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
-			'89.5=pose right 0.1 1.45 -0.3 0 -50', '90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150', '92.5=xr right/a 1 150',
-			'93.5=xr right/a 1 150', '95=xr left/menu 1 150', '95.5=pose right 0.1 1.45 -0.3 0 0', '96=xr right/trigger 1 100', '97=xr left/menu 1 150',
+			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150', '92.5=xr right/a 1 150',
+			'93.5=stick right 1 0 150', '95=xr left/menu 1 150', '96=xr right/trigger 1 100', '97=xr left/menu 1 150',
 			"97.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 8 -U 0.5)", '98.5=xr right/trigger 1 1000', '99=xr right/b 1 150',
 			'100=pose right 0.1 1.45 -0.3 0 0', '101=xr right/trigger 1 100')
 		Expect = 'XR: labels off \(start\)', 'XR: right hand: controller -> gun \(start\)',
@@ -858,20 +866,36 @@ function Test-CmHands {
 			'XR: right hand: controller -> gun \(menu closed\)', 'XR: labels off \(menu closed\)', 'XR: menu pointer click on How to play'
 		Reject = @('XR: initialisation failed', 'XR: show controls', 'XR: labels off \(shot\)') }
 	if ($why) { return $why }
+	# The windows: the menu's first open to its close (o1-c1), its second (o2-c2), from the log's lines
+	$opens = @(Get-LogClocks $name 'XR: menu at ')
+	$closes = @(Get-LogClocks $name 'XR: menu closed')
+	$o1 = $opens | Select-Object -First 1
+	$c1 = $closes | Where-Object { $_ -gt $o1 } | Select-Object -First 1
+	$o2 = $opens | Where-Object { $_ -gt $c1 } | Select-Object -First 1
+	$c2 = $closes | Where-Object { $_ -gt $o2 } | Select-Object -First 1
+	if ($opens.Count -lt 2 -or $null -eq $c1 -or $null -eq $o2 -or $null -eq $c2) {
+		return "the menu didn't open and close twice (opened at $($opens -join ', ') s, closed at $($closes -join ', ') s)"
+	}
+	Write-Host "  the menu open at $o1-$c1 s and $o2-$c2 s (the log's clock)"
+	$rows = 'XR: menu (Resume|Recenter|Gun|Laser|Haptics|World size|Panel distance|Wider view|quit)'
 	# from, to (s, the log's clock), the regex, the count wanted ('+': at least one), what it shows
 	$checks = @(
-		@(90.5, 94.5, 'XR: how to play on$', 2, 'A on the row turns it on'),
-		@(90.5, 94.5, 'XR: how to play off \(chosen\)$', 1, 'A again turns it off'),
-		@(90.5, 94.5, 'XR: menu closed', 0, 'the menu stays open after the choice'),
-		@(94.5, 95.5, 'XR: how to play off \(menu closed\)$', 1, 'closing the menu ends it'),
-		@(94.5, 95.5, 'XR: controllers shown: none$', 1, 'nothing drawn once the menu closed'),
-		@(95.5, 96.7, 'XR: player 1 shot', '+', 'the pull after the close is the game''s'),
-		@(95.5, 97.8, 'XR: controllers shown: (left|right)', 0, 'no controller drawn with the menu closed'),
-		@(98.0, 98.6, 'XR: how to play on$', 1, 'the trigger on the row turns it on'),
-		@(98.6, 99.6, 'XR: how to play off \(menu closed\)$', 1, 'B ends it'),
-		@(98.0, 100.6, 'XR: player 1 shot', 0, 'the pull held through the close is the menu''s'),
-		@(99.6, 104, 'XR: controllers shown: (left|right)', 0, 'no controller drawn with the menu closed'),
-		@(100.6, 101.8, 'XR: player 1 shot', '+', 'the next pull is the game''s'))
+		@($o1, $c1, 'XR: menu How to play$', 3, 'each press in the first menu lands on How to play, the menu staying open'),
+		@($o1, $c1, 'XR: how to play on$', 2, 'A on the row turns it on, and the stick''s right'),
+		@($o1, $c1, 'XR: how to play off \(chosen\)$', 1, 'A again turns it off'),
+		@($o1, $c1, $rows, 0, 'the swaps of gun and controller move no selection: no other row changes'),
+		@($o1, $c1, 'XR: controllers shown: left and right$', '+', 'how to play draws both controllers'),
+		@($c1, ($c1 + 0.5), 'XR: how to play off \(menu closed\)$', 1, 'closing the menu ends it'),
+		@($c1, ($c1 + 0.5), 'XR: controllers shown: none$', 1, 'nothing drawn once the menu closed'),
+		@($c1, $o2, 'XR: player 1 shot', '+', 'the pull after the close is the game''s'),
+		@($c1, $o2, 'XR: controllers shown: (left|right)', 0, 'no controller drawn with the menu closed'),
+		@($o2, $c2, 'XR: how to play on$', 1, 'the trigger on the row turns it on'),
+		@($o2, $c2, 'XR: controllers shown: left and right$', '+', 'how to play draws both controllers'),
+		@($o2, $c2, $rows, 0, 'no other row changes'),
+		@($c2, ($c2 + 0.5), 'XR: how to play off \(menu closed\)$', 1, 'B ends it'),
+		@($o2, ($c2 + 1.0), 'XR: player 1 shot', 0, 'the pull held through the close is the menu''s'),
+		@($c2, 1e9, 'XR: controllers shown: (left|right)', 0, 'no controller drawn with the menu closed'),
+		@(($c2 + 1.0), 1e9, 'XR: player 1 shot', '+', 'the next pull is the game''s'))
 	foreach ($c in $checks) {
 		$n = Get-LogCount $name $c[2] -From $c[0] -To $c[1]
 		$good = if ("$($c[3])" -eq '+') { $n -ge 1 } else { $n -eq $c[3] }

@@ -35,7 +35,8 @@ const char *const HapticsNames[4] { "Off", "Low", "Normal", "Strong" };
 glm::mat4 model { 1.f };	// the panel: its middle, facing the player (+z)
 int selected;
 // The row each hand's ray is on (-1: none), and whether that's known yet: the first update after
-// opening learns them without choosing (the selection follows a ray onto another row).
+// opening, or after How to play swapped a hand's gun and controller (the ray leaves the muzzle or
+// the controller then), learns them without choosing (the selection follows a ray onto another row).
 int hovered[2];
 bool fresh;
 bool pointing[2];
@@ -77,7 +78,7 @@ bool stepper(int row) {
 	return row == Gun || row == Haptics || row == WorldSize || row == PanelDistance;
 }
 bool onOff(int row) {
-	return row == Laser || row == WiderView;
+	return row == Laser || row == WiderView || row == HowToPlay;
 }
 
 std::string value(int row)
@@ -205,6 +206,14 @@ void change(int row, int dir, int hand)
 		config::VrWiden.set(!config::VrWiden);
 		config::saveBool("config", "vr.Widen", config::VrWiden);
 		break;
+	case HowToPlay:
+		// on or off, the menu staying open (closing it turns it off: xr_host.h). The next frame the
+		// hands swap gun and controller, and a ray moves by the muzzle's offset: that update learns
+		// the rows again, so the selection stays on this row.
+		NOTICE_LOG(INPUT, "XR: menu How to play");
+		setHowToPlay(!howToPlayOn(), "chosen");
+		fresh = true;
+		return;
 	default:
 		return;
 	}
@@ -225,11 +234,6 @@ void choose(int row, int hand)
 	case Recenter:
 		NOTICE_LOG(INPUT, "XR: menu Recenter");
 		recenter();
-		break;
-	case HowToPlay:
-		// on or off, the menu staying open (closing it turns it off: xr_host.h)
-		NOTICE_LOG(INPUT, "XR: menu How to play");
-		setHowToPlay(!howToPlayOn(), "chosen");
 		break;
 	case Quit:
 		if (quitArmed && seconds() - quitArmedAt <= QuitConfirmSeconds)

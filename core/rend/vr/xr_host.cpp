@@ -1934,8 +1934,9 @@ void updateLightgun(XrTime time)
 		guns[0].triggerWas = true;
 		slide.held = false;
 		leftStartWas = true;	// a left Start still held doesn't join at once
-		// controllers in both hands again, with the labels
-		p1Armed = menuHowToPlay = false;
+		// controllers in both hands again, with the labels (a How to play left on ends, with its line)
+		p1Armed = false;
+		setHowToPlay(false, "new game");
 		noteHolds("new game");
 	}
 	// The menu's How to play ends with the menu, however it closed (the menu button, B, Resume, a
