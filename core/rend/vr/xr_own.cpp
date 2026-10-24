@@ -4,6 +4,7 @@
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
 #include "xr_own.h"
+#include "glb_mesh.h"
 #include "oslib/directory.h"
 #include "log/Log.h"
 #include "stdclass.h"
@@ -13,6 +14,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #ifdef _WIN32
@@ -34,8 +36,9 @@ using nlohmann::json;
 
 std::vector<GunFile> gunFiles;
 ControllerFile controllerFiles[2];
-std::string signature;		// what the last scan saw
-unsigned scans;
+std::string gunsSignature, controllersSignature;	// what the last scan saw in each folder
+unsigned gunScans, controllerScans;
+bool scanned;
 
 std::string folderOf(const std::string& path)
 {
@@ -93,6 +96,29 @@ std::string lower(std::string s)
 	return s;
 }
 
+// s, at most max bytes of it, not cut inside a UTF-8 character
+std::string cutUtf8(const std::string& s, size_t max)
+{
+	if (s.size() <= max)
+		return s;
+	size_t n = max;
+	while (n > 0 && ((unsigned char)s[n] & 0xc0) == 0x80)
+		n--;
+	return s.substr(0, n);
+}
+
+// A sidecar's number as the float it becomes: finite as that, and within +-MaxCoordinate
+bool number(const json& v, float& out)
+{
+	if (!v.is_number())
+		return false;
+	const float f = (float)v.get<double>();
+	if (!std::isfinite(f) || std::fabs(f) > MaxCoordinate)
+		return false;
+	out = f;
+	return true;
+}
+
 bool vec3(const json& doc, const char *key, glm::vec3& v, std::string& why)
 {
 	const auto it = doc.find(key);
@@ -102,14 +128,11 @@ bool vec3(const json& doc, const char *key, glm::vec3& v, std::string& why)
 		return false;
 	}
 	for (int k = 0; k < 3; k++)
-	{
-		if (!(*it)[k].is_number() || !std::isfinite((*it)[k].get<double>()))
+		if (!number((*it)[k], v[k]))
 		{
-			why = std::string("\"") + key + "\" is not 3 finite numbers";
+			why = std::string("\"") + key + "\" is not 3 numbers from -1000000 to 1000000";
 			return false;
 		}
-		v[k] = (*it)[k].get<float>();
-	}
 	return true;
 }
 
@@ -131,44 +154,97 @@ bool readJson(const std::string& path, const std::string& shown, json& doc, std:
 	return true;
 }
 
-void readGun(GunFile& f, const std::string& sidecar, const std::string& shownSidecar)
+// The sidecar into f; false with what's wrong in f.fault.
+bool readGun(GunFile& f, const std::string& sidecar, const std::string& shownSidecar)
 {
-	f.name = f.stem.substr(0, 24);
+	f.name = cutUtf8(f.stem, 24);
 	json doc;
-	if (!readJson(sidecar, shownSidecar, doc, f.why))
-		return;
+	if (!readJson(sidecar, shownSidecar, doc, f.fault))
+		return false;
 	const auto name = doc.find("name");
 	if (name != doc.end() && name->is_string() && !name->get<std::string>().empty() && name->get<std::string>().size() <= 24)
 		f.name = name->get<std::string>();
-	if (!vec3(doc, "grip", f.grip, f.why) || !vec3(doc, "muzzle", f.muzzle, f.why))
-		return;
-	if (doc.contains("up") && !vec3(doc, "up", f.up, f.why))
-		return;
+	if (!vec3(doc, "grip", f.grip, f.fault) || !vec3(doc, "muzzle", f.muzzle, f.fault))
+		return false;
+	if (doc.contains("up") && !vec3(doc, "up", f.up, f.fault))
+		return false;
 	const auto length = doc.find("length");
-	if (length == doc.end() || !length->is_number())
+	if (length == doc.end() || !number(*length, f.length))
 	{
-		f.why = "\"length\" is not a number (metres)";
-		return;
+		f.fault = "\"length\" is not a number (metres)";
+		return false;
 	}
-	f.length = length->get<float>();
-	if (!std::isfinite(f.length) || f.length < 0.05f || f.length > 1.5f)
+	if (f.length < 0.05f || f.length > 1.5f)
 	{
-		f.why = "\"length\" " + std::to_string(f.length) + " is outside 0.05-1.5 m";
-		return;
+		f.fault = "\"length\" " + std::to_string(f.length) + " is outside 0.05-1.5 m";
+		return false;
 	}
 	if (glm::length(f.up) < 1e-6f)
 	{
-		f.why = "\"up\" is [0, 0, 0]";
-		return;
+		f.fault = "\"up\" is [0, 0, 0]";
+		return false;
 	}
 	const glm::vec3 up = glm::normalize(f.up);
 	const glm::vec3 barrel = f.muzzle - f.grip;
 	if (glm::length(barrel - glm::dot(barrel, up) * up) < 1e-6f * std::max(1.f, glm::length(barrel)))
 	{
-		f.why = "\"muzzle\" is straight along \"up\" from \"grip\"";
+		f.fault = "\"muzzle\" is straight along \"up\" from \"grip\"";
+		return false;
+	}
+	return true;
+}
+
+// The gun's GLB looked at, not read (no image decoded): its triangles, its textures' size as they'd
+// be read, its bounds, and the sidecar's grip and muzzle near them; what's wrong in f.fault.
+void lookAtGlb(GunFile& f)
+{
+	std::vector<u8> data;
+	if (!readFile(f.path, data, MaxFileBytes))
+	{
+		f.fault = "unreadable, or over 256 MB";
 		return;
 	}
-	f.usable = true;
+	GlbMesh mesh;
+	if (!loadGlb(data.data(), data.size(), mesh, f.fault, MaxTextures, MaxTextureSide, false))
+		return;
+	f.triangles = mesh.indices.size() / 3;
+	if (f.triangles > MaxTriangles)
+	{
+		f.fault = "over " + std::to_string(MaxTriangles) + " triangles (" + std::to_string(f.triangles) + ")";
+		return;
+	}
+	f.textures = (int)mesh.images.size();
+	f.textureBytes = 0;
+	for (const GlbImage& image : mesh.images)
+		f.textureBytes += (size_t)image.width * image.height * 4;
+	glm::vec3 lo(FLT_MAX), hi(-FLT_MAX);
+	for (size_t i = 0; i + 2 < mesh.positions.size(); i += 3)
+	{
+		const glm::vec3 p(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]);
+		lo = glm::min(lo, p);
+		hi = glm::max(hi, p);
+	}
+	// a units mix-up (a sidecar in metres for a model in cm) puts the hand or the shots metres off
+	const float size = std::max({ hi.x - lo.x, hi.y - lo.y, hi.z - lo.z });
+	const std::pair<const char *, glm::vec3> points[] { { "grip", f.grip }, { "muzzle", f.muzzle } };
+	for (const auto& point : points)
+	{
+		const float off = glm::length(glm::max(glm::max(lo - point.second, point.second - hi), glm::vec3(0.f)));
+		if (!(off <= 2.f * size))
+		{
+			char why[160];
+			snprintf(why, sizeof(why), "\"%s\" is %.1f from the model, over twice its size (%g): in other units?", point.first, off, size);
+			f.fault = why;
+			return;
+		}
+	}
+}
+
+std::string megabytes(size_t bytes)
+{
+	char s[32];
+	snprintf(s, sizeof(s), "%.1f MB", bytes / 1048576.0);
+	return s;
 }
 
 void readController(ControllerFile& f, const std::string& sidecar, const std::string& shownSidecar)
@@ -189,19 +265,15 @@ void readController(ControllerFile& f, const std::string& sidecar, const std::st
 	float q[4] {};
 	bool ok = rotation != aim->end() && rotation->is_array() && rotation->size() == 4;
 	for (int k = 0; ok && k < 4; k++)
-	{
-		ok = (*rotation)[k].is_number() && std::isfinite((*rotation)[k].get<double>());
-		if (ok)
-			q[k] = (*rotation)[k].get<float>();
-	}
+		ok = number((*rotation)[k], q[k]);
 	if (!ok || std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]) < 1e-6f)
 	{
 		f.why = "\"rotation\" is not [qx, qy, qz, qw]";
 		return;
 	}
 	const auto scale = doc.find("scale");
-	const float s = scale != doc.end() && scale->is_number() ? scale->get<float>() : -1.f;
-	if (!std::isfinite(s) || s < 0.0001f || s > 100.f)
+	float s = -1.f;
+	if (scale == doc.end() || !number(*scale, s) || s < 0.0001f || s > 100.f)
 	{
 		f.why = "\"scale\" is not a number from 0.0001 to 100 (metres per unit)";
 		return;
@@ -256,52 +328,103 @@ void scan()
 	std::sort(names.begin(), names.end(), [](const std::string& a, const std::string& b) { return lower(a) < lower(b); });
 	if (names.size() > 32)
 		names.resize(32);
-	std::string sig = gunsDir + "|" + controllersDir;
+	// each folder on its own: a change in one doesn't read the other again
+	std::string gunsSig = gunsDir, controllersSig = controllersDir;
+	std::vector<std::string> gunStamps;
 	for (const std::string& name : names)
 	{
 		const std::string stem = name.substr(0, name.size() - 4);
-		sig += "|" + name + ":" + stamp(gunsDir + "/" + name) + ":" + stamp(gunsDir + "/" + stem + ".json");
+		gunStamps.push_back(stamp(gunsDir + "/" + name) + ":" + stamp(gunsDir + "/" + stem + ".json"));
+		gunsSig += "|" + name + ":" + gunStamps.back();
 	}
 	for (const char *hand : { "left", "right" })
 		if (!controllersDir.empty())
-			sig += std::string("|") + hand + ":" + stamp(controllersDir + "/" + hand + ".glb") + ":" + stamp(controllersDir + "/" + hand + ".json");
-	if (scans != 0 && sig == signature)
+			controllersSig += std::string("|") + hand + ":" + stamp(controllersDir + "/" + hand + ".glb") + ":" + stamp(controllersDir + "/" + hand + ".json");
+	const bool gunsChanged = !scanned || gunsSig != gunsSignature;
+	const bool controllersChanged = !scanned || controllersSig != controllersSignature;
+	scanned = true;
+	if (!gunsChanged && !controllersChanged)
 		return;
-	signature = sig;
-	scans++;
 
-	gunFiles.clear();
-	for (const std::string& name : names)
+	if (gunsChanged)
 	{
-		GunFile f;
-		f.path = gunsDir + "/" + name;
-		f.shown = "guns/" + name;
-		f.stem = name.substr(0, name.size() - 4);
-		readGun(f, gunsDir + "/" + f.stem + ".json", "guns/" + f.stem + ".json");
-		gunFiles.push_back(f);
+		gunsSignature = gunsSig;
+		gunScans++;
+		std::vector<GunFile> next;
+		for (size_t i = 0; i < names.size(); i++)
+		{
+			GunFile f;
+			f.path = gunsDir + "/" + names[i];
+			f.stamp = gunStamps[i];
+			// the same files as last time: not looked at again
+			const auto same = std::find_if(gunFiles.begin(), gunFiles.end(),
+					[&](const GunFile& g) { return g.path == f.path && g.stamp == f.stamp; });
+			if (same != gunFiles.end())
+			{
+				next.push_back(*same);
+				continue;
+			}
+			f.shown = "guns/" + names[i];
+			f.stem = names[i].substr(0, names[i].size() - 4);
+			if (readGun(f, gunsDir + "/" + f.stem + ".json", "guns/" + f.stem + ".json"))
+				lookAtGlb(f);
+			next.push_back(f);
+		}
+		gunFiles = std::move(next);
+		// the budget, in file-name order: a gun that would take the textures over it is left out
+		size_t total = 0;
+		for (GunFile& f : gunFiles)
+		{
+			f.usable = f.fault.empty() && f.textureBytes <= GunTextureBudget - total;
+			f.why = !f.fault.empty() ? f.fault : f.usable ? std::string()
+					: "its textures (" + megabytes(f.textureBytes) + ") would take the folder's guns over "
+						+ megabytes(GunTextureBudget) + " (make-gun.py makes them smaller)";
+			if (f.usable)
+				total += f.textureBytes;
+		}
 	}
-	for (int hand : { 0, 1 })
+	if (controllersChanged)
 	{
-		ControllerFile& f = controllerFiles[hand];
-		f = ControllerFile();
-		if (controllersDir.empty())
-			continue;
-		const std::string base = hand == 0 ? "left" : "right";
-		f.path = controllersDir + "/" + base + ".glb";
-		f.shown = "controllers/" + base + ".glb";
-		f.present = stamp(f.path) != "-";
-		if (f.present)
-			readController(f, controllersDir + "/" + base + ".json", "controllers/" + base + ".json");
+		controllersSignature = controllersSig;
+		controllerScans++;
+		for (int hand : { 0, 1 })
+		{
+			ControllerFile& f = controllerFiles[hand];
+			f = ControllerFile();
+			if (controllersDir.empty())
+				continue;
+			const std::string base = hand == 0 ? "left" : "right";
+			f.path = controllersDir + "/" + base + ".glb";
+			f.shown = "controllers/" + base + ".glb";
+			f.stamp = stamp(f.path) + ":" + stamp(controllersDir + "/" + base + ".json");
+			f.present = stamp(f.path) != "-";
+			if (f.present)
+				readController(f, controllersDir + "/" + base + ".json", "controllers/" + base + ".json");
+		}
 	}
 	if (!gunsDir.empty() || !controllersDir.empty())
 		NOTICE_LOG(RENDERER, "XR: own models from %s%s%s (%zu guns, controllers%s%s)", gunsDir.c_str(),
 				!gunsDir.empty() && !controllersDir.empty() ? " and " : "", controllersDir.c_str(), gunFiles.size(),
 				controllerFiles[0].present ? " left" : "", controllerFiles[1].present ? " right" : (controllerFiles[0].present ? "" : " none"));
+	// each gun whose state changed
+	for (GunFile& f : gunFiles)
+	{
+		const std::string line = !f.usable ? "skipped: " + f.why : "offered: \"" + f.name + "\" (" + std::to_string(f.triangles)
+				+ " triangles, " + std::to_string(f.textures) + (f.textures == 1 ? " texture, " : " textures, ") + megabytes(f.textureBytes) + ")";
+		if (line != f.logged)
+			NOTICE_LOG(RENDERER, "XR: own gun %s %s", f.shown.c_str(), line.c_str());
+		f.logged = line;
+	}
 }
 
-unsigned generation()
+unsigned gunsGeneration()
 {
-	return scans;
+	return gunScans;
+}
+
+unsigned controllersGeneration()
+{
+	return controllerScans;
 }
 
 const std::vector<GunFile>& guns()

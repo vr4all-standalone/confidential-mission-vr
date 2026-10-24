@@ -73,6 +73,7 @@ struct Model
 	GLenum indexType = GL_UNSIGNED_SHORT;
 	bool uploaded = false;
 	bool failed = false;
+	size_t primitives = 0;	// the GLB's (the player's own: merged into parts by colour and image)
 };
 
 Model builtIn;
@@ -83,7 +84,8 @@ Model runtime[2];
 Model own[2];
 glm::mat4 ownToAim[2];
 bool ownLoaded[2];
-unsigned ownGeneration;
+unsigned ownGeneration;		// own::controllersGeneration() they were read at
+std::string ownKey[2];		// each hand's file and its stamp as read: only a hand whose files changed is read again
 
 // Asking the runtime for its models: init, then retry() for each hand still built in.
 struct Ask
@@ -147,9 +149,31 @@ void fromGlb(Model& m, GlbMesh&& mesh, bool perPart = false)
 	}
 	m.indices = std::move(mesh.indices);
 	m.images = std::move(mesh.images);
+	m.primitives = mesh.parts.size();
 	if (perPart)
-		for (const GlbPart& p : mesh.parts)
-			m.parts.push_back({ p.firstIndex, p.indexCount, { { p.color[0], p.color[1], p.color[2] }, 0.25f, 30.f }, p.image });
+	{
+		// the primitives that share a colour and an image drawn as one part (their indices put together)
+		std::vector<u32> indices;
+		indices.reserve(m.indices.size());
+		std::vector<bool> done(mesh.parts.size());
+		for (size_t i = 0; i < mesh.parts.size(); i++)
+		{
+			if (done[i])
+				continue;
+			const GlbPart& p = mesh.parts[i];
+			const unsigned first = (unsigned)indices.size();
+			for (size_t j = i; j < mesh.parts.size(); j++)
+			{
+				const GlbPart& q = mesh.parts[j];
+				if (done[j] || q.image != p.image || memcmp(q.color, p.color, 3 * sizeof(float)) != 0)
+					continue;
+				done[j] = true;
+				indices.insert(indices.end(), m.indices.begin() + q.firstIndex, m.indices.begin() + q.firstIndex + q.indexCount);
+			}
+			m.parts.push_back({ first, (unsigned)indices.size() - first, { { p.color[0], p.color[1], p.color[2] }, 0.25f, 30.f }, p.image });
+		}
+		m.indices = std::move(indices);
+	}
 	else
 		m.parts.push_back({ 0, (unsigned)m.indices.size(), !m.images.empty() ? Textured : Untextured, m.images.empty() ? -1 : 0 });
 	m.triangles = (unsigned)(m.indices.size() / 3);
@@ -403,19 +427,24 @@ void askRuntime()
 	ask.loggedWhy = why;
 }
 
-// The player's own models (xr_own.h) read again when the folder changed: each hand's GLB, at most
-// 200,000 triangles and 8 textures. Logs "XR: controller model from controllers/left.glb (<n>
-// triangles)", or why it was skipped. (On the render thread: an old one leaves the GPU.)
+// The player's own models (xr_own.h) read again when their folder changed, only a hand whose files
+// changed: each hand's GLB, at most 200,000 triangles and 8 textures. Logs "XR: controller model from
+// controllers/left.glb (<n> triangles, <p> primitives in <k> parts)", or why it was skipped. (On the
+// render thread: an old one leaves the GPU.)
 void refreshOwn()
 {
-	if (own::generation() == ownGeneration)
+	if (own::controllersGeneration() == ownGeneration)
 		return;
-	ownGeneration = own::generation();
+	ownGeneration = own::controllersGeneration();
 	for (int hand : { Left, Right })
 	{
+		const own::ControllerFile& file = own::controller(hand);
+		const std::string key = file.present ? file.path + "|" + file.stamp : std::string();
+		if (key == ownKey[hand])
+			continue;
+		ownKey[hand] = key;
 		release(own[hand]);
 		ownLoaded[hand] = false;
-		const own::ControllerFile& file = own::controller(hand);
 		if (!file.present)
 			continue;
 		std::string why = file.why;
@@ -424,7 +453,7 @@ void refreshOwn()
 		{
 			std::vector<u8> data;
 			std::string error;
-			if (!own::readFile(file.path, data, 256u * 1024 * 1024))
+			if (!own::readFile(file.path, data, own::MaxFileBytes))
 				why = "unreadable, or over 256 MB";
 			else if (!loadGlb(data.data(), data.size(), mesh, error, own::MaxTextures, own::MaxTextureSide))
 				why = error;
@@ -439,7 +468,8 @@ void refreshOwn()
 		fromGlb(own[hand], std::move(mesh), true);
 		ownToAim[hand] = file.modelToAim;
 		ownLoaded[hand] = true;
-		NOTICE_LOG(RENDERER, "XR: controller model from %s (%u triangles)", file.shown.c_str(), own[hand].triangles);
+		NOTICE_LOG(RENDERER, "XR: controller model from %s (%u triangles, %zu primitive%s in %zu part%s)", file.shown.c_str(), own[hand].triangles,
+				own[hand].primitives, own[hand].primitives == 1 ? "" : "s", own[hand].parts.size(), own[hand].parts.size() == 1 ? "" : "s");
 	}
 }
 
@@ -601,6 +631,8 @@ void term()
 		release(m);
 	ownLoaded[Left] = ownLoaded[Right] = false;
 	ownGeneration = 0;
+	ownKey[Left].clear();
+	ownKey[Right].clear();
 	ask = Ask();
 	if (program != 0)
 		glcache.DeleteProgram(program);

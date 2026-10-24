@@ -37,6 +37,8 @@ struct GlbMesh { std::vector<float> positions, normals, uvs; std::vector<u32> in
 // face normals. External files (a buffer or image by file name) are not read. False, with why in
 // `error`, when the data isn't a GLB this can draw (no triangles, or over 1,000,000 vertices or
 // 3,000,000 indices). maxImages 1: the runtime's controllers, one texture for the whole model.
-bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error, int maxImages = 1, int fitSide = 0);
+// pixels false: the images only looked at, not decoded (each GlbImage its size as fitted, its rgba
+// empty), for what a model would cost before it is read (xr_own.h).
+bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error, int maxImages = 1, int fitSide = 0, bool pixels = true);
 
 }

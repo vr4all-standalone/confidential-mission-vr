@@ -55,13 +55,14 @@ struct Reader
 {
 	GlbMesh& out;
 	int maxImages = 1, fitSide = 0;
+	bool pixels = true;		// false: images sized, not decoded
 	std::map<const cgltf_image *, int> imageAt;	// each image tried: its index in out.images (-1: not usable)
 	bool tooBig = false;		// over MaxVertices or MaxIndices: nothing is drawn
 };
 
 // The base colour image, decoded into out: from a buffer view of the GLB (or a data: URI cgltf
 // loaded into a buffer), PNG or JPEG. Else why not: its MIME type, or what was wrong.
-std::string loadImage(const cgltf_image *image, GlbImage& out)
+std::string loadImage(const cgltf_image *image, GlbImage& out, bool pixels)
 {
 	const std::string mime = image->mime_type != nullptr ? image->mime_type : "no MIME type";
 	if (image->mime_type != nullptr && strcmp(image->mime_type, "image/png") && strcmp(image->mime_type, "image/jpeg"))
@@ -78,30 +79,43 @@ std::string loadImage(const cgltf_image *image, GlbImage& out)
 		return mime + ", not decodable";
 	if (w <= 0 || h <= 0 || w > MaxImageSide || h > MaxImageSide)
 		return mime + " " + std::to_string(w) + "x" + std::to_string(h) + ", over 4096";
+	if (!pixels)
+	{
+		out.width = w;
+		out.height = h;
+		return std::string();
+	}
 	// top row first (stb_image's flip is per thread, and other Flycast callers turn it on)
 	stbi_set_flip_vertically_on_load_thread(0);
-	u8 *pixels = stbi_load_from_memory(data, (int)view->size, &w, &h, &channels, 4);
-	if (pixels == nullptr)
+	u8 *decoded = stbi_load_from_memory(data, (int)view->size, &w, &h, &channels, 4);
+	if (decoded == nullptr)
 		return mime + ", not decodable";
 	std::string why;
 	if (w > 0 && h > 0 && w <= MaxImageSide && h <= MaxImageSide)
 	{
 		out.width = w;
 		out.height = h;
-		out.rgba.assign(pixels, pixels + (size_t)w * h * 4);
+		out.rgba.assign(decoded, decoded + (size_t)w * h * 4);
 	}
 	else
 		why = mime + ", not decodable";
-	stbi_image_free(pixels);
+	stbi_image_free(decoded);
 	return why;
 }
 
-// Halved, each 2 x 2 pixels averaged (an odd edge's last pixel twice), till no side is over maxSide.
+// Halved, each 2 x 2 pixels averaged (an odd edge's last pixel twice), till no side is over maxSide
+// (without pixels: its size alone).
 void fitImage(GlbImage& image, int maxSide)
 {
 	while (image.width > maxSide || image.height > maxSide)
 	{
 		const int w = std::max(1, image.width / 2), h = std::max(1, image.height / 2);
+		if (image.rgba.empty())
+		{
+			image.width = w;
+			image.height = h;
+			continue;
+		}
 		std::vector<u8> half((size_t)w * h * 4);
 		auto at = [&](int x, int y, int c) {
 			return (unsigned)image.rgba[((size_t)std::min(y, image.height - 1) * image.width + std::min(x, image.width - 1)) * 4 + c];
@@ -177,7 +191,7 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& r
 		else if ((int)out.images.size() < reader.maxImages)
 		{
 			GlbImage decoded;
-			const std::string why = loadImage(image, decoded);
+			const std::string why = loadImage(image, decoded, reader.pixels);
 			if (why.empty())
 			{
 				if (reader.fitSide > 0)
@@ -287,7 +301,7 @@ void addNode(const cgltf_node *node, Reader& reader, int depth)
 
 }	// namespace
 
-bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error, int maxImages, int fitSide)
+bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error, int maxImages, int fitSide, bool pixels)
 {
 	out = GlbMesh();
 	if (data == nullptr || size < 12 || memcmp(data, "glTF", 4) != 0)
@@ -310,7 +324,7 @@ bool loadGlb(const u8 *data, size_t size, GlbMesh& out, std::string& error, int 
 		cgltf_free(gltf);
 		return false;
 	}
-	Reader reader { out, std::max(maxImages, 0), fitSide };
+	Reader reader { out, std::max(maxImages, 0), fitSide, pixels };
 	const cgltf_scene *scene = gltf->scene != nullptr ? gltf->scene : gltf->scenes_count > 0 ? &gltf->scenes[0] : nullptr;
 	if (scene != nullptr)
 	{

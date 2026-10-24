@@ -503,6 +503,7 @@ extern Option<bool> VrDropShotMarker;
 extern Option<bool> VrDropShotFlash;
 extern Option<int> VrHaptics;
 extern Option<int> VrGun;
+extern Option<std::string> VrGunFile;
 extern Option<bool> CustomTextures;
 extern Option<bool> PreloadCustomTextures;
 extern Option<bool> DumpTextures;

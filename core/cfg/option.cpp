@@ -137,7 +137,8 @@ Option<bool> VrWidenFov("vr.WidenFov", true);	// widen through the game's field 
 Option<bool> VrDropShotMarker("vr.DropShotMarker", true);	// hide the game's own 2D shot marker after shots into 3D
 Option<bool> VrDropShotFlash("vr.DropShotFlash", true);	// hide a bright full-screen flash right after any shot
 Option<int> VrHaptics("vr.Haptics", 2);	// the knock in the hand: 0 off, 1 low, 2 normal, 3 strong
-Option<int> VrGun("vr.Gun", 0);	// the gun drawn: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun, 4 and on the player's own (guns/, file-name order; xr_own.h) (the VR menu)
+Option<int> VrGun("vr.Gun", 0);	// the gun drawn: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun, 4 (and over) the player's own that vr.GunFile names (guns/; xr_own.h) (the VR menu)
+Option<std::string> VrGunFile("vr.GunFile", "");	// with vr.Gun 4: the player's own gun, its file name in guns/ without .glb (the VR menu)
 Option<bool> CustomTextures("rend.CustomTextures");
 Option<bool> PreloadCustomTextures("rend.PreloadCustomTextures");
 Option<bool> DumpTextures("rend.DumpTextures");
