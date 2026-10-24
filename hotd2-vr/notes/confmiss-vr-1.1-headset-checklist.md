@@ -4,8 +4,8 @@ One session on the Quest 3, in this order (about 90 minutes), for what the PC ha
 OpenXR simulator, `vr.XrSim`) cannot prove. Each item says what to do and what should happen.
 
 **The build** (made by `package-release.ps1` and signed with the release key; not installed yet):
-- Quest: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-quest.apk`, versionName `1.1.0-g36c56383c` (versionCode 8, built 2026-10-24 from commit 36c56383c, signed with the release key)
-- PC VR: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-pcvr.zip` (its `flycast.exe` a Release build of the same commit, 36c56383c)
+- Quest: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-quest.apk`, versionName `1.1.0-g509071f58` (versionCode 8, built 2026-10-24 from commit 509071f58, signed with the release key)
+- PC VR: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-pcvr.zip` (its `flycast.exe` a Release build of the same commit, 509071f58)
 
 **How to report:** play the build, then mark each item `[x]` (works) or `[!]` (fails) and add a
 short note after a failing one (what you saw, where in the game, which hand). Leave items you
@@ -88,8 +88,11 @@ where it is.
   the real ones, moving with no lag. If not, note how far off (cm, which way) and how far turned (degrees).
 - [ ] **Do:** read the labels.
   **Expect:** right "A Start", "B Reload", "Trigger Shoot", "Stick click Laser"; left "X Player 2", "Y Reload P2",
-  "Menu", "Stick click Recenter". Readable at arm's length without leaning in, each line ending on its own button
-  (they are placed for the built-in controller's buttons: note any that point beside one, which and how far).
+  "Menu", "Stick click Recenter". Readable at arm's length without leaning in.
+- [ ] **Do:** bring each controller up close and turn it (tip it up to see the trigger).
+  **Expect:** the how-to-play label lines end on their buttons (X, Y, Menu, stick; A, B, stick, trigger), on the
+  model's own buttons, the stick's cap and the trigger's front (the log has `XR: labels: left x at (...) in the aim pose
+  (from the file)` for each). Note any that point beside one: which, and how far (mm, which way).
 - [ ] **Do:** press A.
   **Expect:** the labels go and the right hand turns into the gun; the left hand shows nothing (controllers show only
   while how to play shows).
