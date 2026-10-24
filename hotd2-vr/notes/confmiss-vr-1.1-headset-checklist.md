@@ -94,3 +94,10 @@ Before these, delete every `gun-cm-*.bin` from the app's data folder (or reinsta
 - [ ] In the hand the assault rifle looks whole and the right way round: the muzzle forward, the stock back, the magazine and grip down, with no holes and nothing inside-out.
 - [ ] Delete only `gun-cm-rifle.bin` and start again: no panel, the game starts as usual (the rifle is only watched for in play).
 - [ ] With every file deleted, press B at the panel to skip: the arcade gun stays for the session, and the log says "VR hands: watching for the assault rifle in play".
+
+## Task 13
+
+- [ ] The log says "XR: gun: agents' pistol (auto)" after the first start (or "cabinet gun (auto: the agents' pistol is incomplete)").
+- [ ] Open the menu and switch the Gun row (+ and -): the new gun shows in the hand at once, while the game is paused: the agents' pistol, the cabinet gun, the arcade gun, Auto. Each one's laser leaves its own muzzle.
+- [ ] Shoot with each gun: the muzzle flash sits at the muzzle, and shots land on the dot.
+- [ ] Delete only `gun-cm-pistol.bin` and start again: the Gun row skips the agents' pistol, and with it chosen before, the cabinet gun is in the hand ("(chosen: the agents' pistol is not made yet)").

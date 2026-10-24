@@ -347,14 +347,15 @@ void drawGlowShape(Shape shape, const std::vector<GlowVertex>& verts)
 
 }	// namespace
 
-bool gameGun()
+bool gameGun(GunKind kind)
 {
-	return config::VrGameHands && handsModel() != nullptr;
+	return handModel(kind) != nullptr;
 }
 
-glm::vec3 gunMuzzle()
+glm::vec3 gunMuzzle(GunKind kind)
 {
-	return gameGun() ? handsModel()->muzzle : GunMuzzle;
+	const HandsModel *model = handModel(kind);
+	return model != nullptr ? model->muzzle : GunMuzzle;
 }
 
 float gunKick(float sinceShot)
@@ -370,7 +371,7 @@ float gunKick(float sinceShot)
 // flash is now: full for two headset frames, then gone in another 50 ms.
 static void muzzleNow(const GunView& gun, glm::vec3& muzzle, glm::vec3& forward, float& flash)
 {
-	muzzle = glm::vec3(gun.pose * glm::vec4(gunMuzzle(), 1.f));
+	muzzle = glm::vec3(gun.pose * glm::vec4(gunMuzzle(gun.kind), 1.f));
 	forward = glm::normalize(glm::vec3(gun.pose * glm::vec4(0.f, 0.f, -1.f, 0.f)));
 	flash = gun.sinceShot < 0.f ? 0.f
 			: gun.sinceShot < 0.02f ? 1.f
@@ -379,7 +380,8 @@ static void muzzleNow(const GunView& gun, glm::vec3& muzzle, glm::vec3& forward,
 
 void drawGunModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunView& gun, bool clearDepth)
 {
-	const bool game = gameGun();
+	const HandsModel *model = handModel(gun.kind);
+	const bool game = model != nullptr;
 	if (!game && !initModel())
 		return;
 	glm::vec3 muzzle, forward;
@@ -409,6 +411,7 @@ void drawGunModel(const glm::mat4& viewProj, const glm::vec3& eyePos, const GunV
 	if (game)
 	{
 		HandsView hands;
+		hands.model = model;
 		hands.gunPose = gun.pose;
 		hands.slide = gun.slide;
 		hands.otherHand = gun.otherHand;

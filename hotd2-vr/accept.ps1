@@ -38,6 +38,9 @@
   cm-merge-unit plays nothing: it compiles re\hands_build_test.cpp with core\rend\vr\hands_build.cpp
   (the VS 2022 Build Tools, as build-win.cmd; into build-win\vrtest\cm-merge-unit, not the app),
   runs it (the pistol's merge on synthetic captures) and then vrcheck.py's selftest.
+  cm-gun plays accept-cm-gun and accept-cm-gun-nopistol (the gun choice, Task 13): it needs the cabinet
+  gun's and the pistol's files the rip scenarios leave (it comes after them in the list; without them it
+  fails and says so), and moves the pistol's away (.hold) for the second run, back when it's done.
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -142,7 +145,9 @@ function T([double]$t) { $t.ToString('0.0##', $inv) }
 $cmWiden = 'config:vr.FovScale=2,config:vr.WidenFov=yes'
 # The XR scenarios from before the game's own guns (Task 10) pin the arcade gun: their aim, muzzle
 # (vr.GunScale 0.68: cm-menu's Get-CmMenuAim) and shots assume it, and with vr.GameHands off a
-# run neither draws gun-cm-cabinet.bin nor makes it, whatever ran before.
+# run neither draws gun-cm-cabinet.bin nor makes it, whatever ran before. (Task 13: with it off the
+# hand holds the arcade gun whatever vr.Gun says, its Auto too: "XR: gun: arcade gun (auto: the
+# game's own models are off)".)
 $cmWidenArcade = "$cmWiden,config:vr.GameHands=no"
 $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000, 9000), @(5000, 1000), @(5000, 9000), @(1000, 5000), @(9000, 5000))
 
@@ -1098,6 +1103,58 @@ function Test-CmRipRifle {
 	return $null
 }
 
+# Task 13: the gun choice (vr.Gun, the menu's Gun row) through the simulator, widened, with the files
+# the rip scenarios leave (the cabinet gun and the agents' pistol). Auto at the start: the pistol, or
+# the cabinet gun when the pistol's file is flagged incomplete (HND1 v2 flags at byte 100, 2:
+# complete). The right hand in front of the left eye from 20 s, pointing down past the panel (its ray
+# off the rows: a gun change moves the muzzle, which would move the selection); the first A (30 s)
+# gives it the gun. The menu at 58 s, the stick down twice to Gun, then + three times: the pistol
+# (chosen; "(incomplete)" in the row when it is), the cabinet gun, the arcade gun, each shot with
+# the hand in view (g1-g3), which differ pairwise in the hand's part of the view. Then a start with
+# vr.Gun 1 and the pistol's file away (renamed .hold, back in finally): the cabinet gun.
+function Test-CmGun {
+	foreach ($file in $cmCabinetFile, $cmPistolFile) {
+		if (-not (Test-Path -LiteralPath $file)) { return "no ${file}: run cm-rip-rifle first (the rip scenarios make the guns; the full list does)" }
+	}
+	$complete = ([BitConverter]::ToUInt32([IO.File]::ReadAllBytes($cmPistolFile), 100) -band 2) -ne 0
+	Write-Host "  the agents' pistol's file is flagged $(if ($complete) { 'complete' } else { 'incomplete' })"
+	$name = 'accept-cm-gun'
+	$plus = @(60, 62, 64 | ForEach-Object { "$_=stick right 1 0 150" })
+	$shots = @(61, 63, 65 | ForEach-Object -Begin { $i = 0 } -Process { $i++; "$_=shot g$i" })
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 68; XrSim = $true; Config = $cmWiden
+		At = @('20=pose right 0.1 1.45 -0.3 0 -35') + @(Get-CmStartsXr) + '58=xr left/menu 1 150' +
+			@('58.5=stick right 0 -1 150', '59=stick right 0 -1 150') + $plus + $shots + '66=xr right/b 1 150'
+		Expect = @($(if ($complete) { 'XR: gun: agents'' pistol \(auto\)' } else { 'XR: gun: cabinet gun \(auto: the agents'' pistol is incomplete\)' }),
+			"XR: menu Gun -> Agents' pistol$(if ($complete) { '$' } else { ' \(incomplete\)' })", 'XR: gun: agents'' pistol \(chosen\)',
+			'XR: menu Gun -> Cabinet gun', 'XR: gun: cabinet gun \(chosen\)', 'XR: menu Gun -> Arcade gun', 'XR: gun: arcade gun \(chosen\)')
+		Reject = @('XR: initialisation failed', 'XR: gun: .*not made yet', 'XR: menu (Recenter|Laser|Haptics)') }
+	if ($why) { return $why }
+	$shotFiles = @('t061-g1.png', 't063-g2.png', 't065-g3.png')
+	$why = Test-RunShots $name $shotFiles
+	if ($why) { return $why }
+	$dir = Join-Path $repo "build-win\vrtest\$name"
+	foreach ($pair in @(0, 1), @(0, 2), @(1, 2)) {
+		$why = Invoke-VrCheck 'differ', (Join-Path $dir $shotFiles[$pair[0]]), (Join-Path $dir $shotFiles[$pair[1]]), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
+		if ($why) { return "g$($pair[0] + 1) and g$($pair[1] + 1) look alike: $why" }
+	}
+	$held = "$cmPistolFile.hold"
+	try {
+		if (-not $Reuse) { Move-Item -LiteralPath $cmPistolFile -Destination $held -Force }
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-nopistol'; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=1"
+			Expect = @('XR: gun: cabinet gun \(chosen: the agents'' pistol is not made yet\)')
+			Reject = @('XR: initialisation failed', 'XR: gun: agents'' pistol') }
+	}
+	finally {
+		if (Test-Path -LiteralPath $held) {
+			# (a pistol the run made meanwhile goes: the one held is put back)
+			Remove-Item -LiteralPath $cmPistolFile -Force -ErrorAction SilentlyContinue
+			Move-Item -LiteralPath $held -Destination $cmPistolFile -Force
+		}
+	}
+	if ($why) { return "without the pistol's file: $why" }
+	return $null
+}
+
 # The merge of a gun's captures (hands_build.cpp's mergeCaptures) on synthetic captures, built and run
 # on its own (re\hands_build_test.cmd), then vrcheck.py's selftest; -Reuse changes nothing here.
 function Test-CmMergeUnit {
@@ -1123,6 +1180,8 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-rip-rifle' = 'Test-CmRipRifle'; 'cm-rip-cabinet' = 'Test-CmRipCabinet'; 'cm-rip-hand' = 'Test-CmRipHand'
 	'cm-rip-skip' = 'Test-CmRipSkip'; 'cm-rip-skip-rifle' = 'Test-CmRipSkipRifle'
 	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'
+	# cm-gun after the rip scenarios: it needs the guns' files they leave
+	'cm-gun' = 'Test-CmGun'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File

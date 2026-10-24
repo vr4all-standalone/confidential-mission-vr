@@ -150,7 +150,7 @@ even with the laser off.
 |---|---|
 | Resume | closes the menu |
 | Recenter | the view goes where you face; the menu stays open, in front of you |
-| Gun | the gun drawn: Auto, Agents' pistol, Cabinet gun or Arcade gun (`vr.Gun`; for now each draws the arcade gun) |
+| Gun | the gun in your hand: Auto, Agents' pistol, Cabinet gun or Arcade gun (`vr.Gun`; see The guns below). A gun not made yet is skipped; an agents' pistol made without all of it says "(incomplete)" and can still be chosen. The new gun shows at once, while the game is paused |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
@@ -165,9 +165,13 @@ Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
 
 Sega's NAOMI light-gun game from 2000, with its own profile:
 
-- **The arcade gun in your hand.** The red arcade gun. The agents' own pistol, taken from your
-  copy of the game, is planned. Until then, reload by shooting away from the view, or with B
-  (the cabinet's second button reloads in this game).
+- **The guns.** The agents' own pistol in your hand, or the game's cabinet gun, or the red
+  arcade gun: the menu's Gun row. The pistol and the cabinet gun (and the assault rifle) are
+  made from your own copy of the game, on the first start (a minute or two, only once: B skips
+  it, and the arcade gun stays for that session); nothing of the game comes with this app.
+  Auto takes the agents' pistol when all of it was made, else the cabinet gun, else the arcade
+  gun; a gun chosen that isn't made yet falls back the same way. Reload by shooting away from
+  the view, or with B (the cabinet's second button reloads in this game).
 - **A wider view, inside the game.** The game draws and culls a wider view itself: stage 1
   goes from about 61 by 48 degrees to 111 by 95, the story scenes from about 70 degrees across
   to 109. Its light gun still counts shots only inside the original view: around it the aim
@@ -210,7 +214,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.GunScale` | 0.68 | size of the gun, times the 25 cm arcade gun it is modelled on (also set with grip + thumbstick) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
 | `vr.Haptics` | 2 | the knock in the hand: 0 off, 1 low, 2 normal, 3 strong |
-| `vr.Gun` | 0 | the gun drawn: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun (for now each draws the arcade gun) |
+| `vr.Gun` | 0 | the gun in your hand: 0 auto, 1 the agents' pistol, 2 the cabinet gun, 3 the arcade gun (The guns, below) |
 | `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
 | `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |
@@ -238,7 +242,8 @@ next to `flycast.exe`), under `[config]`. The useful ones:
   and the light gun ray cast.
 - `core/rend/vr/xr_gun.*`, `gun_model.h`: the gun, its effects and shaders.
 - `core/rend/vr/xr_hands.*`, `hands_rip.*`, `hands_build.*`: models made from a game on the
-  player's own device, and drawn in the hands (hotd2-vr's; the agents' pistol is to use them).
+  player's own device, and drawn in the hands (Confidential Mission's guns each their own file,
+  the one in the hand chosen in the menu).
 - `core/rend/vr/xr_panel.*`: a text panel in the headset.
 - `shell/android-studio/.../CmStartActivity.java`, `CmFiles.java`: the start screen and
   finding the game's three files on the headset.

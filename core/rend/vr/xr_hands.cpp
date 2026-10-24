@@ -5,7 +5,8 @@
 	hands.bin in the data directory (little endian, made from the player's own game by
 	hands_rip.cpp, or on the PC by hotd2-vr/assets/rip_hands.py), and in the same format the
 	hero's staff of The Maze of the Kings, staff-mok.bin, and Confidential Mission's guns,
-	gun-cm-*.bin (only the running game's file is read, again when another game starts):
+	gun-cm-*.bin (only the running game's files are read, again when one is made or another game
+	starts; Confidential Mission's guns each on first use):
 		"HND1", u32 version (1, or 2 with the two u32s below)
 		f32 muzzle[3], grab[3], travel, onSlide[16] (column major)
 		version 2: u32 flags (1 gun only: no hand meshes, travel 0; 2 complete: all of the
@@ -30,9 +31,11 @@
 #include "rend/gles/glcache.h"
 #include "cfg/option.h"
 #include "log/Log.h"
+#include "stdclass.h"
 #include "types.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
 #include <cstdio>
 #include <cstring>
@@ -78,31 +81,39 @@ struct Model
 	std::vector<Part> meshes[MeshCount];
 	std::vector<u8> vertices;
 	bool staff = false;	// the hero's staff (its fist off unless vr.StaffHand)
+	u32 flags = 0;		// HND1 v2's (2: complete)
+	GLuint vbo = 0, vao = 0;	// (and the textures' ids) once drawn
 };
-Model model;
-bool tried, loaded;
+// The running game's models: its own (handsModel()), and Confidential Mission's guns, each in
+// the slot of its GunKind (the arcade gun's, 0, is the game's own model's).
+struct Slot
+{
+	Model model;
+	bool tried = false, loaded = false;
+	bool missing = false;	// no file (else unreadable)
+};
+constexpr int GameSlot = 0, Slots = 4;
+Slot slots[Slots];
+std::string gunLogged;	// chosenGun()'s line, as last logged
 
-GLuint program, vbo, vao;
+GLuint program;
 GLint uMvp = -1, uModel = -1, uEye = -1, uSpecular = -1, uShininess = -1, uAlphaTest = -1, uLight = -1, uTex = -1;
 
-bool load()
+// A model's file into `model`; false without one it can read (`missing`: no file at all).
+bool load(Model& model, std::string path, const std::string& legacy, bool& missing)
 {
-	std::string path = hands::modelPath();
-	if (path.empty())
-	{
-		INFO_LOG(RENDERER, "XR: no model of its own for this game, the arcade gun it is");
-		return false;
-	}
+	const std::string first = path;
 	// where older builds had it: the app's internal files
 	FILE *f = nowide::fopen(path.c_str(), "rb");
-	if (f == nullptr && !hands::legacyModelPath().empty())
+	if (f == nullptr && !legacy.empty())
 	{
-		path = hands::legacyModelPath();
+		path = legacy;
 		f = nowide::fopen(path.c_str(), "rb");
 	}
+	missing = f == nullptr;
 	if (f == nullptr)
 	{
-		INFO_LOG(RENDERER, "XR: no %s, the arcade gun it is", hands::modelPath().c_str());
+		INFO_LOG(RENDERER, "XR: no %s, the arcade gun it is", first.c_str());
 		return false;
 	}
 	bool ok = true;
@@ -137,6 +148,7 @@ bool load()
 		sourcePolys = u32At();
 	}
 	model.info.gunOnly = (flags & 1) != 0;
+	model.flags = flags;
 	const u32 textures = u32At();
 	for (u32 i = 0; ok && i < textures && i < 64; i++)
 	{
@@ -267,11 +279,18 @@ void main()
 	uAlphaTest = glGetUniformLocation(program, "alphaTest");
 	uLight = glGetUniformLocation(program, "muzzleLight");
 	uTex = glGetUniformLocation(program, "tex");
+	return true;
+}
 
-	vao = createVertexArray();
-	bindVertexArray(vao);
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+// A model's vertices and textures to the GPU, on its first draw.
+void upload(Model& model)
+{
+	if (model.vao != 0)
+		return;
+	model.vao = createVertexArray();
+	bindVertexArray(model.vao);
+	glGenBuffers(1, &model.vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, model.vbo);
 	glBufferData(GL_ARRAY_BUFFER, model.vertices.size(), model.vertices.data(), GL_STATIC_DRAW);
 	glVertexAttribPointer(VERTEX_POS_ARRAY, 3, GL_FLOAT, GL_FALSE, VertexSize, (const void *)0);
 	glVertexAttribPointer(VERTEX_NORM_ARRAY, 3, GL_FLOAT, GL_FALSE, VertexSize, (const void *)12);
@@ -295,10 +314,9 @@ void main()
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, t.flags & 2 ? GL_CLAMP_TO_EDGE : t.flags & 8 ? GL_MIRRORED_REPEAT : GL_REPEAT);
 	}
 	glcache.BindTexture(GL_TEXTURE_2D, 0);
-	return true;
 }
 
-void drawMesh(int mesh, const glm::mat4& viewProj, const glm::mat4& pose, float specular, float shininess)
+void drawMesh(const Model& model, int mesh, const glm::mat4& viewProj, const glm::mat4& pose, float specular, float shininess)
 {
 	const glm::mat4 mvp = viewProj * pose;
 	glUniformMatrix4fv(uMvp, 1, GL_FALSE, &mvp[0][0]);
@@ -314,39 +332,176 @@ void drawMesh(int mesh, const glm::mat4& viewProj, const glm::mat4& pose, float 
 	}
 }
 
+// A model just made, or another game: every model again, and the gun line.
+void refresh()
+{
+	if (!hands::takeNewModel())
+		return;
+	termHands();
+	for (Slot& slot : slots)
+		slot = Slot();
+	gunLogged.clear();
+}
+
+bool cmGuns()
+{
+	const hands::Source *source = gameModelSource();
+	return source != nullptr && source->kind == hands::Source::CmGuns;
+}
+
 }	// namespace
 
 const HandsModel *handsModel()
 {
-	if (hands::takeNewModel())
+	refresh();
+	if (cmGuns())
+		return gunModel(chosenGun());
+	Slot& slot = slots[GameSlot];
+	if (!slot.tried)
 	{
-		// just made from the game, or another game's: in with it
-		termHands();
-		model = Model();
-		tried = false;
+		slot.tried = true;
+		const std::string path = hands::modelPath();
+		if (path.empty())
+			INFO_LOG(RENDERER, "XR: no model of its own for this game, the arcade gun it is");
+		else
+			slot.loaded = load(slot.model, path, hands::legacyModelPath(), slot.missing);
 	}
-	if (!tried)
+	return slot.loaded ? &slot.model.info : nullptr;
+}
+
+const HandsModel *gunModel(GunKind kind)
+{
+	refresh();
+	if (kind == GunKind::Arcade || !cmGuns())
+		return nullptr;
+	Slot& slot = slots[(int)kind];
+	if (!slot.tried)
 	{
-		tried = true;
-		loaded = load();
+		slot.tried = true;
+		// (GunKind's order is the profile's guns[], the cabinet gun first)
+		const hands::GunTarget& gun = gameModelSource()->guns[(int)kind - 1];
+		slot.missing = true;
+		if (gun.used())
+			slot.loaded = load(slot.model, get_writable_data_path(gun.file), std::string(), slot.missing);
 	}
-	return loaded ? &model.info : nullptr;
+	return slot.loaded ? &slot.model.info : nullptr;
+}
+
+bool gunComplete(GunKind kind)
+{
+	return kind == GunKind::Arcade || (gunModel(kind) != nullptr && (slots[(int)kind].model.flags & 2) != 0);
+}
+
+const char *gunName(GunKind kind)
+{
+	switch (kind)
+	{
+	case GunKind::Cabinet:
+		return "cabinet gun";
+	case GunKind::Pistol:
+		return "agents' pistol";
+	case GunKind::Rifle:
+		return "assault rifle";
+	default:
+		return "arcade gun";
+	}
+}
+
+GunKind chosenGun()
+{
+	refresh();
+	if (!cmGuns())
+		return GunKind::Arcade;	// (another game's own model takes no choosing: handModel())
+	const int setting = std::clamp((int)config::VrGun, 0, 3);
+	const GunKind wanted = setting == 1 ? GunKind::Pistol : setting == 2 ? GunKind::Cabinet : GunKind::Arcade;
+	GunKind kind = GunKind::Arcade;
+	std::string why;	// each gun passed over, and why
+	auto passOver = [&](GunKind gun, const char *how) {
+		why += std::string(why.empty() ? "" : ", ") + "the " + gunName(gun) + how;
+	};
+	auto notThere = [&](GunKind gun) { passOver(gun, slots[(int)gun].missing ? " is not made yet" : " can't be read"); };
+	if (setting == 3)
+		kind = GunKind::Arcade;
+	else if (!config::VrGameHands)
+		why = "the game's own models are off";
+	else if (setting != 0 && gunModel(wanted) != nullptr)
+		kind = wanted;
+	else
+	{
+		// auto, or the one chosen isn't there: the agents' pistol if complete, else the cabinet
+		// gun if there, else the arcade gun
+		if (setting != 0)
+			notThere(wanted);
+		if (wanted != GunKind::Pistol && gunModel(GunKind::Pistol) != nullptr && gunComplete(GunKind::Pistol))
+			kind = GunKind::Pistol;
+		else
+		{
+			if (wanted != GunKind::Pistol)
+			{
+				if (gunModel(GunKind::Pistol) != nullptr)
+					passOver(GunKind::Pistol, " is incomplete");
+				else
+					notThere(GunKind::Pistol);
+			}
+			if (wanted != GunKind::Cabinet && gunModel(GunKind::Cabinet) != nullptr)
+				kind = GunKind::Cabinet;
+			else if (wanted != GunKind::Cabinet)
+				notThere(GunKind::Cabinet);
+		}
+	}
+	const std::string line = std::string(gunName(kind)) + " (" + (setting == 0 ? "auto" : "chosen")
+			+ (why.empty() ? "" : ": " + why) + ")";
+	if (line != gunLogged)
+	{
+		gunLogged = line;
+		NOTICE_LOG(RENDERER, "XR: gun: %s", line.c_str());
+	}
+	return kind;
+}
+
+GunKind handGun(int player)
+{
+	(void)player;
+	return chosenGun();
+}
+
+const HandsModel *handModel(GunKind kind)
+{
+	if (!config::VrGameHands)
+		return nullptr;
+	return cmGuns() ? gunModel(kind) : handsModel();
+}
+
+std::vector<GunChoice> gunChoices()
+{
+	return {
+		{ 0, "Auto", true, true },
+		{ 1, "Agents' pistol", gunModel(GunKind::Pistol) != nullptr, gunComplete(GunKind::Pistol) },
+		{ 2, "Cabinet gun", gunModel(GunKind::Cabinet) != nullptr, gunComplete(GunKind::Cabinet) },
+		{ 3, "Arcade gun", true, true },
+	};
 }
 
 void drawHands(const glm::mat4& viewProj, const glm::vec3& eyePos, const HandsView& view)
 {
-	if (handsModel() == nullptr || !initGl())
+	Model *found = nullptr;
+	for (Slot& slot : slots)
+		if (slot.loaded && view.model == &slot.model.info)
+			found = &slot.model;
+	if (found == nullptr || !initGl())
 		return;
+	Model& model = *found;
+	upload(model);
 	glcache.UseProgram(program);
 	glUniform3f(uEye, eyePos.x, eyePos.y, eyePos.z);
 	glUniform4f(uLight, view.muzzleLight.x, view.muzzleLight.y, view.muzzleLight.z, view.muzzleLight.w);
 	glUniform1i(uTex, 0);
 	glActiveTexture(GL_TEXTURE0);
-	bindVertexArray(vao);
+	bindVertexArray(model.vao);
 
 	// metal with a sheen, skin and cotton matt
-	drawMesh(MeshFrame, viewProj, view.gunPose, 0.35f, 40.f);
-	drawMesh(MeshSlide, viewProj, glm::translate(view.gunPose, glm::vec3(0.f, 0.f, view.slide)), 0.45f, 50.f);
+	drawMesh(model, MeshFrame, viewProj, view.gunPose, 0.35f, 40.f);
+	drawMesh(model, MeshSlide, viewProj, glm::translate(view.gunPose, glm::vec3(0.f, 0.f, view.slide)), 0.45f, 50.f);
 	// The hero's gloves came out mirrored in the headset (the other hand a right glove on
 	// the left controller: the one around his staff seems to be his left), so both are
 	// drawn mirrored in x about their own origin; the staff itself stays as it is.
@@ -354,9 +509,9 @@ void drawHands(const glm::mat4& viewProj, const glm::vec3& eyePos, const HandsVi
 	// (the hero's fist sits where the player's own hand is, but made for a staff held
 	// upright: it looked better left out)
 	if (!model.staff || config::VrStaffHand)
-		drawMesh(MeshGunHand, viewProj, view.gunPose * gloves, 0.06f, 10.f);
+		drawMesh(model, MeshGunHand, viewProj, view.gunPose * gloves, 0.06f, 10.f);
 	if (view.otherHand)
-		drawMesh(MeshOpenHand, viewProj, view.handPose * gloves, 0.06f, 10.f);
+		drawMesh(model, MeshOpenHand, viewProj, view.handPose * gloves, 0.06f, 10.f);
 
 	bindVertexArray(0);
 	glcache.BindTexture(GL_TEXTURE_2D, 0);
@@ -367,16 +522,22 @@ void termHands()
 {
 	if (program != 0)
 		glcache.DeleteProgram(program);
-	if (vbo != 0)
-		glDeleteBuffers(1, &vbo);
-	deleteVertexArray(vao);
-	for (Texture& t : model.textures)
-		if (t.id != 0)
-		{
-			glcache.DeleteTextures(1, &t.id);
-			t.id = 0;
-		}
-	program = vbo = vao = 0;
+	program = 0;
+	for (Slot& slot : slots)
+	{
+		Model& model = slot.model;
+		if (model.vbo != 0)
+			glDeleteBuffers(1, &model.vbo);
+		if (model.vao != 0)
+			deleteVertexArray(model.vao);
+		model.vbo = model.vao = 0;
+		for (Texture& t : model.textures)
+			if (t.id != 0)
+			{
+				glcache.DeleteTextures(1, &t.id);
+				t.id = 0;
+			}
+	}
 	uMvp = uModel = uEye = uSpecular = uShininess = uAlphaTest = uLight = uTex = -1;
 }
 

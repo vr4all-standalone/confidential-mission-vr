@@ -1294,8 +1294,8 @@ bool adjustWorldSize(XrTime time, const glm::vec2& stick)
 		config::saveFloat("config", "vr.WorldScale", config::VrWorldScale);
 		NOTICE_LOG(RENDERER, "XR: world size %.4f m per game unit", (float)config::VrWorldScale);
 	}
-	// the size of whichever pistol is drawn
-	const bool game = gameGun();
+	// the size of whichever pistol is drawn (player 1's)
+	const bool game = gameGun(handGun(guns[0].player));
 	config::Option<float>& gunSize = game ? config::VrHandScale : config::VrGunScale;
 	const char *gunKey = game ? "vr.HandScale" : "vr.GunScale";
 	if (!vertical && std::abs(s.x) > 0.5f)
@@ -1494,14 +1494,16 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 			NOTICE_LOG(INPUT, "XR: %s hand at %.3f %.3f %.3f from the aim pose (%s)", g.hand == Right ? "right" : "left",
 					palm.x, palm.y, palm.z, fromRuntime ? "runtime" : "fallback");
 		}
-		const bool game = gameGun();
+		// the gun in this hand (Task 14: the rifle for a while), its model and muzzle
+		const GunKind kind = handGun(g.player);
+		const bool game = gameGun(kind);
 		const float gunScale = std::clamp(game ? (float)config::VrHandScale : (float)config::VrGunScale, 0.4f, 1.6f);
 		// the game's pistol is in a right hand: mirrored for the left
 		const bool mirror = game && g.hand == Left;
 		const glm::mat4 placement = gunPlacement(game, gunScale, palm, mirror);
 		// Shots leave the muzzle along the barrel, so the aim line and the hit agree. Into
 		// rebuilt game eye space for the hit test.
-		const glm::vec3 o = glm::vec3(pose * placement * glm::vec4(gunMuzzle(), 1.f));
+		const glm::vec3 o = glm::vec3(pose * placement * glm::vec4(gunMuzzle(kind), 1.f));
 		const glm::vec3 d = rot * glm::vec3(0, 0, -1);
 		const float s = worldScale();
 		const glm::vec3 og = glm::vec3(o.x, -o.y, o.z) / s;
@@ -1527,13 +1529,14 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		const glm::vec3 hand = palm;
 		// A long one (the hero's staff, its head 75 cm out) tips up less: its muzzle rises no
 		// more than one 40 cm from the hand would. Every pistol here is shorter.
-		const float reach = glm::distance(glm::vec3(placement * glm::vec4(gunMuzzle(), 1.f)), hand);
+		const float reach = glm::distance(glm::vec3(placement * glm::vec4(gunMuzzle(kind), 1.f)), hand);
 		const float tip = std::min(1.f, 0.4f / std::max(reach, 0.01f));
 		glm::mat4 recoilMat = glm::translate(glm::mat4(1.f), glm::vec3(0.f, 0.f, 0.035f * kick) + hand);
 		recoilMat = glm::rotate(recoilMat, glm::radians(18.f * tip * kick), glm::vec3(1, 0, 0));
 		recoilMat = glm::rotate(recoilMat, glm::radians(6.f * tip * twist * std::max(kick, 0.f)), glm::vec3(0, 1, 0));
 		recoilMat = glm::translate(recoilMat, -hand);
 		GunView& view = g.view;
+		view.kind = kind;
 		view.pose = pose * recoilMat * placement;
 		// (the game's pistol has a smaller muzzle than the arcade gun's lens)
 		view.scale = game ? gunScale * 0.8f : gunScale;
@@ -1552,7 +1555,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		g.visible = config::VrShowGun && holds(g.hand) == Holds::Gun;
 		// (the slide and the open hand only for a gun that's held: not while the hand holds its controller)
 		// (a gun alone, Confidential Mission's: no hand of the game's for the other one)
-		if (game && slide && !handsModel()->gunOnly && holds(g.hand) == Holds::Gun)
+		if (game && slide && !handModel(kind)->gunOnly && holds(g.hand) == Holds::Gun)
 			updateOtherHand(time, 1 - g.hand, tracked[1 - g.hand], locations[1 - g.hand], pose * placement, gunScale, mirror);
 		else
 		{
@@ -1809,7 +1812,7 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 		{
 			// a line from the controller (the glow pass's muzzle is its pose times the muzzle)
 			view = GunView();
-			view.pose = glm::translate(glm::mat4(1.f), ray.origin - gunMuzzle());
+			view.pose = glm::translate(glm::mat4(1.f), ray.origin - gunMuzzle(view.kind));
 			view.restMuzzle = ray.origin;
 			view.restForward = ray.dir;
 			view.now = time * 1e-9;

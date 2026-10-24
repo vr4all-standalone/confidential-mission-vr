@@ -10,6 +10,7 @@
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
 #pragma once
+#include "xr_hands.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -34,13 +35,14 @@ constexpr glm::vec3 ModelPalm { 0.f, -0.018f, 0.062f };
 // 1.1.49; this app asks for 1.0.34).
 constexpr glm::vec3 HandPalm { 0.f, -0.078f, 0.068f };
 
-// The pistol drawn: the agent's own from the game (xr_hands.h; in The Maze of the Kings
-// the hero's staff) when the running game has one and vr.GameHands is on, else the arcade
-// gun. Model space is then gun space of xr_hands.h, with its origin in the fist (for a gun
-// alone, gun only in HND1 v2, Confidential Mission's: the top of its grip, where the fist goes).
-bool gameGun();
-// The muzzle in model space, of whichever pistol it is.
-glm::vec3 gunMuzzle();
+// Whether a hand holding `kind` (handGun()) draws a model from the game (xr_hands.h
+// handModel(): the agent's own pistol, in The Maze of the Kings the hero's staff, in
+// Confidential Mission the gun of that kind) rather than the arcade gun. Model space is then
+// gun space of xr_hands.h, with its origin in the fist (for a gun alone, gun only in HND1 v2,
+// Confidential Mission's: the top of its grip, where the fist goes).
+bool gameGun(GunKind kind);
+// The muzzle in model space, of whichever pistol a hand holding `kind` draws.
+glm::vec3 gunMuzzle(GunKind kind);
 
 // Model space -> gun space: the model's grip on the hand (palm, gun space), at `scale`
 // times the model's own size (arcade gun, vr.GunScale: 1 is 24.7 cm long, 17.1 cm tall;
@@ -68,7 +70,8 @@ struct GunView
 	bool aimOutside = false;	// ...greyed: the game can't hit there (outside its own view)
 	glm::vec3 aimPoint { 0.f };	// room space
 	int player = 0;				// whose gun: player 1's aim is red, player 2's blue
-	// The game's pistol only (gameGun()):
+	GunKind kind = GunKind::Arcade;	// the gun in the hand (handGun()): the model, its muzzle and flash
+	// The game's pistol only (gameGun(kind)):
 	float slide = 0.f;			// metres its slide is back, in model space
 	bool otherHand = false;		// the open hand on the other controller, or racking the slide...
 	glm::mat4 handPose { 1.f };	// ...hand space (xr_hands.h) -> room space

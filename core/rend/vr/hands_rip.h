@@ -44,7 +44,8 @@ struct Source
 	Parts pistol {};		// AgentsPistol: the textures in the game over scene
 	StaffParts staff {};	// HerosStaff: the textures in the attract demo and the story's intro
 	GunTarget guns[3] {};	// CmGuns: the guns, each its own file (the cabinet gun first; unused: no file)
-	// The file modelPath() names (CmGuns: the cabinet gun's, until Task 13 chooses)
+	// The file modelPath() names (CmGuns: the cabinet gun's, for the "made before" line; the
+	// headset reads each gun's own file: xr_hands.h gunModel())
 	const char *modelFile() const { return kind == CmGuns ? guns[0].file : file; }
 	const char *name() const {
 		return kind == CmGuns ? "the guns" : kind == HerosStaff ? "the hero's staff" : "the agent's hands and pistol";

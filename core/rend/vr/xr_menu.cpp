@@ -4,6 +4,7 @@
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
 #include "xr_menu.h"
+#include "xr_hands.h"
 #include "xr_host.h"
 #include "xr_panel.h"
 #include "cfg/cfg.h"
@@ -28,9 +29,6 @@ constexpr int Left = 0, Right = 1;
 
 const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Laser", "Haptics", "World size", "Panel distance",
 		"Wider view", "Show controls", "Quit" };
-// vr.Gun's choices, round and round. (Task 13 decides Auto, and draws the chosen gun; until then
-// every choice draws the arcade gun.)
-const char *const GunNames[4] { "Auto", "Agents' pistol", "Cabinet gun", "Arcade gun" };
 const char *const HapticsNames[4] { "Off", "Low", "Normal", "Strong" };
 
 glm::mat4 model { 1.f };	// the panel: its middle, facing the player (+z)
@@ -63,6 +61,15 @@ struct WidenRegistration
 	}
 } widenRegistration;
 
+// vr.Gun's place in its choices (xr_hands.h gunChoices(); not there: Auto's)
+int gunAt(const std::vector<GunChoice>& choices)
+{
+	for (size_t i = 0; i < choices.size(); i++)
+		if (choices[i].setting == config::VrGun)
+			return (int)i;
+	return 0;
+}
+
 bool stepper(int row) {
 	return row == Gun || row == Haptics || row == WorldSize || row == PanelDistance;
 }
@@ -76,7 +83,12 @@ std::string value(int row)
 	switch (row)
 	{
 	case Gun:
-		return GunNames[std::clamp((int)config::VrGun, 0, 3)];
+	{
+		// a gun not made yet shows dimmed (only when vr.Gun names it: the row skips it)
+		const std::vector<GunChoice> choices = gunChoices();
+		const GunChoice& gun = choices[gunAt(choices)];
+		return std::string(gun.label) + (!gun.made ? " (not made yet)" : !gun.complete ? " (incomplete)" : "");
+	}
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
 	case Haptics:
@@ -105,6 +117,11 @@ RowsPanel panel()
 		r.value = value(row);
 		r.selected = row == selected;
 		r.stepper = stepper(row);
+		if (row == Gun)
+		{
+			const std::vector<GunChoice> choices = gunChoices();
+			r.dim = !choices[gunAt(choices)].made;
+		}
 		p.rows.push_back(r);
 	}
 	// (the font has no menu button sign)
@@ -120,9 +137,18 @@ void change(int row, int dir, int hand)
 	{
 	case Gun:
 	{
-		const int gun = (std::clamp((int)config::VrGun, 0, 3) + dir + 4) % 4;
-		config::VrGun.set(gun);
-		config::saveInt("config", "vr.Gun", gun);
+		// the next one each way, round and round, skipping those not made yet
+		const std::vector<GunChoice> choices = gunChoices();
+		const int n = (int)choices.size();
+		int at = gunAt(choices);
+		for (int i = 0; i < n; i++)
+		{
+			at = (at + dir + n) % n;
+			if (choices[at].made)
+				break;
+		}
+		config::VrGun.set(choices[at].setting);
+		config::saveInt("config", "vr.Gun", choices[at].setting);
 		break;
 	}
 	case Laser:
@@ -169,6 +195,8 @@ void change(int row, int dir, int hand)
 		return;
 	}
 	NOTICE_LOG(INPUT, "XR: menu %s -> %s", Labels[row], value(row).c_str());
+	if (row == Gun)
+		chosenGun();	// (its "XR: gun: ..." line at once)
 }
 
 // A row chosen (A, or a click away from a value row's halves): its action, or + on a value row.
