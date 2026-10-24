@@ -65,7 +65,8 @@ Details:
 ## 5. Gun angle
 
 A new menu row, **Gun angle**, tilts the gun up or down in the hand.
-- **Range (my call):** −30° to +30° in 5° steps; 0° (as in 1.1) is the default.
+- **Range:** −30° to +30° in **1° steps** (the user: "make it tilt at 1 degree steps not 5"). 0° (as in 1.1) is the default. The range is my call.
+- **Repeat on hold (my call):** holding the stick on this row repeats the step, about 10 steps a second after a short delay, so a big change doesn't take 30 flicks. Whether other stepper rows repeat too is up to the builder.
 - **What it moves (my call):** it rotates the drawn gun around the hand's side-to-side axis, at the grip. The aim ray, the laser and the muzzle flash rotate with it, so the shot always leaves along the barrel.
 - **Scope:** it applies to every gun, including the rifle, and to both hands. It is saved.
 - **Labels:** the how-to-play controllers are not affected.
@@ -127,6 +128,35 @@ A new menu row, **Gun angle**, tilts the gun up or down in the hand.
 **No game content:** no game artwork, cover or screenshot, and none of the game's on-screen text. Only our own words and badges.
 
 **First-start gun step:** the start screen says the first start makes the guns from the player's own files, once. If the in-headset first-start step shows text, word it to match: "Making your guns from your game files (once)". Also check whether that step can run faster without losing quality; report what you find either way.
+
+## 7. Controllers during cutscenes
+
+The user: "for the in game cutscenes if you can during them go back to oculus controller and when game start come back to gun".
+
+During the game's story cutscenes, each hand shows its Quest controller model instead of the gun. When play resumes, the guns come back.
+- **Which controller model:** the same one the how-to-play phase draws (the bundled or player-folder file controllers, the runtime model, or the built-in shape).
+- **Labels (my call):** no how-to-play labels during cutscenes, just the controllers.
+- **What counts as a cutscene:** a span where the game shows a non-interactive scene during a game in progress. That covers the stage intros and story scenes between and inside stages.
+  - Attract mode and the title screen already have their own behaviour; leave them as they are.
+  - Detection is the builder's research. Possible sources: a game-state value in RAM (see `hotd2-vr/notes/confmiss-findings.md`), or the game's own "gun input ignored" state, e.g. the HUD/ammo display or the reticle being absent.
+  - The detection must not flicker. If a scene can be skipped with a shot or Start, the guns must come back the moment play resumes.
+  - Record what was found in `confmiss-findings.md`, with addresses and the method, and no game text.
+- **Player 2:** a hand that is player 2's follows the same rule.
+- **If it can't be done:** if no reliable signal can be found, say so in the report with what was tried, rather than shipping a heuristic that flickers mid-fight.
+
+## 8. New how-to-play labels
+
+The how-to-play labels use the user's exact text:
+
+| Controller | Labels |
+|---|---|
+| Right | A - P1 Start · B - P1 Reload · Trigger - P1 Shoot · Stick - Laser |
+| Left | X - P2 Start · Y - P2 Reload · Trigger - P2 Shoot · Stick - Recenter |
+
+- **Stick:** "Stick" means the stick click: the right stick toggles the laser, the left stick recenters.
+- **Menu label (my call):** the left controller's Menu label stays as it is, so players can find the settings menu. The user can drop it at the headset round.
+- **Check the mapping:** confirm in code that the left trigger really is player 2's shot. If the left trigger fires for player 1 before player 2 joins, the labels still use the user's text, and the report must say so.
+- **Docs:** README and the checklist use the same list.
 
 ## Declined: shipping the in-game guns
 
