@@ -4,8 +4,10 @@
 	and a panel of rows (xr_panel.h) stands in front of them. Either hand points at a row and its
 	trigger chooses (on a row with - and +, the left half is -, the right half +); the stick moves
 	the selection (up and down, wrapping) and is - and + (left and right); A chooses (+ on a value
-	row); the menu button or B closes it. Each change is saved in emu.cfg at once. Quit asks to be
-	chosen again within 3 s; once it quits, the menu takes nothing more.
+	row); the menu button or B closes it. Each change is saved in emu.cfg at once. How to play shows
+	the controllers with their labels in both hands while the menu stays open (chosen again, or the
+	menu closing, ends it; xr_host.h setHowToPlay). Quit asks to be chosen again within 3 s; once it
+	quits, the menu takes nothing more.
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -15,7 +17,7 @@
 namespace vr::xr::menu
 {
 
-enum Row { Resume, Recenter, Gun, Laser, Haptics, WorldSize, PanelDistance, WiderView, ShowControls, Quit, Rows };
+enum Row { Resume, Recenter, Gun, Laser, Haptics, WorldSize, PanelDistance, WiderView, HowToPlay, Quit, Rows };
 
 // What the controllers did in a headset frame. The buttons are edges (just pressed); the rays,
 // one per hand (0 left, 1 right), are in the game camera's room space, with their trigger's click.

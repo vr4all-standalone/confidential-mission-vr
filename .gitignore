@@ -40,6 +40,10 @@ staff*.bin
 HND1*.bin
 gun-*.bin
 
+# hotd2-vr: the models a release build comes with (guns/, controllers/, CREDITS.txt) are other people's
+# work under their own licences: filled by hand for a build (README, Releasing), never committed
+hotd2-vr/models/
+
 # hotd2-vr: VR Light Gun Hub's release key lives outside the repository (make-release-key.ps1);
 # never commit a key or its password. Flycast's own playstore.jks stays tracked.
 release-signing.properties

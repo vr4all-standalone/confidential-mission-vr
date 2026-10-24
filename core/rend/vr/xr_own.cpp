@@ -46,8 +46,16 @@ std::string folderOf(const std::string& path)
 	return slash == std::string::npos ? std::string() : path.substr(0, slash);
 }
 
-// Where the folders may be: next to flycast.exe (the PC), next to the game's zip.
-std::vector<std::string> roots()
+// A place the folders may be, and what the log puts before guns/..., controllers/... from it
+struct Root
+{
+	std::string dir;
+	std::string shown;
+};
+
+// Where the folders may be: the player's, next to flycast.exe (the PC) and next to the game's zip;
+// then the bundled set, <data>/models (the release builds': last, so a player's file goes first).
+std::vector<Root> roots()
 {
 	std::vector<std::string> r;
 #ifdef _WIN32
@@ -68,7 +76,15 @@ std::vector<std::string> roots()
 	const std::string content = folderOf(settings.content.path);
 	if (!content.empty() && std::find(r.begin(), r.end(), content) == r.end())
 		r.push_back(content);
-	return r;
+	std::vector<Root> all;
+	for (const std::string& dir : r)
+		all.push_back({ dir, "" });
+	std::string bundled = get_writable_data_path("models");
+	while (!bundled.empty() && (bundled.back() == '/' || bundled.back() == '\\'))
+		bundled.pop_back();
+	if (!bundled.empty() && std::find(r.begin(), r.end(), bundled) == r.end())
+		all.push_back({ bundled, "bundled models/" });
+	return all;
 }
 
 bool isDir(const std::string& path)
@@ -304,42 +320,65 @@ bool readFile(const std::string& path, std::vector<u8>& data, size_t maxBytes)
 
 void scan()
 {
-	std::string gunsDir, controllersDir;
-	for (const std::string& root : roots())
+	// Every root's guns/*.glb, a file name (case aside) from the first root that has it, then in
+	// file-name order (at most 32); each hand's controller from the first root with its GLB. The
+	// folders there, for the log.
+	struct Found
 	{
-		if (gunsDir.empty() && isDir(root + "/guns"))
-			gunsDir = root + "/guns";
-		if (controllersDir.empty() && isDir(root + "/controllers"))
-			controllersDir = root + "/controllers";
-	}
-	// the guns in file-name order (at most 32)
-	std::vector<std::string> names;
-	if (!gunsDir.empty())
-		if (DIR *dir = flycast::opendir(gunsDir.c_str()))
+		std::string dir, name, shown;	// its folder, its file name, the log's prefix (bundled models/)
+	};
+	std::vector<Found> found;
+	Found hands[2];
+	std::vector<std::string> folders;
+	std::vector<std::string> earlier;	// the stems of the roots before, lower case
+	for (const Root& root : roots())
+	{
+		const std::string gunsDir = root.dir + "/guns", controllersDir = root.dir + "/controllers";
+		std::vector<std::string> stems;
+		if (isDir(gunsDir))
 		{
-			while (dirent *e = flycast::readdir(dir))
+			folders.push_back(gunsDir);
+			if (DIR *dir = flycast::opendir(gunsDir.c_str()))
 			{
-				const std::string name = e->d_name;
-				if (name.size() > 4 && lower(name.substr(name.size() - 4)) == ".glb")
-					names.push_back(name);
+				while (dirent *e = flycast::readdir(dir))
+				{
+					const std::string name = e->d_name;
+					if (name.size() <= 4 || lower(name.substr(name.size() - 4)) != ".glb")
+						continue;
+					const std::string stem = lower(name.substr(0, name.size() - 4));
+					if (std::find(earlier.begin(), earlier.end(), stem) == earlier.end())
+					{
+						found.push_back({ gunsDir, name, root.shown });
+						stems.push_back(stem);
+					}
+				}
+				flycast::closedir(dir);
 			}
-			flycast::closedir(dir);
 		}
-	std::sort(names.begin(), names.end(), [](const std::string& a, const std::string& b) { return lower(a) < lower(b); });
-	if (names.size() > 32)
-		names.resize(32);
-	// each folder on its own: a change in one doesn't read the other again
-	std::string gunsSig = gunsDir, controllersSig = controllersDir;
-	std::vector<std::string> gunStamps;
-	for (const std::string& name : names)
-	{
-		const std::string stem = name.substr(0, name.size() - 4);
-		gunStamps.push_back(stamp(gunsDir + "/" + name) + ":" + stamp(gunsDir + "/" + stem + ".json"));
-		gunsSig += "|" + name + ":" + gunStamps.back();
+		earlier.insert(earlier.end(), stems.begin(), stems.end());
+		if (isDir(controllersDir))
+		{
+			folders.push_back(controllersDir);
+			for (int hand : { 0, 1 })
+				if (hands[hand].dir.empty() && stamp(controllersDir + (hand == 0 ? "/left.glb" : "/right.glb")) != "-")
+					hands[hand] = { controllersDir, hand == 0 ? "left" : "right", root.shown };
+		}
 	}
-	for (const char *hand : { "left", "right" })
-		if (!controllersDir.empty())
-			controllersSig += std::string("|") + hand + ":" + stamp(controllersDir + "/" + hand + ".glb") + ":" + stamp(controllersDir + "/" + hand + ".json");
+	std::sort(found.begin(), found.end(), [](const Found& a, const Found& b) { return lower(a.name) < lower(b.name); });
+	if (found.size() > 32)
+		found.resize(32);
+	// each kind on its own: a change in the guns doesn't read the controllers again, nor the other way
+	std::string gunsSig, controllersSig;
+	std::vector<std::string> gunStamps;
+	for (const Found& f : found)
+	{
+		const std::string stem = f.name.substr(0, f.name.size() - 4);
+		gunStamps.push_back(stamp(f.dir + "/" + f.name) + ":" + stamp(f.dir + "/" + stem + ".json"));
+		gunsSig += "|" + f.dir + "/" + f.name + ":" + gunStamps.back();
+	}
+	for (const Found& h : hands)
+		if (!h.dir.empty())
+			controllersSig += "|" + h.dir + "/" + h.name + ":" + stamp(h.dir + "/" + h.name + ".glb") + ":" + stamp(h.dir + "/" + h.name + ".json");
 	const bool gunsChanged = !scanned || gunsSig != gunsSignature;
 	const bool controllersChanged = !scanned || controllersSig != controllersSignature;
 	scanned = true;
@@ -351,10 +390,11 @@ void scan()
 		gunsSignature = gunsSig;
 		gunScans++;
 		std::vector<GunFile> next;
-		for (size_t i = 0; i < names.size(); i++)
+		for (size_t i = 0; i < found.size(); i++)
 		{
+			const Found& at = found[i];
 			GunFile f;
-			f.path = gunsDir + "/" + names[i];
+			f.path = at.dir + "/" + at.name;
 			f.stamp = gunStamps[i];
 			// the same files as last time: not looked at again
 			const auto same = std::find_if(gunFiles.begin(), gunFiles.end(),
@@ -364,24 +404,16 @@ void scan()
 				next.push_back(*same);
 				continue;
 			}
-			f.shown = "guns/" + names[i];
-			f.stem = names[i].substr(0, names[i].size() - 4);
-			if (readGun(f, gunsDir + "/" + f.stem + ".json", "guns/" + f.stem + ".json"))
+			f.shown = at.shown + "guns/" + at.name;
+			f.stem = at.name.substr(0, at.name.size() - 4);
+			if (readGun(f, at.dir + "/" + f.stem + ".json", at.shown + "guns/" + f.stem + ".json"))
 				lookAtGlb(f);
+			// (no total across the guns: only the chosen one is read, each capped on its own)
+			f.usable = f.fault.empty();
+			f.why = f.fault;
 			next.push_back(f);
 		}
 		gunFiles = std::move(next);
-		// the budget, in file-name order: a gun that would take the textures over it is left out
-		size_t total = 0;
-		for (GunFile& f : gunFiles)
-		{
-			f.usable = f.fault.empty() && f.textureBytes <= GunTextureBudget - total;
-			f.why = !f.fault.empty() ? f.fault : f.usable ? std::string()
-					: "its textures (" + megabytes(f.textureBytes) + ") would take the folder's guns over "
-						+ megabytes(GunTextureBudget) + " (make-gun.py makes them smaller)";
-			if (f.usable)
-				total += f.textureBytes;
-		}
 	}
 	if (controllersChanged)
 	{
@@ -391,21 +423,25 @@ void scan()
 		{
 			ControllerFile& f = controllerFiles[hand];
 			f = ControllerFile();
-			if (controllersDir.empty())
+			const Found& at = hands[hand];
+			if (at.dir.empty())
 				continue;
-			const std::string base = hand == 0 ? "left" : "right";
-			f.path = controllersDir + "/" + base + ".glb";
-			f.shown = "controllers/" + base + ".glb";
-			f.stamp = stamp(f.path) + ":" + stamp(controllersDir + "/" + base + ".json");
+			f.path = at.dir + "/" + at.name + ".glb";
+			f.shown = at.shown + "controllers/" + at.name + ".glb";
+			f.stamp = stamp(f.path) + ":" + stamp(at.dir + "/" + at.name + ".json");
 			f.present = stamp(f.path) != "-";
 			if (f.present)
-				readController(f, controllersDir + "/" + base + ".json", "controllers/" + base + ".json");
+				readController(f, at.dir + "/" + at.name + ".json", at.shown + "controllers/" + at.name + ".json");
 		}
 	}
-	if (!gunsDir.empty() || !controllersDir.empty())
-		NOTICE_LOG(RENDERER, "XR: own models from %s%s%s (%zu guns, controllers%s%s)", gunsDir.c_str(),
-				!gunsDir.empty() && !controllersDir.empty() ? " and " : "", controllersDir.c_str(), gunFiles.size(),
+	if (!folders.empty())
+	{
+		std::string where;
+		for (const std::string& folder : folders)
+			where += (where.empty() ? "" : ", ") + folder;
+		NOTICE_LOG(RENDERER, "XR: own models from %s (%zu guns, controllers%s%s)", where.c_str(), gunFiles.size(),
 				controllerFiles[0].present ? " left" : "", controllerFiles[1].present ? " right" : (controllerFiles[0].present ? "" : " none"));
+	}
 	// each gun whose state changed
 	for (GunFile& f : gunFiles)
 	{

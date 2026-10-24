@@ -7,6 +7,7 @@ import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.Uri;
@@ -36,6 +37,12 @@ import com.flycast.emulator.periph.InputDeviceManager;
 import com.flycast.emulator.periph.SipEmulator;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -105,6 +112,7 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
             return;
         }
         Log.i("flycast", "Environment initialized");
+        copyBundledModels(homeDir);
         Emulator app = (Emulator)getApplicationContext();
         app.getConfigurationPrefs();
         storage = new AndroidStorage(this);
@@ -250,6 +258,93 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
             }
             activity.finish();
         });
+    }
+
+    // hotd2-vr: the models that come with the app (assets/models: guns/, controllers/ and CREDITS.txt, in
+    // the vr build when hotd2-vr/models was there to build it with) copied to <home>/data/models, the
+    // data folder's models/ where the native side looks for them last (get_writable_data_path("models"),
+    // xr_own.cpp). Copied again only when the app was installed or updated since the last copy (its
+    // versionName and install time, in models/.installed) or a file is missing; a new copy replaces the
+    // old one whole, and an APK with none removes an old copy. Small (a few MB): on this thread, before
+    // the native side looks.
+    private void copyBundledModels(String homeDir)
+    {
+        File data = new File(homeDir, "data");
+        File models = new File(data, "models");
+        File stamp = new File(models, ".installed");
+        try {
+            List<String> files = new ArrayList<>();
+            listAssets("models", files);
+            if (files.isEmpty()) {
+                if (stamp.exists()) {
+                    deleteTree(models);
+                    Log.i("flycast", "Bundled models: none in this app, the old copy removed");
+                }
+                return;
+            }
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            String version = info.versionName + " " + info.lastUpdateTime;
+            boolean current = stamp.exists() && version.equals(readText(stamp));
+            for (String f : files)
+                current = current && new File(data, f).isFile();
+            if (current)
+                return;
+            deleteTree(models);
+            byte[] buffer = new byte[65536];
+            for (String f : files) {
+                File target = new File(data, f);
+                File parent = target.getParentFile();
+                if (parent != null && !parent.isDirectory() && !parent.mkdirs())
+                    throw new IOException("cannot make " + parent);
+                File part = new File(target.getPath() + ".part");
+                try (InputStream in = getAssets().open(f); OutputStream out = new FileOutputStream(part)) {
+                    int n;
+                    while ((n = in.read(buffer)) > 0)
+                        out.write(buffer, 0, n);
+                }
+                if (!part.renameTo(target))
+                    throw new IOException("cannot rename " + part);
+            }
+            try (OutputStream out = new FileOutputStream(stamp)) {
+                out.write(version.getBytes(StandardCharsets.UTF_8));
+            }
+            Log.i("flycast", "Bundled models: " + files.size() + " files copied to " + models);
+        } catch (Exception e) {
+            Log.w("flycast", "Bundled models: copying to " + models + " failed", e);
+        }
+    }
+
+    // The files under an assets folder, as paths from the assets' root (an empty folder: none).
+    private void listAssets(String path, List<String> out) throws IOException
+    {
+        String[] names = getAssets().list(path);
+        if (names == null || names.length == 0) {
+            if (path.contains("/"))
+                out.add(path);
+            return;
+        }
+        for (String name : names)
+            listAssets(path + "/" + name, out);
+    }
+
+    private static String readText(File file) throws IOException
+    {
+        byte[] bytes = new byte[(int)Math.min(file.length(), 4096)];
+        try (InputStream in = new FileInputStream(file)) {
+            int at = 0, n;
+            while (at < bytes.length && (n = in.read(bytes, at, bytes.length - at)) > 0)
+                at += n;
+            return new String(bytes, 0, at, StandardCharsets.UTF_8);
+        }
+    }
+
+    private static void deleteTree(File file)
+    {
+        File[] children = file.listFiles();
+        if (children != null)
+            for (File child : children)
+                deleteTree(child);
+        file.delete();
     }
 
     private void setStorageDirectories()

@@ -48,12 +48,14 @@
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
   cm-own-gun and cm-own-controllers (Task 14b, the player's own models) play accept-cm-own-gun and -nosidecar,
   accept-cm-own-controllers and -right with re\make-own-models.py's fixtures (self-made boxes) written into
-  build-win\guns\ and build-win\controllers\ meanwhile; they, cm-controllers and cm-controllers-rt first move any
-  guns\ and controllers\ folders aside (.accept-hold), next to build-win\flycast.exe and in $env:VRLGH_GAMES, and back
-  after (a player's own models there are left as they were). cm-own-gun needs cm-gun's rip files. cm-own-gun-file
-  plays accept-cm-own-gun-file: the gun accept-cm-own-gun's menu saved, played again with a file sorting before it
-  (it plays cm-own-gun first without its emu.cfg.after). own-folders: the folders' restore when a fixture can't be
-  removed (no game run).
+  build-win\guns\ and build-win\controllers\ meanwhile; they, cm-controllers, cm-controllers-rt and cm-bundled first move
+  any guns\ and controllers\ folders aside (.accept-hold), next to build-win\flycast.exe and in $env:VRLGH_GAMES, and the
+  bundled models' folder build-win\data\models too, and back after (a player's own models and the bundled ones are left
+  as they were). cm-own-gun needs cm-gun's rip files. cm-own-gun-file plays accept-cm-own-gun-file: the gun
+  accept-cm-own-gun's menu saved, played again with a file sorting before it (it plays cm-own-gun first without its
+  emu.cfg.after). own-folders: the folders' restore when a fixture can't be removed (no game run; a player's
+  build-win\guns\ goes to guns.own-folders-hold meanwhile). cm-bundled (S37) plays accept-cm-bundled: fixtures in the
+  player's folders and in a bundled folder of its own (build-win\data\models), merged file by file.
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
 $ErrorActionPreference = 'Stop'
@@ -748,31 +750,40 @@ function Test-SpikeKeys {
 	return $null
 }
 
-# The controller models (xr_controllers.h) through the simulator, in stage 1's first room: the
-# free (left) hand moved in front of the left eye at 56 s, a window shot with it there at 57 s,
-# the hand moved away (below and behind the head) at 57.5 s and another shot at 58 s. The left
-# eye's view differs where the controller was ($cmControllerBox: around it, below the enemy's
-# feet, left of the gun's laser; without a controller the two shots differ there by ~0.3, with
-# the built-in shape by ~17). The simulator lists no XR_FB_render_model: the built-in shape.
+# The controller models (xr_controllers.h) through the simulator, before play starts (S36: the controllers are drawn only
+# while how to play shows): the free (left) hand moved in front of the left eye at 24 s, a window shot with it there at
+# 25 s, the hand moved away (below and behind the head) at 25.5 s and another shot at 26 s. The left eye's view differs
+# where the controller was ($cmControllerBox: around it; with the built-in shape by ~17). The same again in stage 1's
+# first room at 56-58 s, in play, where the two shots differ there by ~0.3 without a controller: the left hand holds no
+# gun, so nothing is drawn there now (cm-controllers checks it). The simulator lists no XR_FB_render_model: the built-in shape.
 $cmControllerBox = '0.32,0.62,0.5,0.88'
 function Get-CmControllersParams([string]$name, [string]$config) {
 	@{ Game = 'confmiss'; Name = $name; Seconds = 62; XrSim = $true; Config = $config
-		At = @(Get-CmStartsXr) + '56=pose left -0.1 1.45 -0.3 0 0', '57=shot in', '57.5=pose left -0.1 0.2 0.5 0 0', '58=shot out'
+		At = @('24=pose left -0.1 1.45 -0.3 0 0', '25=shot in', '25.5=pose left -0.1 0.2 0.5 0 0', '26=shot out') + @(Get-CmStartsXr) +
+			'56=pose left -0.1 1.45 -0.3 0 0', '57=shot playin', '57.5=pose left -0.1 0.2 0.5 0 0', '58=shot playout'
 		Reject = @('XR: initialisation failed') }
 }
 function Test-CmControllers { Invoke-OwnFolders { Test-CmControllersRun } }
 function Test-CmControllersRun {
 	$name = 'accept-cm-controllers'
 	$params = Get-CmControllersParams $name $cmWidenArcade
-	$params.Expect = 'XR: runtime extensions: ', 'XR: controller models built in \(the runtime has no XR_FB_render_model\)'
+	$params.Expect = 'XR: runtime extensions: ', 'XR: controller models built in \(the runtime has no XR_FB_render_model\)',
+		'XR: controllers shown: left and right$', 'XR: controllers shown: none$'
 	$params.Reject += 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime'
 	$why = Invoke-VrTest $params
 	if ($why) { return $why }
-	$why = Test-RunShots $name 't057-in.png', 't058-out.png'
+	$why = Test-RunShots $name 't025-in.png', 't026-out.png', 't057-playin.png', 't058-playout.png'
 	if ($why) { return $why }
 	$dir = Join-Path $repo "build-win\vrtest\$name"
-	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), (Join-Path $dir 't058-out.png'), '--box', $cmControllerBox
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-in.png'), (Join-Path $dir 't026-out.png'), '--box', $cmControllerBox
 	if ($why) { return "no controller in the left hand: $why" }
+	$why = Invoke-VrCheck 'same', (Join-Path $dir 't057-playin.png'), (Join-Path $dir 't058-playout.png'), '--box', $cmControllerBox
+	if ($why) { return "a controller drawn in the left hand in play: $why" }
+	# the controllers go with the first Start (how to play ends) and stay gone
+	$n = Get-LogCount $name 'XR: controllers shown: ' -From 29 -To 62
+	$none = Get-LogCount $name 'XR: controllers shown: none$' -From 29 -To 62
+	Write-Host "  $n lines 'XR: controllers shown' at 29-62 s, $none of them none (want 1 and 1: the first Start)"
+	if ($n -ne 1 -or $none -ne 1) { return "$n lines 'XR: controllers shown' after the first Start ($none none), want one none" }
 	return $null
 }
 
@@ -804,9 +815,9 @@ function Test-CmControllersRtRun {
 		return 'want the models unavailable first and then from the runtime (the retry)'
 	}
 	Write-Host "  PASS retry: unavailable (line $($first.LineNumber)), then from the runtime (line $($loaded.LineNumber))"
-	$why = Test-RunShots $name 't057-in.png', 't058-out.png'
+	$why = Test-RunShots $name 't025-in.png', 't026-out.png'
 	if ($why) { return $why }
-	$builtIn = Join-Path $repo 'build-win\vrtest\accept-cm-controllers\t057-in.png'
+	$builtIn = Join-Path $repo 'build-win\vrtest\accept-cm-controllers\t025-in.png'
 	if (-not (Test-Path -LiteralPath $builtIn) -and -not $Reuse) {
 		Write-Host '  (no cm-controllers shot to compare with: playing accept-cm-controllers)'
 		$why = Test-CmControllers
@@ -814,54 +825,72 @@ function Test-CmControllersRtRun {
 	}
 	if (-not (Test-Path -LiteralPath $builtIn)) { return "no $builtIn to compare with" }
 	$dir = Join-Path $repo "build-win\vrtest\$name"
-	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), (Join-Path $dir 't058-out.png'), '--box', $cmControllerBox
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-in.png'), (Join-Path $dir 't026-out.png'), '--box', $cmControllerBox
 	if ($why) { return "no controller in the left hand: $why" }
-	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), $builtIn, '--box', $cmControllerBox
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-in.png'), $builtIn, '--box', $cmControllerBox
 	if ($why) { return "the runtime's model looks like the built-in one: $why" }
 	return $null
 }
 
-# What each hand holds and the how-to-play labels (Task 9) through the simulator, widened: the
-# right hand in front of the left eye from 20 s, a controller with its labels (shots at 25, 27 s); the
-# first A (30 s) gives it the gun and the labels go (shot at 35 s). X lets player 2 join at 60 s
-# (the left hand takes its gun), player 2 idles out at ~70 s (findings p2out: a controller
-# again). The menu at 90 s, the right stick up twice (from Resume it wraps to Quit, then Show
-# controls) and A: both hands controllers with labels again, until the right trigger's pull at
-# 94 s gives the gun back. The menu again at 96 s, Show controls chosen by the right trigger and
-# held through the close: the labels stay. The labels and the gun differ in the right hand's part
-# of the view.
+# What each hand holds and the how-to-play labels (Task 9, S36, S36b) through the simulator, widened: the right hand
+# in front of the left eye from 20 s, a controller with its labels (shots at 25, 27 s); the first A (30 s) gives it the
+# gun, and the labels and the controllers go (shot at 35 s): once play starts a hand without a gun draws nothing. X lets
+# player 2 join at 60 s (the left hand takes its gun), player 2 idles out at ~70 s (findings p2out: the left hand
+# without a gun again). The menu at 90 s, the right stick up twice (from Resume it wraps to Quit, then How to play) and
+# A at 91.5 s: how to play on (both hands controllers with labels), the menu still open; A again at 92.5 s turns it
+# off, at 93.5 s on. The menu button closes the menu at 95 s, which ends it: the gun back, nothing drawn in the left
+# hand. The trigger's pull at 96 s is the game's: it fires. The menu again at 97 s, How to play chosen with the right
+# trigger at 98.5 s (held 1 s) and the menu closed by B at 99 s while it is held: that pull is the menu's, nothing
+# fires; the next pull (101 s, the hand back on the game) does. The log's clock runs ~0.2 s behind these times.
+# (From 89.5 s to 95.5 s the right hand points down, off the panel: its pointer would take the row from the stick.)
 function Test-CmHands {
 	$name = 'accept-cm-hands'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 102; XrSim = $true; Config = $cmWidenArcade
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 104; XrSim = $true; Config = $cmWidenArcade
 		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '27=shot labels2') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
-			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150',
-			'94=xr right/trigger 1 100', '96=xr left/menu 1 150', "96.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 8 -U 0.5)",
-			'97=xr right/trigger 1 800')
+			'89.5=pose right 0.1 1.45 -0.3 0 -50', '90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150', '92.5=xr right/a 1 150',
+			'93.5=xr right/a 1 150', '95=xr left/menu 1 150', '95.5=pose right 0.1 1.45 -0.3 0 0', '96=xr right/trigger 1 100', '97=xr left/menu 1 150',
+			"97.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 8 -U 0.5)", '98.5=xr right/trigger 1 1000', '99=xr right/b 1 150',
+			'100=pose right 0.1 1.45 -0.3 0 0', '101=xr right/trigger 1 100')
 		Expect = 'XR: labels off \(start\)', 'XR: right hand: controller -> gun \(start\)',
 			'XR: left hand: controller -> gun \(player 2 joins\)', 'XR: left hand: gun -> controller \(player 2 out\)',
-			'XR: show controls', 'XR: right hand: controller -> gun \(shot\)'
-		Reject = @('XR: initialisation failed') }
+			'XR: menu How to play$', 'XR: how to play on$', 'XR: right hand: gun -> controller \(how to play\)', 'XR: labels on \(how to play\)',
+			'XR: how to play off \(chosen\)$', 'XR: right hand: controller -> gun \(chosen\)', 'XR: how to play off \(menu closed\)$',
+			'XR: right hand: controller -> gun \(menu closed\)', 'XR: labels off \(menu closed\)', 'XR: menu pointer click on How to play'
+		Reject = @('XR: initialisation failed', 'XR: show controls', 'XR: labels off \(shot\)') }
 	if ($why) { return $why }
-	# Show controls chosen by the trigger (97 s), held through the menu's close: that pull isn't the
-	# game's next one, so the labels stay (one "labels off (shot)", from 94 s, for two Show controls).
-	$shows = Get-LogCount $name 'XR: show controls$'
-	$offs = Get-LogCount $name 'XR: labels off \(shot\)'
-	Write-Host "  $shows lines 'XR: show controls' (want 2), $offs lines 'XR: labels off (shot)' (want 1)"
-	if ($shows -ne 2 -or $offs -ne 1) { return "Show controls by the trigger: $shows show controls, $offs labels off (shot)" }
+	# from, to (s, the log's clock), the regex, the count wanted ('+': at least one), what it shows
+	$checks = @(
+		@(90.5, 94.5, 'XR: how to play on$', 2, 'A on the row turns it on'),
+		@(90.5, 94.5, 'XR: how to play off \(chosen\)$', 1, 'A again turns it off'),
+		@(90.5, 94.5, 'XR: menu closed', 0, 'the menu stays open after the choice'),
+		@(94.5, 95.5, 'XR: how to play off \(menu closed\)$', 1, 'closing the menu ends it'),
+		@(94.5, 95.5, 'XR: controllers shown: none$', 1, 'nothing drawn once the menu closed'),
+		@(95.5, 96.7, 'XR: player 1 shot', '+', 'the pull after the close is the game''s'),
+		@(95.5, 97.8, 'XR: controllers shown: (left|right)', 0, 'no controller drawn with the menu closed'),
+		@(98.0, 98.6, 'XR: how to play on$', 1, 'the trigger on the row turns it on'),
+		@(98.6, 99.6, 'XR: how to play off \(menu closed\)$', 1, 'B ends it'),
+		@(98.0, 100.6, 'XR: player 1 shot', 0, 'the pull held through the close is the menu''s'),
+		@(99.6, 104, 'XR: controllers shown: (left|right)', 0, 'no controller drawn with the menu closed'),
+		@(100.6, 101.8, 'XR: player 1 shot', '+', 'the next pull is the game''s'))
+	foreach ($c in $checks) {
+		$n = Get-LogCount $name $c[2] -From $c[0] -To $c[1]
+		$good = if ("$($c[3])" -eq '+') { $n -ge 1 } else { $n -eq $c[3] }
+		Write-Host "  $(if ($good) { 'PASS' } else { 'FAIL' }) $n lines '$($c[2])' at $($c[0])-$($c[1]) s (want $($c[3]): $($c[4]))"
+		if (-not $good) { return "$($c[4]): $n lines '$($c[2])' at $($c[0])-$($c[1]) s, want $($c[3])" }
+	}
 	$why = Test-RunShots $name 't025-labels.png', 't027-labels2.png', 't035-gun.png'
 	if ($why) { return $why }
 	$dir = Join-Path $repo "build-win\vrtest\$name"
 	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-labels.png'), (Join-Path $dir 't035-gun.png'), '--box', '0.3,0.3,0.9,0.95'
 	if ($why) { return "the labels and the gun look the same: $why" }
-	# The game's screen changes between those two as well. The left hand's part of the view: its
-	# controller the same in both, only its labels go (around them: their dark plates are near the
-	# room's black, the letters do it); and with nothing done (25, 27 s) the same.
+	# The game's screen changes between those two as well. The left hand's part of the view: its controller and labels at
+	# 25 s, nothing there once play starts (S36); and with nothing done (25, 27 s) the same.
 	$left = '0.25,0.74,0.43,0.9'
 	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-labels.png'), (Join-Path $dir 't035-gun.png'), '--box', $left
-	if ($why) { return "the left hand's labels didn't go: $why" }
+	if ($why) { return "the left hand's controller didn't go: $why" }
 	$why = Invoke-VrCheck 'same', (Join-Path $dir 't025-labels.png'), (Join-Path $dir 't027-labels2.png'), '--box', $left
 	if ($why) { return "the left hand's labels changed with nothing done: $why" }
-	return Test-ArmingShot $name
+	return $null
 }
 
 # The pull that gives back the gun ('labels off (shot)') fires too: player 1's shot logged within
@@ -1321,25 +1350,33 @@ function Test-CmMergeUnit {
 }
 
 # Task 14b: the folders of the player's own models, guns\ and controllers\, next to build-win\flycast.exe and next to
-# the zip ($env:VRLGH_GAMES): moved aside (<folder>.accept-hold) while $body runs, back after. -Fixture: these
-# arguments to re\make-own-models.py, which writes its fixtures into build-win meanwhile (gone after); its
-# "muzzle x y z" line in $ownMuzzle, its "textures <stem> <bytes>" lines in $ownTextures. $body's output is the scenario's ($null: passed).
+# the zip ($env:VRLGH_GAMES), and the bundled models' folder build-win\data\models (S37: the PC zip's data\models, looked
+# at last): moved aside (<folder>.accept-hold) while $body runs, back after. -Fixture: these arguments to
+# re\make-own-models.py, which writes its fixtures into build-win meanwhile (gone after); its "muzzle x y z" line in
+# $ownMuzzle, its "textures <stem> <bytes>" lines in $ownTextures. -Bundled: the same into build-win\data\models (a
+# bundled set of the harness's own, gone after). $body's output is the scenario's ($null: passed).
 $ownMuzzle = $null
 $ownTextures = [ordered]@{}
-function Invoke-OwnFolders([scriptblock]$body, [string[]]$Fixture = @()) {
+$ownBundled = Join-Path $repo 'build-win\data\models'
+function Invoke-OwnFolders([scriptblock]$body, [string[]]$Fixture = @(), [string[]]$Bundled = @()) {
 	$held = @()
-	$wrote = $false
+	$made = @()
 	try {
-		foreach ($root in @((Join-Path $repo 'build-win'), $env:VRLGH_GAMES) | Where-Object { $_ }) {
-			foreach ($sub in 'guns', 'controllers') {
-				$dir = Join-Path $root $sub
-				if (Test-Path -LiteralPath "$dir.accept-hold") { throw "$dir.accept-hold is there from a run that died: put it back as $dir first" }
-				if (Test-Path -LiteralPath $dir) { Move-Item -LiteralPath $dir -Destination "$dir.accept-hold"; $held += $dir }
-			}
+		$dirs = @(foreach ($root in @((Join-Path $repo 'build-win'), $env:VRLGH_GAMES) | Where-Object { $_ }) {
+			foreach ($sub in 'guns', 'controllers') { Join-Path $root $sub } }) + $ownBundled
+		foreach ($dir in $dirs) {
+			if (Test-Path -LiteralPath "$dir.accept-hold") { throw "$dir.accept-hold is there from a run that died: put it back as $dir first" }
+			if (Test-Path -LiteralPath $dir) { Move-Item -LiteralPath $dir -Destination "$dir.accept-hold"; $held += $dir }
+		}
+		$maker = Join-Path $PSScriptRoot 're\make-own-models.py'
+		if ($Bundled) {
+			$made += $ownBundled
+			$out = @(& python -I $maker $ownBundled @Bundled)
+			if ($LASTEXITCODE -ne 0) { return "make-own-models.py (bundled) $($Bundled -join ' '): exit $LASTEXITCODE $out" }
 		}
 		if ($Fixture) {
-			$wrote = $true
-			$out = @(& python -I (Join-Path $PSScriptRoot 're\make-own-models.py') (Join-Path $repo 'build-win') @Fixture)
+			$made += @((Join-Path $repo 'build-win\guns'), (Join-Path $repo 'build-win\controllers'))
+			$out = @(& python -I $maker (Join-Path $repo 'build-win') @Fixture)
 			if ($LASTEXITCODE -ne 0) { return "make-own-models.py $($Fixture -join ' '): exit $LASTEXITCODE $out" }
 			$script:ownMuzzle = @($out | Where-Object { $_ -match '^muzzle ' } | ForEach-Object { @(($_ -split ' ')[1..3] | ForEach-Object { [double]::Parse($_, $inv) }) })
 			$script:ownTextures = [ordered]@{}
@@ -1351,12 +1388,9 @@ function Invoke-OwnFolders([scriptblock]$body, [string[]]$Fixture = @()) {
 		# a fixture folder that can't be removed (a file kept open): a held folder stays in .accept-hold (moved back it
 		# would land inside the leftover as guns\guns.accept-hold) and the scenario fails saying so
 		$stuck = @()
-		if ($wrote) {
-			foreach ($sub in 'guns', 'controllers') {
-				$dir = Join-Path $repo "build-win\$sub"
-				Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
-				if (Test-Path -LiteralPath $dir) { $stuck += $dir }
-			}
+		foreach ($dir in $made) {
+			Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+			if (Test-Path -LiteralPath $dir) { $stuck += $dir }
 		}
 		foreach ($dir in $held) {
 			if (Test-Path -LiteralPath $dir) {
@@ -1386,25 +1420,23 @@ function Get-LogVec([string]$run, [string]$prefix) {
 # (vrcheck hues, against the agents' pistol's shot at 60.6 s: the arcade gun is red too). Then without its sidecar (accept-cm-own-gun-nosidecar, vr.Gun=4): the
 # box gun skipped with why, the hand's gun as Auto's with "(chosen: boxgun is not there".
 # Fix round 1: only the chosen gun is read and put on the GPU (mipmapped), the others only looked at ("offered");
-# tex-a, tex-b, tex-c (128 MB of textures each) against the folder's 256 MB budget, which ones go over derived from
-# the fixture's "textures" lines in file-name order; the body's 8 green slabs merged (10 primitives in 3 parts); the
-# sidecars with 1e39, a huge up and a far muzzle skipped with why.
-$ownBudget = 256MB	# xr_own.h GunTextureBudget
+# tex-a, tex-b, tex-c (128 MB of textures each, 384 MB in all): each offered, there is no total across the guns (S40:
+# a gun's textures are capped on their own), and each gun's offered or skipped line logged once; the body's 8 green
+# slabs merged (10 primitives in 3 parts); the sidecars with 1e39, a huge up and a far muzzle skipped with why.
+$ownOldBudget = 256MB	# the folder total there was before S40
 function Test-CmOwnGun {
 	$why = Invoke-OwnFolders -Fixture '--guns' {
 		$name = 'accept-cm-own-gun'
-		$total = [long]0
 		$fixtureSum = [long]0
-		$budgetLines = @()
+		$offeredLines = @()
 		foreach ($stem in @($ownTextures.Keys | Sort-Object)) {
 			$bytes = $ownTextures[$stem]
 			$fixtureSum += $bytes
 			$mb = [regex]::Escape(($bytes / 1MB).ToString('0.0', $inv))
-			if ($total + $bytes -le $ownBudget) { $total += $bytes; $budgetLines += "XR: own gun guns.$([regex]::Escape($stem))\.glb offered: .*, $mb MB\)$" }
-			else { $budgetLines += "XR: own gun guns.$([regex]::Escape($stem))\.glb skipped: its textures \($mb MB\) would take the folder's guns over 256\.0 MB" }
+			$offeredLines += "XR: own gun guns.$([regex]::Escape($stem))\.glb offered: .*, $mb MB\)$"
 		}
-		if ($fixtureSum -le $ownBudget) { return "the fixture's textures ($fixtureSum bytes) don't go over the budget ($ownBudget)" }
-		Write-Host "  the fixture's textures: $fixtureSum bytes against the budget's $ownBudget"
+		if ($fixtureSum -le $ownOldBudget) { return "the fixture's textures ($fixtureSum bytes) aren't over the old folder total ($ownOldBudget)" }
+		Write-Host "  the fixture's textures: $fixtureSum bytes, over the old folder total of $($ownOldBudget): all offered"
 		$plus = @(60, 61, 62, 64 | ForEach-Object { "$_=stick right 1 0 150" })
 		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 68; XrSim = $true; Config = "$cmWiden,config:vr.HandScale=1"
 			At = @('20=pose right 0.1 1.45 -0.3 0 -35') + @(Get-CmStartsXr) + '58=xr left/menu 1 150' +
@@ -1415,10 +1447,16 @@ function Test-CmOwnGun {
 				'XR: own gun guns.bad-inf\.glb skipped: "grip" is not 3 numbers from -1000000 to 1000000$',
 				'XR: own gun guns.bad-up\.glb skipped: "up" is not 3 numbers from -1000000 to 1000000$',
 				'XR: own gun guns.bad-far\.glb skipped: "muzzle" is [\d.]+ from the model, over twice its size \(2\)',
-				'XR: menu Gun -> Arcade gun$', 'XR: menu Gun -> Box gun$', 'XR: gun: Box gun \(chosen\)$', 'XR: P1 muzzle: Box gun at ') + $budgetLines
+				'XR: menu Gun -> Arcade gun$', 'XR: menu Gun -> Box gun$', 'XR: gun: Box gun \(chosen\)$', 'XR: P1 muzzle: Box gun at ') + $offeredLines
 			Reject = @('XR: initialisation failed', 'XR: menu Gun -> Big grid', 'XR: gun: Box gun \(auto', 'XR: menu (Recenter|Laser|Haptics)',
-				'XR: own gun "(?!Box gun")[^"]*" (from|on the GPU)') }
+				'XR: own gun "(?!Box gun")[^"]*" (from|on the GPU)', 'would take the folder''s guns over') }
 		if ($why) { return $why }
+		# each gun's state logged once (a scan logs a gun again only when it changed; the menu's opening scans again)
+		foreach ($stem in @($ownTextures.Keys) + 'zz-big', 'bad-inf', 'bad-up', 'bad-far') {
+			$n = Get-LogCount $name "XR: own gun guns.$([regex]::Escape($stem))\.glb (offered|skipped)"
+			if ($n -ne 1) { return "$n lines 'XR: own gun guns/$stem.glb offered/skipped', want 1" }
+		}
+		Write-Host "  each gun's offered or skipped line once"
 		$palm = Get-LogVec $name 'XR: right hand at '
 		$muzzle = Get-LogVec $name 'XR: P1 muzzle: Box gun at '
 		if (-not $palm -or -not $muzzle -or -not $ownMuzzle) { return 'no hand, muzzle or fixture muzzle line to compare' }
@@ -1471,37 +1509,49 @@ function Test-CmOwnGunFile {
 # The harness's restore (Task 14b fix round 1, finding 7), no game run: a stand-in for the player's build-win\guns\ is
 # held aside while a fixture is written there, one of the fixture's files kept open so its removal fails: the
 # scenario must fail saying so, with the stand-in left in guns.accept-hold, not moved into the leftover fixture
-# folder. Needs build-win without guns\ and guns.accept-hold.
+# folder. A real build-win\guns\ (the player's) is moved to guns.own-folders-hold meanwhile and back after.
 function Test-OwnFolders {
 	$guns = Join-Path $repo 'build-win\guns'
-	foreach ($p in $guns, "$guns.accept-hold") { if (Test-Path -LiteralPath $p) { return "$p is there: move it aside for this test" } }
-	New-Item -ItemType Directory -Path $guns | Out-Null
-	Set-Content -LiteralPath (Join-Path $guns 'player.txt') -Value 'a stand-in for the own models of a player'
-	$script:ownLock = $null
+	$aside = "$guns.own-folders-hold"
+	foreach ($p in "$guns.accept-hold", $aside) { if (Test-Path -LiteralPath $p) { return "$p is there from a run that died: put it back first" } }
+	$moved = Test-Path -LiteralPath $guns
+	if ($moved) { Move-Item -LiteralPath $guns -Destination $aside }
 	try {
-		$why = Invoke-OwnFolders -Fixture '--guns' { $script:ownLock = [IO.File]::Open((Join-Path $guns 'boxgun.glb'), 'Open', 'Read', 'None'); $null }
+		New-Item -ItemType Directory -Path $guns | Out-Null
+		Set-Content -LiteralPath (Join-Path $guns 'player.txt') -Value 'a stand-in for the own models of a player'
+		$script:ownLock = $null
+		try {
+			$why = Invoke-OwnFolders -Fixture '--guns' { $script:ownLock = [IO.File]::Open((Join-Path $guns 'boxgun.glb'), 'Open', 'Read', 'None'); $null }
+		}
+		catch { $why = "threw: $_" }
+		finally { if ($script:ownLock) { $script:ownLock.Close() } }
+		$nested = Test-Path -LiteralPath (Join-Path $guns 'guns.accept-hold')
+		$kept = Test-Path -LiteralPath "$guns.accept-hold\player.txt"
+		Write-Host "  Invoke-OwnFolders said: $why"
+		Write-Host "  the stand-in kept in guns.accept-hold: $kept; moved into the leftover folder: $nested"
+		# (all of it the test's own: the fixture's leftovers and the stand-in)
+		Remove-Item -LiteralPath $guns, "$guns.accept-hold" -Recurse -Force -ErrorAction SilentlyContinue
+		if ($nested) { return 'the held folder was moved into the fixture folder that could not be removed (guns\guns.accept-hold)' }
+		if (-not $kept) { return 'the held folder is not in guns.accept-hold after the failed removal' }
+		if ("$why" -notmatch 'could not be removed') { return "the scenario did not fail on the failed removal: $why" }
+		return $null
 	}
-	catch { $why = "threw: $_" }
-	finally { if ($script:ownLock) { $script:ownLock.Close() } }
-	$nested = Test-Path -LiteralPath (Join-Path $guns 'guns.accept-hold')
-	$kept = Test-Path -LiteralPath "$guns.accept-hold\player.txt"
-	Write-Host "  Invoke-OwnFolders said: $why"
-	Write-Host "  the stand-in kept in guns.accept-hold: $kept; moved into the leftover folder: $nested"
-	# (all of it the test's own: the fixture's leftovers and the stand-in)
-	Remove-Item -LiteralPath $guns, "$guns.accept-hold" -Recurse -Force -ErrorAction SilentlyContinue
-	if ($nested) { return 'the held folder was moved into the fixture folder that could not be removed (guns\guns.accept-hold)' }
-	if (-not $kept) { return 'the held folder is not in guns.accept-hold after the failed removal' }
-	if ("$why" -notmatch 'could not be removed') { return "the scenario did not fail on the failed removal: $why" }
-	return $null
+	finally {
+		if ($moved) {
+			Remove-Item -LiteralPath $guns -Recurse -Force -ErrorAction SilentlyContinue	# (the test's own leftovers, if any)
+			if (Test-Path -LiteralPath $guns) { Write-Host "  !! $guns could not be removed: the player's guns are in $aside; put them back by hand" -ForegroundColor Red }
+			else { Move-Item -LiteralPath $aside -Destination $guns }
+		}
+	}
 }
 
 # The player's own controllers (Task 14b) through the simulator, as cm-controllers: re\make-own-models.py's box controller
 # (controllers\left.glb, right.glb + .json: in cm, two parts, its aim node 2 cm up and 6 cm forward, tilted 30 degrees) in
-# both hands; the left hand in front of the eye at 56 s (no gun in it) differs from the built-in controller there
+# both hands; the left hand in front of the eye at 24 s (before play starts) differs from the built-in controller there
 # (cm-controllers' shot). Without left.glb (accept-cm-own-controllers-right): the left hand's file isn't read and its
 # shot differs from the box's (the built-in shape is back), the right hand's still is.
 function Test-CmOwnControllers {
-	$builtIn = Join-Path $repo 'build-win\vrtest\accept-cm-controllers\t057-in.png'
+	$builtIn = Join-Path $repo 'build-win\vrtest\accept-cm-controllers\t025-in.png'
 	if (-not (Test-Path -LiteralPath $builtIn) -and -not $Reuse) {
 		Write-Host '  (no cm-controllers shot to compare with: playing accept-cm-controllers)'
 		$why = Test-CmControllers
@@ -1513,12 +1563,12 @@ function Test-CmOwnControllers {
 		$params.Expect = 'XR: controller model from controllers.left\.glb \(36 triangles, 3 primitives in 2 parts\)', 'XR: controller model from controllers.right\.glb \(36 triangles, 3 primitives in 2 parts\)'
 		$why = Invoke-VrTest $params
 		if ($why) { return $why }
-		$why = Test-RunShots $name 't057-in.png', 't058-out.png'
+		$why = Test-RunShots $name 't025-in.png', 't026-out.png'
 		if ($why) { return $why }
 		$dir = Join-Path $repo "build-win\vrtest\$name"
-		$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), (Join-Path $dir 't058-out.png'), '--box', $cmControllerBox
+		$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-in.png'), (Join-Path $dir 't026-out.png'), '--box', $cmControllerBox
 		if ($why) { return "no controller in the left hand: $why" }
-		$why = Invoke-VrCheck 'differ', (Join-Path $dir 't057-in.png'), $builtIn, '--box', $cmControllerBox
+		$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-in.png'), $builtIn, '--box', $cmControllerBox
 		if ($why) { return "the box controller looks like the built-in one: $why" }
 		return $null
 	}
@@ -1530,11 +1580,28 @@ function Test-CmOwnControllers {
 		$params.Reject += 'XR: controller model from controllers.left'
 		$why = Invoke-VrTest $params
 		if ($why) { return $why }
-		$why = Test-RunShots $right 't057-in.png'
+		$why = Test-RunShots $right 't025-in.png'
 		if ($why) { return $why }
-		$why = Invoke-VrCheck 'differ', (Join-Path $repo "build-win\vrtest\$right\t057-in.png"), (Join-Path $repo "build-win\vrtest\$name\t057-in.png"), '--box', $cmControllerBox
+		$why = Invoke-VrCheck 'differ', (Join-Path $repo "build-win\vrtest\$right\t025-in.png"), (Join-Path $repo "build-win\vrtest\$name\t025-in.png"), '--box', $cmControllerBox
 		if ($why) { return "without left.glb the left hand still looks like the box: $why" }
 		return $null
+	}
+}
+
+# The bundled models (S37) and the player's, merged file by file: re\make-own-models.py's fixtures in the player's
+# folders (build-win\guns: the box gun alone; build-win\controllers: right.glb alone) and in a bundled folder of the
+# harness's own, build-win\data\models (the box gun, aa-early "Early gun", both controllers). The player's boxgun.glb goes
+# instead of the bundled one, the player's right.glb replaces only the right hand's (the left hand's comes from the
+# bundled set), the bundled aa-early is offered and chosen (vr.Gun 4, vr.GunFile aa-early), and the log names the
+# bundled files "bundled models/...". The user's own and bundled models are held aside meanwhile.
+function Test-CmBundled {
+	return Invoke-OwnFolders -Fixture '--guns', '--only-box', '--controllers', '--only-right' -Bundled '--guns', '--only-box', '--early', '--controllers' {
+		Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-bundled'; Seconds = 20; XrSim = $true; Config = "$cmWiden,config:vr.Gun=4,config:vr.GunFile=aa-early"
+			Expect = @('XR: own models from .*models.* \(2 guns, controllers',
+				'XR: own gun bundled models.guns.aa-early\.glb offered: "Early gun"', 'XR: own gun guns.boxgun\.glb offered: "Box gun"',
+				'XR: own gun "Early gun" from bundled models.guns.aa-early\.glb', 'XR: gun: Early gun \(chosen\)$',
+				'XR: controller model from bundled models.controllers.left\.glb \(36 triangles', 'XR: controller model from controllers.right\.glb \(36 triangles')
+			Reject = @('XR: initialisation failed', 'bundled models.guns.boxgun', 'bundled models.controllers.right') }
 	}
 }
 
@@ -1555,7 +1622,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-rifle-sim' = 'Test-CmRifleSim'; 'cm-rifle-p2' = 'Test-CmRifleP2'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'cm-own-gun' = 'Test-CmOwnGun'; 'cm-own-gun-file' = 'Test-CmOwnGunFile'; 'cm-own-controllers' = 'Test-CmOwnControllers'
-	'own-folders' = 'Test-OwnFolders'
+	'own-folders' = 'Test-OwnFolders'; 'cm-bundled' = 'Test-CmBundled'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

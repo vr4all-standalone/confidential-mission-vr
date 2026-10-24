@@ -4,7 +4,8 @@
 
     confidential-mission-vr-quest.apk   the Quest app (Quest 3, 3S, 2, Pro)
     confidential-mission-vr-pcvr.zip    the PC version with VR on (flycast.exe, emu.cfg, README.txt,
-                                        LICENSE.txt, Play Confidential Mission.cmd)
+                                        LICENSE.txt, Play Confidential Mission.cmd; with the bundled
+                                        models also CREDITS.txt and data\models\)
 
   Neither holds anything of the game: the players bring their own, and what the app makes from it
   is made on the spot. Both are checked for that (the names in their file lists: discs, keys,
@@ -12,7 +13,14 @@
   debug key (no release key, see make-release-key.ps1) it is refused, since anyone could sign an
   "update" of the app with that key. The APK is also checked for being Confidential Mission VR
   (its package, version and label, and its start screen the only entry in the headset's library),
-  and the zip for holding exactly its five files, with a README.txt that names no other game.
+  and the zip for holding exactly its files, with a README.txt that names no other game.
+
+  The models that come with the app, hotd2-vr\models (guns\, controllers\ and CREDITS.txt: other
+  people's work under their own licences, filled by hand and never in git): when the folder is
+  there the APK has them as assets/models (the vr build takes the folder) and the zip as
+  data\models\ with CREDITS.txt at its top, the same files in both. Every GLB in either must be
+  named on a "File:" line of its CREDITS.txt (File: guns/zapper.glb), and git must track nothing
+  in hotd2-vr\models; -CheckOnly checks those two as well.
 
   A release is built from a commit, the one its published source is: the working tree must be
   clean (the gamesdk submodule's local change aside), and the APK's versionName (1.1.0-g<commit>),
@@ -63,6 +71,29 @@ function Find-GameData([string]$archive) {
 	} finally { $zip.Dispose() }
 }
 
+# The bundled models' GLBs in a zip or APK (under models/: the APK's assets/models/, the zip's data/models/) that its
+# CREDITS.txt (assets/models/CREDITS.txt, the zip's CREDITS.txt) doesn't name on a "File: <path from models/>" line.
+function Find-UncreditedModels([string]$archive) {
+	$zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $archive).Path)
+	try {
+		$entries = @($zip.Entries | Where-Object { $_.Name })
+		$glbs = @($entries | Where-Object { ($_.FullName -replace '\\', '/') -match '(^|/)models/.+\.glb$' })
+		if (-not $glbs.Count) { return }
+		$credits = $entries | Where-Object { @('assets/models/CREDITS.txt', 'CREDITS.txt') -contains ($_.FullName -replace '\\', '/') } |
+			Select-Object -First 1
+		$text = ''
+		if ($credits) {
+			$reader = New-Object IO.StreamReader($credits.Open())
+			try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+		}
+		foreach ($g in $glbs) {
+			$rel = ($g.FullName -replace '\\', '/') -replace '^(.*?/)?models/', ''
+			if (-not $credits) { "$($g.FullName) (no CREDITS.txt)" }
+			elseif ($text -notmatch "(?m)^\s*File:\s*$([regex]::Escape($rel))\s*$") { $g.FullName }
+		}
+	} finally { $zip.Dispose() }
+}
+
 function Test-Archives([string[]]$archives) {
 	$bad = $false
 	foreach ($a in $archives) {
@@ -74,13 +105,36 @@ function Test-Archives([string[]]$archives) {
 		} else {
 			Write-Host "content check: $(Split-Path -Leaf $a) has no game data names"
 		}
+		$uncredited = @(Find-UncreditedModels $a)
+		if ($uncredited.Count) {
+			$bad = $true
+			Write-Host "$a has models its CREDITS.txt doesn't name (a File: line each):" -ForegroundColor Red
+			$uncredited | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+		} else {
+			Write-Host "credits check: $(Split-Path -Leaf $a) names every model it has in its CREDITS.txt"
+		}
 	}
 	-not $bad
 }
 
+# hotd2-vr\models is never in git (other people's models, under their own licences; .gitignore)
+function Test-ModelsUntracked {
+	$ErrorActionPreference = 'Continue'
+	$tracked = @(& git -C $repo ls-files -- hotd2-vr/models 2>$null)
+	if ($LASTEXITCODE -ne 0) { Write-Host 'git ls-files failed: hotd2-vr\models not checked' -ForegroundColor Red; return $false }
+	if ($tracked.Count) {
+		Write-Host 'git tracks files in hotd2-vr\models, never released that way (git rm --cached them):' -ForegroundColor Red
+		$tracked | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+		return $false
+	}
+	Write-Host 'git check: nothing in hotd2-vr\models is tracked'
+	$true
+}
+
 if ($CheckOnly) {
 	# powershell -File passes "a.zip,b.apk" as one string
-	if (Test-Archives ($CheckOnly | ForEach-Object { $_ -split ',' })) { exit 0 } else { exit 1 }
+	$untracked = Test-ModelsUntracked
+	if ((Test-Archives ($CheckOnly | ForEach-Object { $_ -split ',' })) -and $untracked) { exit 0 } else { exit 1 }
 }
 
 function Invoke-Git { $ErrorActionPreference = 'Continue'; & git -C $repo @args 2>$null }
@@ -139,6 +193,7 @@ if (-not $AllowDebugKey) {
 		exit 1
 	}
 }
+if (-not (Test-ModelsUntracked)) { exit 1 }
 
 # the SDK's newest build-tools and a JDK, as build-quest.cmd finds them
 $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
@@ -247,13 +302,47 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item (Join-Path $repo 'build-win\flycast.exe') $stage
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "assets\$playCmd") $stage
+# the models that come with the app, when hotd2-vr\models is there: data\models\ (where flycast.exe looks last, after
+# the player's folders) and their CREDITS.txt at the top; the APK must have the same ones (assets/models)
+$models = Join-Path $PSScriptRoot 'models'
+$modelFiles = @()
+if (Test-Path -LiteralPath $models) {
+	foreach ($sub in 'guns', 'controllers') {
+		$from = Join-Path $models $sub
+		if (-not (Test-Path -LiteralPath $from)) { continue }
+		$to = Join-Path $stage "data\models\$sub"
+		New-Item -ItemType Directory -Force $to | Out-Null
+		foreach ($f in @(Get-ChildItem -LiteralPath $from -File | Where-Object { '.glb', '.json' -contains $_.Extension } | Sort-Object Name)) {
+			Copy-Item -LiteralPath $f.FullName $to
+			$modelFiles += "data/models/$sub/$($f.Name)"
+		}
+	}
+	if (Test-Path -LiteralPath (Join-Path $models 'CREDITS.txt')) {
+		Copy-Item -LiteralPath (Join-Path $models 'CREDITS.txt') $stage
+		$modelFiles += 'CREDITS.txt'
+	}
+} else {
+	Write-Host 'No hotd2-vr\models: this release comes without the bundled models (README, Releasing).' -ForegroundColor Yellow
+}
+$a = [IO.Compression.ZipFile]::OpenRead($apk)
+try {
+	$apkModels = @($a.Entries | Where-Object { $_.Name -and $_.FullName -like 'assets/models/*' } |
+		ForEach-Object { $_.FullName.Substring('assets/models/'.Length) } | Sort-Object)
+} finally { $a.Dispose() }
+$wantModels = @($modelFiles | ForEach-Object { $_ -replace '^data/models/', '' } | Sort-Object)
+$modelsGood = ($apkModels -join '|') -eq ($wantModels -join '|')
+if ($modelsGood) { Write-Host "models check: the APK and the zip have the same $($wantModels.Count) bundled model files" }
+else {
+	Write-Host ("The APK's bundled models ($($apkModels -join ', ')) are not those of hotd2-vr\models ($($wantModels -join ', ')): " +
+		'build again without -SkipBuild.') -ForegroundColor Red
+}
 Set-Content -Path (Join-Path $stage 'emu.cfg') -Encoding ascii -Value @'
 [config]
 pvr.rend = 0
 rend.NativeDepthInterpolation = yes
 vr.Xr = yes
 '@
-Set-Content -Path (Join-Path $stage 'README.txt') -Encoding ascii -Value @'
+$readme = @'
 Confidential Mission VR, PC version
 
 Sega's light-gun game Confidential Mission (arcade, Sega NAOMI, 2000) in VR. The original game
@@ -289,6 +378,11 @@ materials dropped, recoloured, converted to C++. The OpenXR loader by Khronos, A
 Licence: this build is distributed under the GNU GPL version 3 (LICENSE.txt). Its source code
 is published with every release, on the same page as this zip.
 '@
+if ($modelFiles.Count) {
+	$readme = $readme -replace '(?m)^Licence: this build', ("The other guns and the controllers, in data\models, are 3D models made by others, under their`n" +
+		"own licences: CREDITS.txt names each one, its author, its licence and what was changed.`n`nLicence: this build")
+}
+Set-Content -Path (Join-Path $stage 'README.txt') -Encoding ascii -Value ($readme -replace "`r?`n", "`r`n")
 # the licence: GPL-3.0 for the build (the gun model's CC BY 4.0 goes with GPL-3.0, not GPL-2.0;
 # Flycast's "or later" allows it). Its text: the copy that comes with Flycast's picoTCP.
 $gpl3 = Get-Content -Raw (Join-Path $repo 'core\deps\picotcp\LICENSE.GPLv3')
@@ -308,13 +402,24 @@ version 3, below. Its source code is published with every release, on the same p
 flycast.exe also contains cgltf by Johannes Kuhlmann (https://github.com/jkuhlmann/cgltf), which
 reads the controllers' models, under the MIT licence:
 
-'@ + "`r`n" + $cgltf + "`r`n`r`n" + $gpl3)
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
+'@ + "`r`n" + $cgltf + "`r`n`r`n" + $(if ($modelFiles.Count) {
+	"The 3D models in data\models are not part of flycast.exe and not under its licence: each is its`r`n" +
+	"author's, under its own licence, as CREDITS.txt says.`r`n`r`n" }) + $gpl3)
+# the zip, its entry names with forward slashes (Windows PowerShell 5.1's Compress-Archive writes data\models\...)
+Add-Type -AssemblyName System.IO.Compression
+$out = [IO.File]::Open($zip, 'CreateNew')
+$archive = New-Object IO.Compression.ZipArchive($out, [IO.Compression.ZipArchiveMode]::Create)
+try {
+	foreach ($f in @(Get-ChildItem -LiteralPath $stage -Recurse -File)) {
+		$entry = $f.FullName.Substring($stage.Length).TrimStart('\') -replace '\\', '/'
+		[void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $f.FullName, $entry, [IO.Compression.CompressionLevel]::Optimal)
+	}
+} finally { $archive.Dispose(); $out.Dispose() }
 
-# the zip: exactly its five files, and a README.txt about this game alone
-$zipFiles = 'flycast.exe', 'emu.cfg', 'README.txt', 'LICENSE.txt', $playCmd
+# the zip: exactly its files (the bundled models' too), and a README.txt about this game alone
+$zipFiles = @('flycast.exe', 'emu.cfg', 'README.txt', 'LICENSE.txt', $playCmd) + $modelFiles
 $z = [IO.Compression.ZipFile]::OpenRead($zip)
-try { $inZip = @($z.Entries | ForEach-Object { $_.FullName }) } finally { $z.Dispose() }
+try { $inZip = @($z.Entries | Where-Object { $_.Name } | ForEach-Object { $_.FullName }) } finally { $z.Dispose() }
 $extra = @($inZip | Where-Object { $zipFiles -notcontains $_ })
 $lacking = @($zipFiles | Where-Object { $inZip -notcontains $_ })
 $readmeText = if ($lacking -notcontains 'README.txt') { [Text.Encoding]::ASCII.GetString((Read-ZipEntry $zip 'README.txt')) } else { '' }
@@ -331,7 +436,7 @@ if ($extra.Count -or $lacking.Count) {
 	Write-Host "zip check: $(Split-Path -Leaf $zip) holds exactly $($zipFiles -join ', '); README.txt names no other game"
 }
 
-if (-not (Test-Archives $apkOut, $zip) -or -not $zipGood) {
+if (-not (Test-Archives $apkOut, $zip) -or -not $zipGood -or -not $modelsGood) {
 	foreach ($f in $apkOut, $zip) { if (Test-Path $f) { (Get-Item $f).Delete() } }
 	exit 1
 }

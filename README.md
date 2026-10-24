@@ -158,7 +158,7 @@ even with the laser off.
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
 | Panel distance | the 2D plane's distance, 15 to 120 game units, 5 a step (`vr.HudDepth`) |
 | Wider view | the game's wider view, On or Off (`vr.Widen`); it changes at the next start, and says "(next start)" until then |
-| Show controls | the controllers and their labels (not in this build yet) |
+| How to play | On or Off: the controllers in both hands, with what their buttons do (the guns leave the hands); the menu stays open. Closing the menu turns it off |
 | Quit | back to the start screen (PC: Flycast quits). It asks first: the row says "Quit? Choose again", and a second choose within 3 s quits |
 
 Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
@@ -207,8 +207,17 @@ held where the game's aim is where the gun points. All of it, with the evidence:
 ## Your own models
 
 Guns and controllers of your own, as GLB files (glTF 2.0 binary), each with a small JSON file of
-the same name beside it (its sidecar). **The app ships no model of anyone else's: you are
-responsible for the rights to the files you add.**
+the same name beside it (its sidecar). **You are responsible for the rights to the files you
+add.**
+
+The release builds come with four made by others, under their own licences (Credits and
+licences below, and `CREDITS.txt`): two guns (`namco.glb`, "Namco gun", and `zapper.glb`,
+"Zapper", in the Gun row after the arcade gun) and the Quest's two controllers. They sit in the
+app's data folder (`data\models\` next to `flycast.exe`; on the Quest the app copies them to its
+`files/data/models/` when it is installed or updated) and are looked at last, file by file: a
+gun of yours with the same file name goes instead (your `guns/zapper.glb`), and your
+`controllers/left.glb` replaces only the left one. The log names a bundled file
+`bundled models/guns/zapper.glb`.
 
 Where they go (looked at when the game starts and each time the VR menu opens; only files that
 changed are read again):
@@ -218,8 +227,9 @@ changed are read again):
 | Quest | `Download/guns/` (next to `confmiss.zip`) | `Download/controllers/` |
 | PC | `guns\` next to `flycast.exe`, or next to the game's zip (`roms\guns\`) | `controllers\`, the same |
 
-On the PC a folder next to `flycast.exe` comes first. On the Quest the app already has the
-access to all files it needs for `Download/`.
+On the PC a folder next to `flycast.exe` comes first, then the one next to the zip; the bundled
+models come last. On the Quest the app already has the access to all files it needs for
+`Download/`.
 
 ### Guns
 
@@ -248,15 +258,17 @@ within -1,000,000 to 1,000,000, and `grip` and `muzzle` each within twice the mo
 model (else the units are likely mixed up). A gun without a sidecar, or with a bad one, is left
 out, with one line in the log saying why. A model may have up to 200,000 triangles and 8 textures
 (each brought down to 2048 pixels a side; a part whose texture is over 4096 keeps just its colour);
-each part keeps its own colour and texture (parts that share both are drawn together). All your
-guns' textures together may take 256 MB as read (a 2048 x 2048 texture takes 16 MB, a 1024 one 4
-MB): in file-name order, a gun that would go over is left out, with the reason in the log.
+each part keeps its own colour and texture (parts that share both are drawn together), tinted
+by the model's vertex colours (`COLOR_0`) where it has them. Only the gun you choose is read, so
+there is no limit on all your guns together: one gun's textures take at most 128 MB as read (8
+of 2048 x 2048, 16 MB each; a 1024 one takes 4 MB).
 
 ### Controllers
 
 `controllers/left.glb` + `left.json`, `controllers/right.glb` + `right.json`, each hand on its
-own: drawn instead of the controller wherever one shows (a hand without a gun, the menu). The
-labels of Show controls stay where the built-in controller's buttons are.
+own: drawn instead of the built-in controller wherever one shows (a hand without a gun, while
+how to play shows: before play starts, and the menu's How to play). The how-to-play labels stay
+where the built-in controller's buttons are.
 
 ```json
 { "aim": { "position": [0, 2, -6], "rotation": [0.2588, 0, 0, 0.9659] }, "scale": 0.01 }
@@ -293,6 +305,7 @@ log says what was read:
 - when chosen: `XR: own gun "My gun" from guns/mygun.glb (<n> triangles, <p> primitives in <k> parts #rrggbb ..., <t> textures; muzzle x y z)` and `XR: own gun "My gun" on the GPU (<t> images, <x.x> MB, mipmapped)`
 - `XR: gun: My gun (chosen)` and `XR: P1 muzzle: My gun at x y z from the aim pose`
 - `XR: controller model from controllers/left.glb (<n> triangles, <p> primitives in <k> parts)`, or `... skipped: <why>`
+- a bundled file as `bundled models/guns/zapper.glb`; `XR: own models from <folders> (<n> guns, controllers left right)` lists the folders read
 
 ## Options
 
@@ -305,6 +318,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.FovScale` | 2 (profile) | how much wider than the original (tan of the half angle) |
 | `vr.WidenFov` | yes | widen through the game's own field of view (the profile knows where) |
 | `vr.Laser` | yes | laser line and dot (also with a click on the right thumbstick) |
+| `vr.ShowControllers` | yes | the controllers in the hands that hold no gun, while how to play shows (before play starts, the menu's How to play) |
 | `vr.ShowGun` | yes | the gun model |
 | `vr.GunScale` | 0.68 | size of the gun, times the 25 cm arcade gun it is modelled on (also set with grip + thumbstick) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
@@ -399,16 +413,26 @@ The start screen's file check has a JVM test: `gradlew.bat :flycast:testDebugUni
    have to uninstall, losing their settings and what the app made from their game). Never
    commit it; `.gitignore` keeps out `*.jks` and `release-signing.properties`. Elsewhere:
    `-Dir <folder>`, and `$env:VRLGH_SIGNING` set to that folder's `release-signing.properties`.
-2. **The packages.** `powershell -File hotd2-vr\package-release.ps1` builds both versions and
+2. **The bundled models.** `hotd2-vr\models\` holds the models the release comes with:
+   `guns\` and `controllers\` (each GLB with its sidecar, as in Your own models) and
+   `CREDITS.txt`, which names each GLB on a `File:` line (`File: guns/zapper.glb`) with its
+   author, licence, link and what was changed. Fill it by hand from the models' own downloads;
+   it is never committed (`.gitignore`): they are other people's work, under their own
+   licences. When it is there the Quest build puts it in the APK (`assets/models/`, copied to
+   the app's data folder at start) and `package-release.ps1` in the zip (`data\models\` and
+   `CREDITS.txt`); without it both come without models.
+3. **The packages.** `powershell -File hotd2-vr\package-release.ps1` builds both versions and
    puts `confidential-mission-vr-quest.apk` and `confidential-mission-vr-pcvr.zip` (`flycast.exe`,
-   `emu.cfg`, `README.txt`, `LICENSE.txt`, `Play Confidential Mission.cmd`) in `dist\`. It
-   refuses an APK signed with the public debug key (`-AllowDebugKey` takes one for a test
-   build), an APK that isn't Confidential Mission VR (its package, version and label, and the
-   start screen as its only library entry), a zip with other files or a `README.txt` naming
-   another game, and either file if its file list has anything of a game in it (disc images,
-   keys, rips, frame grabs, models made from a game). `-SkipBuild` packages what was built
-   last; `-CheckOnly <archives>` only checks the contents.
-3. **The source.** Publish the source of the release's commit with it (the GPL asks for that):
+   `emu.cfg`, `README.txt`, `LICENSE.txt`, `Play Confidential Mission.cmd`, and with the bundled
+   models `CREDITS.txt` and `data\models\`) in `dist\`. It refuses an APK signed with the public
+   debug key (`-AllowDebugKey` takes one for a test build), an APK that isn't Confidential
+   Mission VR (its package, version and label, and the start screen as its only library entry),
+   a zip with other files or a `README.txt` naming another game, either file if its file list
+   has anything of a game in it (disc images, keys, rips, frame grabs, models made from a game)
+   or a model its `CREDITS.txt` doesn't name, an APK whose bundled models aren't those of
+   `hotd2-vr\models\`, and anything under `hotd2-vr/models` tracked by git. `-SkipBuild`
+   packages what was built last; `-CheckOnly <archives>` only checks the contents (and git).
+4. **The source.** Publish the source of the release's commit with it (the GPL asks for that):
    tag the commit and push it, so the release page carries its source archives.
 
 ## Tools
@@ -476,6 +500,16 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
   BY 4.0 goes together with GPL-3.0 but not GPL-2.0, the builds, which include it (the Quest
   app and the PC version), are distributed under **GPL-3.0**, which Flycast's "or later"
   allows. The source is published with every release.
+- The bundled models, in the release builds only (not in this repository; `CREDITS.txt` in
+  the APK and the zip lists them with what was changed):
+  ["Namco Arcade Gun"](https://sketchfab.com/3d-models/namco-arcade-gun-15fbd5b9add94a34b5c21746e3dd32be)
+  by Martoscar, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/);
+  ["Nintendo Zapper"](https://sketchfab.com/3d-models/nintendo-zapper-e2a445cbf957439ab3a3f0c0408cd422)
+  by BIGDOGLOBAL (bdglobal), [CC BY-ND 4.0](https://creativecommons.org/licenses/by-nd/4.0/);
+  ["Meta Quest Left Controller"](https://sketchfab.com/3d-models/meta-quest-left-controller-c70d4a544ddf4b5d8155c2edaff6f9de)
+  and ["Meta Quest Right Controller"](https://sketchfab.com/3d-models/meta-quest-right-controller-5221accf9c7842eb9b2d4df2d2e5c545)
+  by declan02530, CC BY 4.0. They are files of their own next to the app, not part of its
+  code, each under its own licence.
 - [OpenXR loader](https://github.com/KhronosGroup/OpenXR-SDK) by Khronos, Apache-2.0.
 - Roboto (Flycast's own copy, on the headset's panel) by Google, Apache-2.0.
 - [MediaPipe](https://github.com/google-ai-edge/mediapipe) by Google, Apache-2.0
@@ -484,6 +518,6 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
   #1 to hotd2-vr).
 - The app's icon is drawn for it from plain shapes (`hotd2-vr/assets/make-icon.py`).
 - Inspired by [DR-89/time-crisis-vr](https://github.com/DR-89/time-crisis-vr).
-- Confidential Mission is Sega's game. Namco is a trademark of Bandai Namco.
+- Confidential Mission is Sega's game. Namco is a trademark of Bandai Namco, Zapper of Nintendo, Meta Quest of Meta.
 
 Unofficial fan project, not affiliated with Sega. No game is included.

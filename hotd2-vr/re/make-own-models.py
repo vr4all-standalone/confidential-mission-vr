@@ -1,8 +1,8 @@
 r"""
-Test fixtures for the player's own models (Task 14b; accept.ps1 cm-own-gun, cm-own-controllers): self-made
-boxes written at test time, so no third-party model is ever in the repo.
+Test fixtures for the player's own models and the bundled ones (Task 14b, S37; accept.ps1 cm-own-gun,
+cm-own-controllers, cm-bundled): self-made boxes written at test time, so no third-party model is ever in the repo.
 
-  python -I make-own-models.py <root> [--guns] [--controllers] [--no-sidecar] [--only-right] [--early]
+  python -I make-own-models.py <root> [--guns] [--controllers] [--no-sidecar] [--only-right] [--early] [--only-box]
 
 <root>\guns\boxgun.glb + boxgun.json: a box gun (grip, body, barrel), each its own base colour (red, green,
 blue), the body 8 slabs of the same green (10 primitives that make 3 parts), the barrel (a muzzle brake, wider
@@ -10,8 +10,9 @@ and taller than the body: it shows from behind) also textured (a 4x4 PNG, light 
 long) with the barrel along +x and up +z (so the app must turn and scale it). <root>\guns\zz-big.glb + .json: a
 grid of 204,800 triangles, over the app's 200,000 (refused). bad-inf, bad-up, bad-far (the box gun's GLB):
 sidecars with a grip of 1e39, an up of 1e30, a muzzle 500 units away (each refused). tex-a, tex-b, tex-c: 8
-boxes, each with its own 2048 x 2048 PNG (128 MB of RGBA a gun, over the folder's 256 MB in all). --early:
-aa-early.glb + .json ("Early gun", the box gun's GLB), sorting before boxgun. <root>\controllers\left.glb,
+boxes, each with its own 2048 x 2048 PNG (128 MB of RGBA a gun, 384 MB in all: each is still offered, there is
+no total across the guns). --early: aa-early.glb + .json ("Early gun", the box gun's GLB), sorting before boxgun.
+--only-box: the box gun alone (and aa-early with --early), none of the others. <root>\controllers\left.glb,
 right.glb + .json: a box controller in cm (3 primitives, 2 parts: dark grey in two halves, orange), its aim node
 2 cm up, 6 cm forward, tilted 30 degrees.
 
@@ -148,7 +149,7 @@ def box_gun():
     return g
 
 
-def write_guns(root, sidecar, early):
+def write_guns(root, sidecar, early, only_box=False):
     os.makedirs(os.path.join(root, 'guns'), exist_ok=True)
     g = box_gun()
     g.write(os.path.join(root, 'guns', 'boxgun.glb'))
@@ -156,6 +157,13 @@ def write_guns(root, sidecar, early):
         with open(os.path.join(root, 'guns', 'boxgun.json'), 'w') as f:
             json.dump(GUN, f, indent=1)
         print('textures boxgun %d' % (4 * 4 * 4))
+    if early:
+        g.write(os.path.join(root, 'guns', 'aa-early.glb'))
+        with open(os.path.join(root, 'guns', 'aa-early.json'), 'w') as f:
+            json.dump(dict(GUN, name='Early gun'), f, indent=1)
+        print('textures aa-early %d' % (4 * 4 * 4))
+    if only_box:
+        return
     # over the cap: 320 x 320 quads
     n = 320
     pos = [[x / n, y / n, 0.0] for y in range(n + 1) for x in range(n + 1)]
@@ -173,16 +181,11 @@ def write_guns(root, sidecar, early):
     bad = {'bad-inf': dict(GUN, name='Inf grip', grip=[1e39, 0.0, 0.0]),
            'bad-up': dict(GUN, name='Huge up', up=[0.0, 0.0, 1e30]),
            'bad-far': dict(GUN, name='Far muzzle', muzzle=[500.0, 0.0, 0.25])}
-    others = dict(bad)
-    if early:
-        others['aa-early'] = dict(GUN, name='Early gun')
-    for stem, side in others.items():
+    for stem, side in bad.items():
         g.write(os.path.join(root, 'guns', stem + '.glb'))
         with open(os.path.join(root, 'guns', stem + '.json'), 'w') as f:
             json.dump(side, f, indent=1)
-        if stem not in bad:
-            print('textures %s %d' % (stem, 4 * 4 * 4))
-    # 128 MB of textures each (8 x 2048 x 2048 RGBA): the folder's guns over the 256 MB budget in all
+    # 128 MB of textures each (8 x 2048 x 2048 RGBA), 384 MB in all: more than the folder total there once was
     side = 2048
     images = [png(side, side, raw=(b'\x00' + bytes((40 + 25 * k, 200 - 20 * k, 90, 255)) * side) * side) for k in range(8)]
     for stem in 'tex-a', 'tex-b', 'tex-c':
@@ -219,9 +222,10 @@ def main():
     ap.add_argument('--no-sidecar', action='store_true', help="the box gun without its boxgun.json")
     ap.add_argument('--only-right', action='store_true', help='controllers: right.glb only')
     ap.add_argument('--early', action='store_true', help='guns: aa-early.glb too, sorting before boxgun.glb')
+    ap.add_argument('--only-box', action='store_true', help='guns: the box gun alone (and aa-early with --early)')
     a = ap.parse_args()
     if a.guns:
-        write_guns(a.root, not a.no_sidecar, a.early)
+        write_guns(a.root, not a.no_sidecar, a.early, a.only_box)
     if a.controllers:
         write_controllers(a.root, ['right'] if a.only_right else ['left', 'right'])
     print('muzzle %.4f %.4f %.4f' % tuple(gun_muzzle(GUN)))

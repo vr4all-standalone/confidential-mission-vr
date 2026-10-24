@@ -28,8 +28,10 @@ struct GlbPart { u32 firstIndex = 0, indexCount = 0; float color[4] { 1.f, 1.f, 
 // that have one, when a PNG or a JPEG: the first maxImages that decode, in the order the
 // primitives come; when none is, why in `untextured`: the image's MIME type (image/ktx2: glTF
 // subset 1's Basis Universal, not decoded here) or what was wrong with it (empty when textured).
+// colors: the vertices' own colours (COLOR_0, RGBA, linear as the base colour factor is), 4 a vertex,
+// white where a primitive has none; empty when none has any.
 struct GlbMesh { std::vector<float> positions, normals, uvs; std::vector<u32> indices; std::vector<GlbImage> images;
-	std::vector<GlbPart> parts; std::string untextured; };
+	std::vector<GlbPart> parts; std::string untextured; std::vector<float> colors; };
 
 // All primitives (triangle lists, strips and fans), node transforms applied; base colour
 // PNG/JPEG via stb_image, at most 4096 pixels a side, and with fitSide > 0 halved (2 x 2 pixels

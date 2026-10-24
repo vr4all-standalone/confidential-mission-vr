@@ -152,6 +152,31 @@ android {
     }
 }
 
+// hotd2-vr: the models that come with the app, hotd2-vr/models (guns/, controllers/, CREDITS.txt): filled
+// by hand from the models' own downloads for a release build and never in git (.gitignore; the README's
+// Releasing). The vr build's assets/models when that folder is there, else none (the plain public build).
+// BaseGLActivity copies them out to the data folder at start.
+abstract class BundledModels : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val models: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val assets: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val from = models.get().asFile
+        val out = assets.get().asFile
+        out.deleteRecursively()
+        // the models and their sidecars, and the credits: nothing else that may lie there
+        from.walkTopDown().filter {
+            it.isFile && (it.extension.lowercase() in setOf("glb", "json") || it.name == "CREDITS.txt")
+        }.forEach { it.copyTo(File(out, "models/" + it.relativeTo(from).invariantSeparatorsPath), overwrite = true) }
+    }
+}
+val bundledModels = file("../../../hotd2-vr/models")
+
 // hotd2-vr: the vr build type is the app Confidential Mission VR, with an application ID of its own
 // (BaseGLActivity.VR_APPLICATION_ID matches it). ${applicationId} in the manifest follows.
 // Its versionName is the app's own (hubVersion and the commit), not Flycast's tags.
@@ -159,6 +184,13 @@ androidComponents {
     onVariants(selector().withBuildType("vr")) { variant ->
         variant.applicationId.set("com.vrlightgunhub.confmiss")
         variant.outputs.forEach { it.versionName.set("$hubVersion-g${gitShortHash()}") }
+        if (bundledModels.isDirectory) {
+            val copy = tasks.register<BundledModels>("${variant.name}BundledModels") {
+                models.set(bundledModels)
+            }
+            variant.sources.assets?.addGeneratedSourceDirectory(copy, BundledModels::assets)
+            logger.lifecycle("hotd2-vr: hotd2-vr/models goes in the ${variant.name} build as assets/models")
+        }
     }
 }
 

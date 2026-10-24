@@ -211,13 +211,14 @@ std::chrono::steady_clock::time_point nextModelRetry;
 bool controllerShown[2];
 glm::mat4 controllerGrip[2];
 glm::mat4 controllerAim[2];		// (the aim pose: the player's own controller models go there, xr_own.h)
-// What each hand holds (holds()) and the how-to-play labels (xr_labels.h). A game starts with a
-// controller in each hand and the labels on; player 1's gun hand takes the gun at the first right
-// Start or trigger pull (p1Armed; that pull fires as usual) and the labels go. The left holds player
-// 2's gun while player 2 is in. The menu's Show controls (controlsShown): both hands controllers
-// with labels until the next trigger pull in the game, which gives back what they held. As last
-// logged (noteHolds): heldWas, labelsWere. rightStartWas: the right Start's last state, for its press.
-bool p1Armed, controlsShown;
+// What each hand holds (holds()) and how to play: the controllers with their labels (xr_labels.h).
+// A game starts with a controller in each hand and the labels on; player 1's gun hand takes the gun
+// at the first right Start or trigger pull (p1Armed; that pull fires as usual), and the controllers
+// and the labels go: from then on a hand without a gun draws nothing. The left holds player 2's gun
+// while player 2 is in. The menu's How to play (menuHowToPlay): both hands their controllers with the
+// labels while the menu is open; the menu closing, however it closes, gives back what they held. As
+// last logged (noteHolds): heldWas, labelsWere. rightStartWas: the right Start's last state, for its press.
+bool p1Armed, menuHowToPlay;
 Holds heldWas[2] { Holds::Controller, Holds::Controller };
 bool labelsWere = true;
 bool rightStartWas;
@@ -239,11 +240,12 @@ struct NewGameRegistration
 		EventManager::listen(Event::Start, [](Event, void *) { newGame = true; });
 	}
 } newGameRegistration;
-// Whether the hands that hold their controllers show the labels: before the game's first Start or
-// pull, and after Show controls until the next pull. (Drawn only with the light gun on, vr.XrGun.)
+// How to play: the hands that hold their controllers show them, with the labels: before the game's
+// first Start or pull, and while the menu's How to play is on. (The labels drawn only with the light
+// gun on, vr.XrGun; without it the controllers always show.)
 bool labelsOn()
 {
-	return controlsShown || !p1Armed;
+	return menuHowToPlay || !p1Armed;
 }
 
 // What each hand holds and whether the labels show, logged where it changed (why: what did it).
@@ -1624,7 +1626,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		view.aimDot = config::VrLaser && (onScreen || aimOutside);
 		view.aimOutside = aimOutside && !onScreen;
 		view.aimPoint = o + d * (dist > 0.f ? dist * s : 5.f);
-		// (a hand that holds its controller shows that instead: before play, after Show controls)
+		// (a hand that holds its controller shows that instead: before play, the menu's How to play)
 		g.visible = config::VrShowGun && holds(g.hand) == Holds::Gun;
 		// (the slide and the open hand only for a gun that's held: not while the hand holds its controller)
 		// (a gun alone, Confidential Mission's: no hand of the game's for the other one)
@@ -1776,19 +1778,22 @@ void retryControllerModels()
 	controllers::retry();
 }
 
-// The controllers drawn this frame (xr_controllers.h): in each tracked hand that shows no gun (nor,
-// with the labels off, the game's open hand next to it: with them on, a hand holding its controller
-// shows it and its labels), at its grip pose, while focused and vr.ShowControllers is on. With the
-// menu open too, the pointers' lines starting from them.
+// The controllers drawn this frame (xr_controllers.h): only while how to play shows (labelsOn():
+// before play starts, the menu's How to play; always with the light gun off, vr.XrGun), in each
+// tracked hand that shows no gun, at its grip pose, while focused and vr.ShowControllers is on. Once
+// play starts a hand without a gun draws nothing (the menu's pointer lines still start from it).
+// Logs "XR: controllers shown: left and right" (none, left, right) where that changes, tracking aside.
 void updateControllers(XrTime time)
 {
 	const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+	const bool howToPlay = labelsOn() || !config::VrXrGun;
+	int shown = 0;		// the hands that show one: 1 left, 2 right
 	for (int hand : { Left, Right })
 	{
 		controllerShown[hand] = false;
-		const bool gameHand = !labelsOn() && !dualWield && guns[0].visible && guns[0].view.otherHand && guns[0].hand != hand;
-		if (!controllersReady || !focused || !originSet || !config::VrShowControllers || gunInHand(hand) != nullptr || gameHand)
+		if (!controllersReady || !focused || !originSet || !config::VrShowControllers || !howToPlay || gunInHand(hand) != nullptr)
 			continue;
+		shown |= hand == Left ? 1 : 2;
 		XrSpaceLocation location { XR_TYPE_SPACE_LOCATION };
 		if (XR_SUCCEEDED(XR(xrLocateSpace)(gripSpaces[hand], localSpace, time, &location))
 				&& (location.locationFlags & valid) == valid)
@@ -1802,6 +1807,13 @@ void updateControllers(XrTime time)
 				controllerAim[hand] = glm::translate(glm::mat4(1.f), relativePosition(aim.pose.position))
 						* glm::mat4_cast(relativeRotation(aim.pose.orientation));
 		}
+	}
+	static int shownWas = 0;
+	if (shown != shownWas)
+	{
+		static const char *const Shown[] { "none", "left", "right", "left and right" };
+		NOTICE_LOG(INPUT, "XR: controllers shown: %s", Shown[shown]);
+		shownWas = shown;
 	}
 }
 
@@ -1923,9 +1935,13 @@ void updateLightgun(XrTime time)
 		slide.held = false;
 		leftStartWas = true;	// a left Start still held doesn't join at once
 		// controllers in both hands again, with the labels
-		p1Armed = controlsShown = false;
+		p1Armed = menuHowToPlay = false;
 		noteHolds("new game");
 	}
+	// The menu's How to play ends with the menu, however it closed (the menu button, B, Resume, a
+	// game started elsewhere): the hands get back what they held.
+	if (menuHowToPlay && !menuOpen)
+		setHowToPlay(false, "menu closed");
 	// The game runs itself to its game over scene for the agent's hands, or its attract demo
 	// for the hero's staff (hands_rip.h): its buttons are its own then.
 	const bool preparing = hands::preparing();
@@ -2124,14 +2140,14 @@ void updateLightgun(XrTime time)
 		p1 |= (rightStart ? 4 : 0) | (skip && !skipSwallow ? 128 : 0);
 
 	// The game's first right Start or trigger pull: player 1 takes the gun (in the pull's hand, moved
-	// there above) and the labels go. A pull after Show controls gives back what the hands held.
-	// Before the guns' update: the gun is drawn, and the pull fires, in this very frame.
+	// there above) and the controllers and labels go. (The menu's How to play is over by now: it ends
+	// with the menu, whose pulls are its own.) Before the guns' update: the gun is drawn, and the pull
+	// fires, in this very frame.
 	const bool pulled = (!guns[0].triggerWas && triggerHeld(guns[0], pulls[guns[0].hand]))
 			|| (dualWield && !guns[1].triggerWas && triggerHeld(guns[1], pulls[guns[1].hand]));
-	if (pulled && labelsOn())
+	if (pulled && !p1Armed)
 	{
 		p1Armed = true;
-		controlsShown = false;
 		noteHolds("shot");
 	}
 	else if (rightStart && !rightStartWas && !p1Armed)
@@ -2603,16 +2619,26 @@ void quitToStart()
 #endif
 }
 
-void showControls()
+void setHowToPlay(bool on, const char *why)
 {
-	controlsShown = true;
-	NOTICE_LOG(INPUT, "XR: show controls");
-	noteHolds("show controls");
+	if (on == menuHowToPlay)
+		return;
+	menuHowToPlay = on;
+	if (on)
+		NOTICE_LOG(INPUT, "XR: how to play on");
+	else
+		NOTICE_LOG(INPUT, "XR: how to play off (%s)", why);
+	noteHolds(on ? "how to play" : why);
+}
+
+bool howToPlayOn()
+{
+	return menuHowToPlay;
 }
 
 Holds holds(int hand)
 {
-	if (controlsShown || (hand != Left && hand != Right))
+	if (menuHowToPlay || (hand != Left && hand != Right))
 		return Holds::Controller;
 	if (dualWield && hand == guns[1].hand)
 		return Holds::Gun;
@@ -2669,7 +2695,7 @@ void term()
 	guns[1] = Gun { 1, Left };
 	dualWield = leftStartWas = recenterWas = laserWas = menuWas = rightStartWas = false;
 	skipWas = skipSwallow = false;
-	// (what the hands hold stays, p1Armed and controlsShown: player 2's gun went without a word)
+	// (what the hands hold stays, p1Armed and menuHowToPlay: player 2's gun went without a word)
 	for (int hand : { Left, Right })
 		heldWas[hand] = holds(hand);
 	// (menuOpen stays: the emulator is still held stopped, and the next session shows the menu)

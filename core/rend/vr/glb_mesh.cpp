@@ -171,6 +171,12 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& r
 	const cgltf_accessor *uv = attribute(prim, cgltf_attribute_type_texcoord);
 	if (uv != nullptr && (uv->type != cgltf_type_vec2 || uv->count != position->count))
 		uv = nullptr;
+	// the vertices' own colours (kept once a primitive has them: the vertices before them white)
+	const cgltf_accessor *color = attribute(prim, cgltf_attribute_type_color);
+	if (color != nullptr && ((color->type != cgltf_type_vec3 && color->type != cgltf_type_vec4) || color->count != position->count))
+		color = nullptr;
+	if (color != nullptr && out.colors.empty())
+		out.colors.assign(out.positions.size() / 3 * 4, 1.f);
 	// this primitive's base colour image (KHR_texture_basisu's when it has no other): one of the
 	// mesh's images if it decodes and fewer than maxImages came before it
 	const cgltf_image *image = nullptr;
@@ -225,6 +231,13 @@ void addPrimitive(const cgltf_primitive& prim, const glm::mat4& world, Reader& r
 		if (textured && uv != nullptr)
 			cgltf_accessor_read_float(uv, i, t, 2);
 		out.uvs.insert(out.uvs.end(), { t[0], t[1] });
+		if (!out.colors.empty())
+		{
+			float c[4] { 1.f, 1.f, 1.f, 1.f };
+			if (color != nullptr)
+				cgltf_accessor_read_float(color, i, c, color->type == cgltf_type_vec4 ? 4 : 3);
+			out.colors.insert(out.colors.end(), { c[0], c[1], c[2], c[3] });
+		}
 	}
 
 	// the primitive's vertex order (indexed or not), as triangles

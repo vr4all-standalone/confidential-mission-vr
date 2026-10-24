@@ -29,7 +29,7 @@ constexpr float Distance = 1.2f, BelowEyes = 0.1f;
 constexpr int Left = 0, Right = 1;
 
 const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Laser", "Haptics", "World size", "Panel distance",
-		"Wider view", "Show controls", "Quit" };
+		"Wider view", "How to play", "Quit" };
 const char *const HapticsNames[4] { "Off", "Low", "Normal", "Strong" };
 
 glm::mat4 model { 1.f };	// the panel: its middle, facing the player (+z)
@@ -105,6 +105,8 @@ std::string value(int row)
 		return s;
 	case WiderView:
 		return std::string(config::VrWiden ? "On" : "Off") + (config::VrWiden != widenAtStart ? " (next start)" : "");
+	case HowToPlay:
+		return howToPlayOn() ? "On" : "Off";
 	default:
 		return "";
 	}
@@ -224,10 +226,10 @@ void choose(int row, int hand)
 		NOTICE_LOG(INPUT, "XR: menu Recenter");
 		recenter();
 		break;
-	case ShowControls:
-		NOTICE_LOG(INPUT, "XR: menu Show controls");
-		showControls();
-		close();
+	case HowToPlay:
+		// on or off, the menu staying open (closing it turns it off: xr_host.h)
+		NOTICE_LOG(INPUT, "XR: menu How to play");
+		setHowToPlay(!howToPlayOn(), "chosen");
 		break;
 	case Quit:
 		if (quitArmed && seconds() - quitArmedAt <= QuitConfirmSeconds)

@@ -491,10 +491,15 @@ bool loadOwnGun(Model& model, const own::GunFile& file, std::string& why)
 				const glm::vec3 p = scale * (turn * (glm::make_vec3(&mesh.positions[v * 3]) - file.grip));
 				const glm::vec3 n = turn * glm::make_vec3(&mesh.normals[v * 3]);
 				const float vertex[8] { p.x, p.y, p.z, n.x, n.y, n.z, mesh.uvs[v * 2], mesh.uvs[v * 2 + 1] };
+				// the part's colour, times the vertex's own (COLOR_0) when the GLB has them
+				u8 rgba[4] { g.rgba[0], g.rgba[1], g.rgba[2], g.rgba[3] };
+				if (!mesh.colors.empty())
+					for (int c = 0; c < 4; c++)
+						rgba[c] = (u8)std::lround(g.rgba[c] * std::clamp(mesh.colors[v * 4 + c], 0.f, 1.f));
 				const size_t at = model.vertices.size();
 				model.vertices.resize(at + VertexSize);
 				memcpy(&model.vertices[at], vertex, sizeof(vertex));
-				memcpy(&model.vertices[at + sizeof(vertex)], g.rgba, 4);
+				memcpy(&model.vertices[at + sizeof(vertex)], rgba, 4);
 			}
 			part.count += gp->indexCount;
 		}
@@ -550,7 +555,7 @@ void refreshOwn()
 		gun->name = file.name;
 		gun->valid = file.usable && !gun->failed;
 		if (!gun->valid && gun->loaded)
-			unloadOwn(*gun);	// (now over the budget)
+			unloadOwn(*gun);	// (its files now refused)
 		next.push_back(std::move(gun));
 	}
 	// the files gone or changed

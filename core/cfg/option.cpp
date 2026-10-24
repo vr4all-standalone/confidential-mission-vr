@@ -119,7 +119,7 @@ Option<int> VrMsaa("vr.Msaa", 1);		// smooth edges: multisampling, e.g. 4 (the Q
 Option<int> VrXrRefreshRate("vr.XrRefreshRate", 72);	// Hz
 Option<bool> VrLaser("vr.Laser", true);		// aim line and dot from the gun
 Option<bool> VrShowGun("vr.ShowGun", true);	// a gun in the shooting hand
-Option<bool> VrShowControllers("vr.ShowControllers", true);	// the controllers in the hands that hold no gun
+Option<bool> VrShowControllers("vr.ShowControllers", true);	// the controllers in the hands that hold no gun, while how to play shows (before play starts, the VR menu's How to play)
 Option<float> VrGunScale("vr.GunScale", 0.68f);	// its size, times the model's (24.7 cm long); 0.68: 17 cm, a compact pistol
 Option<bool> VrGameHands("vr.GameHands", true);	// the agent's own hands and pistol from the game, when files/hands.bin is there
 Option<float> VrHandScale("vr.HandScale", 1.f);	// their size, times the ripped model's (a 20 cm pistol)
