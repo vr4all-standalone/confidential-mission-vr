@@ -548,15 +548,17 @@ def compare(args):
 HND_GUN_ONLY, HND_COMPLETE = 1, 2
 
 
-def _read_hnd(path):
+def _parse_hnd(path):
     """version, flags, source polys (None before version 2), muzzle, the gun's vertex positions
     (the frame and slide meshes, n x 3), all triangles, textures."""
     data = open(path, 'rb').read()
     if data[:4] != b'HND1':
-        raise SystemExit(f'{os.path.basename(path)}: not an HND1 model')
+        print(f'FAIL {os.path.basename(path)}: not an HND1 model')
+        raise SystemExit(1)
     version, = struct.unpack_from('<I', data, 4)
     if version not in (1, 2):
-        raise SystemExit(f'{os.path.basename(path)}: HND1 version {version} not read here')
+        print(f'FAIL {os.path.basename(path)}: HND1 version {version} not read here')
+        raise SystemExit(1)
     head = struct.unpack_from('<23f', data, 8)
     off = 8 + 23 * 4
     flags, polys = 0, None
@@ -578,7 +580,7 @@ def _read_hnd(path):
             _tex, n = struct.unpack_from('<II', data, off)
             off += 8
             if off + n * 36 > len(data):
-                raise SystemExit(f'{os.path.basename(path)}: cut short')
+                raise struct.error('cut short')
             v = np.frombuffer(data, '<f4', n * 9, off).reshape(n, 9)
             off += n * 36
             triangles += n // 3
@@ -586,6 +588,15 @@ def _read_hnd(path):
                 gun.append(v[:, :3].astype(np.float64))
     pts = np.concatenate(gun) if gun else np.zeros((0, 3))
     return version, flags, polys, np.array(head[0:3], np.float64), pts, triangles, textures
+
+
+def _read_hnd(path):
+    """_parse_hnd, with a FAIL line (exit 1) for a file that isn't a whole HND1 model."""
+    try:
+        return _parse_hnd(path)
+    except struct.error:
+        print(f'FAIL {os.path.basename(path)}: cut short ({os.path.getsize(path)} bytes), not a whole HND1 model')
+        raise SystemExit(1)
 
 
 def hnd(args):
@@ -1124,6 +1135,11 @@ def selftest():
         check(['hnd', gun_m, '--polys', '1'], 1, [gun_v1, gun_ext,
                                                   'FAIL gun.bin: version 1 has no source polygon count (want 1 or more)'])
         check(['hnd', gun_m, '--length', '0.27'], 0, [gun_v1, gun_ext])
+        with open(gun_m, 'rb') as f:
+            whole = f.read()
+        with open(gun_m, 'wb') as f:
+            f.write(whole[:200])
+        check(['hnd', gun_m], 1, ['FAIL gun.bin: cut short (200 bytes), not a whole HND1 model'])
 
     for f in failures:
         print('FAIL ' + f, end='' if f.endswith('\n') else '\n')

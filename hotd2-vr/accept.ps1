@@ -21,7 +21,9 @@
   and cm-hands-shot (accept-cm-hands, accept-cm-hands-shot). The gun run: cm-rip-cabinet plays
   accept-cm-rip-cabinet (it deletes build-win\data\gun-cm-*.bin first and leaves the cabinet gun's
   file there), cm-rip-hand accept-cm-rip-hand and -arcade (it needs that file), cm-rip-skip
-  accept-cm-rip-skip and -skip2 (it deletes the files again).
+  accept-cm-rip-skip and -skip2 (it deletes the files again). A CM run that starts a game with
+  vr.GameHands on and no gun-cm-cabinet.bin makes the file while watching (the reload tutorial
+  after Start); the XR scenarios from before it pin the arcade gun ($cmWidenArcade).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -124,6 +126,10 @@ function Test-Mok {
 #
 function T([double]$t) { $t.ToString('0.0##', $inv) }
 $cmWiden = 'config:vr.FovScale=2,config:vr.WidenFov=yes'
+# The XR scenarios from before the game's own guns (Task 10) pin the arcade gun: their aim, muzzle
+# (vr.GunScale 0.68: cm-menu's Get-CmMenuAim) and shots assume it, and with vr.GameHands off a
+# run neither draws gun-cm-cabinet.bin nor makes it, whatever ran before.
+$cmWidenArcade = "$cmWiden,config:vr.GameHands=no"
 $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000, 9000), @(5000, 1000), @(5000, 9000), @(1000, 5000), @(9000, 5000))
 
 function Get-CmStarts { for ($t = 30; $t -le 52; $t += 2) { "$t=start 0" } }
@@ -414,7 +420,7 @@ function Test-CmFloor {
 # 2-4 when it didn't).
 function Test-CmSim {
 	$name = 'accept-cm-sim'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWiden
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 64; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '49=shot a', '58=shot b', '58.5=pose head 0 1.6 0 30 0', '60=shot c', '61=pose head 0 1.6 0 0 0', '62=shot d'
 		Expect = 'XRSIM: runtime up for "Confidential Mission VR" \(832x720 per eye, 72 Hz, /interaction_profiles/oculus/touch_controller\)',
 			'XR: session created', 'XR: eye buffers 832x720', 'VR: camera profile for  CONFIDENTIAL MISSION ---------$'
@@ -444,7 +450,7 @@ function Test-CmSim {
 # Start lines before 53 s on the log's clock (so the count sees them), and none come after.
 function Test-CmButtons {
 	$name = 'accept-cm-buttons'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 74; XrSim = $true; Config = $cmWiden
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 74; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '56=xr right/b 1 200', '60=xr left/x 1 200', '62=xr left/y 1 200', '66=xr left/thumbstick 1 200',
 			'68=xr right/thumbstick 1 200', '70=xr left/menu 1 200'
 		Expect = 'Light gun P1 at .*start 1', 'Light gun P1 at .* B 1', 'XR: player 2 joins: a gun in each hand',
@@ -471,7 +477,7 @@ function Test-CmButtonsPc {
 			@{ Name = 'accept-cm-buttons-vive'; Profile = 'htc/vive_controller'; At = @('33=xr left/menu 1 200', '36=xr left/menu 1 1200')
 				Expect = @('XR: player 2 joins: a gun in each hand') })) {
 		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $pc.Name; Seconds = 40; XrSim = $true
-			Config = "$cmWiden,config:vr.XrSimProfile=$($pc.Profile)"; At = $pc.At
+			Config = "$cmWidenArcade,config:vr.XrSimProfile=$($pc.Profile)"; At = $pc.At
 			Expect = @("XR: controllers: /interaction_profiles/$($pc.Profile)") + $pc.Expect; Reject = 'XR: initialisation failed' }
 		if ($why) { return "$($pc.Profile): $why" }
 		$n = Get-LogCount $pc.Name 'XR: menu button'
@@ -501,7 +507,7 @@ function Test-CmButtonsPc {
 function Test-CmPause {
 	$name = 'accept-cm-pause'
 	$cycles = @(for ($t = 70; $t -le 109; $t++) { "$t=xr left/menu 1 150" })
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 125; XrSim = $true; Config = $cmWiden
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 125; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + @('40.5=xr left/menu 1 150', '41=shot g', '41.5=xr left/menu 1 150',
 			'58=xr left/menu 1 150', '59=shot p1', '60.5=shot p2', '61=pose head 0 1.6 0 25 0', '62=shot p3', '62.5=pose head 0 1.6 0 0 0',
 			'63=xr right/b 1 150', '64=shot r1', '67=shot r2') + $cycles + @('113=xr left/menu 1 150', '114=xrstate visible',
@@ -573,7 +579,7 @@ function Get-CmMenuAim([int]$Row, [double]$U) {
 function Test-CmMenu {
 	$name = 'accept-cm-menu'
 	$downs = @(foreach ($t in 58.5, 59, 59.5, 60) { "$(T $t)=stick right 0 -1 150" })
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 72; XrSim = $true; Config = $cmWiden
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 72; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150' + $downs + @('60.5=xr right/a 1 150', '61=stick right 0 -1 150',
 			'62=stick right 1 0 150', "63=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 3 -U 0.75)", '63.5=xr right/trigger 1 100',
 			'65=xr right/b 1 150')
@@ -607,7 +613,7 @@ function Test-CmMenu {
 # vr-test.ps1 ends early with exit code 2.
 function Test-CmMenuQuit {
 	$name = 'accept-cm-menu-quit'
-	$params = @{ Game = 'confmiss'; Name = $name; Seconds = 70; XrSim = $true; Config = $cmWiden
+	$params = @{ Game = 'confmiss'; Name = $name; Seconds = 70; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150', '58.5=stick right 0 1 150', '59=xr right/a 1 150', '59.5=xr right/a 1 150'
 		Expect = 'XR: menu open \(paused\)', 'XR: menu quit armed', 'XR: menu quit$', 'XR: quitting'; Reject = 'XR: initialisation failed' }
 	if ($Reuse -and (Test-Path -LiteralPath (Get-RunLog $name))) { return Invoke-VrTest $params }
@@ -649,7 +655,7 @@ function Get-CmHapticsActions {
 # lesson's 0 -> 6 at ~30 s).
 function Test-CmHaptics {
 	$name = 'accept-cm-haptics'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true; Config = $cmWiden
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmHapticsActions); Expect = 'XR: player 2 joins: a gun in each hand'
 		Reject = 'XR: initialisation failed', 'VR: P1 magazine 6 -> ' }
 	if ($why) { return $why }
@@ -666,7 +672,7 @@ function Test-CmHaptics {
 # vr.Haptics=1 (low): the same pulls, every knock at 0.45 of its amplitude, none at 1.0.
 function Test-CmHapticsLow {
 	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-low'; Seconds = 75; XrSim = $true
-		Config = "$cmWiden,config:vr.Haptics=1"; At = @(Get-CmHapticsActions)
+		Config = "$cmWidenArcade,config:vr.Haptics=1"; At = @(Get-CmHapticsActions)
 		Expect = 'XR: player 1 shot at', 'XRSIM: haptic right 0\.030 0\.450'
 		Reject = 'XR: initialisation failed', 'XRSIM: haptic .* 1\.000$' }
 }
@@ -674,13 +680,13 @@ function Test-CmHapticsLow {
 # vr.Haptics=0 (off): the same pulls, no haptics at all.
 function Test-CmHapticsOff {
 	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-off'; Seconds = 75; XrSim = $true
-		Config = "$cmWiden,config:vr.Haptics=0"; At = @(Get-CmHapticsActions)
+		Config = "$cmWidenArcade,config:vr.Haptics=0"; At = @(Get-CmHapticsActions)
 		Expect = 'XR: player 1 shot at'; Reject = 'XR: initialisation failed', 'XRSIM: haptic' }
 }
 
 # Player 1's magazine (+0x50) poked to the rifle's 45 at 60 s: the change is logged.
 function Test-CmHapticsMag {
-	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-mag'; Seconds = 75; XrSim = $true; Config = $cmWiden
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-mag'; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '60=poke 0c155808 1 2d'
 		Expect = 'VR: poke 0c155808 = 2d', 'VR: P1 magazine 6 -> 45'; Reject = 'XR: initialisation failed' }
 }
@@ -688,7 +694,7 @@ function Test-CmHapticsMag {
 # Reloads: the right controller points at the floor from 53.5 s and pulls 4 times from 54 s
 # (off the screen: the game's reload). No knock at all, neither a Shot nor a click.
 function Test-CmHapticsReload {
-	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-reload'; Seconds = 75; XrSim = $true; Config = $cmWiden
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-reload'; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '53.5=pose right 0.18 1.3 -0.35 0 -80' + @(for ($i = 0; $i -lt 4; $i++) { "$(T (54 + 0.6 * $i))=xr right/trigger 1 100" })
 		Expect = 'XR: player 1 shot off screen \(reload\)'; Reject = 'XR: initialisation failed', 'XRSIM: haptic right' }
 }
@@ -725,7 +731,7 @@ function Get-CmControllersParams([string]$name, [string]$config) {
 }
 function Test-CmControllers {
 	$name = 'accept-cm-controllers'
-	$params = Get-CmControllersParams $name $cmWiden
+	$params = Get-CmControllersParams $name $cmWidenArcade
 	$params.Expect = 'XR: runtime extensions: ', 'XR: controller models built in \(the runtime has no XR_FB_render_model\)'
 	$params.Reject += 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime'
 	$why = Invoke-VrTest $params
@@ -751,7 +757,7 @@ function Test-CmControllersRt {
 		& python -I (Join-Path $PSScriptRoot 're\make-test-glb.py') $glb | ForEach-Object { Write-Host "  $_" }
 		if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $glb)) { return "make-test-glb.py could not write $glb" }
 	}
-	$params = Get-CmControllersParams $name "$cmWiden,config:vr.XrSimRenderModel=$glb"
+	$params = Get-CmControllersParams $name "$cmWidenArcade,config:vr.XrSimRenderModel=$glb"
 	$params.Expect = 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models built in \(left and right models unavailable\)',
 		'XR: controller models from the runtime \(left 140 triangles, right 140\)'
 	$params.Reject += 'XR: controller models built in \(the runtime has no XR_FB_render_model'
@@ -793,7 +799,7 @@ function Test-CmControllersRt {
 # of the view.
 function Test-CmHands {
 	$name = 'accept-cm-hands'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 102; XrSim = $true; Config = $cmWiden
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 102; XrSim = $true; Config = $cmWidenArcade
 		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '27=shot labels2') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
 			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150',
 			'94=xr right/trigger 1 100', '96=xr left/menu 1 150', "96.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 8 -U 0.5)",
@@ -844,7 +850,7 @@ function Test-ArmingShot([string]$name) {
 # labels go with it.
 function Test-CmHandsShot {
 	$name = 'accept-cm-hands-shot'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 34; XrSim = $true; Config = $cmWiden
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 34; XrSim = $true; Config = $cmWidenArcade
 		At = @('28=xr right/trigger 1 100')
 		Expect = 'XR: right hand: controller -> gun \(shot\)', 'XR: labels off \(shot\)'
 		Reject = @('XR: initialisation failed') }
@@ -919,22 +925,28 @@ function Test-CmRipHand {
 	return $null
 }
 
-# B skips the run (3 s: the gun comes up at ~6), and the menu button does nothing during it (2 s):
-# the arcade gun, no file.
-# The next start (the same again) runs it again.
+# B skips the run and the menu button does nothing during it, both keyed on the run's first line
+# (the gun comes up ~6 s in, at 30 s of game). Skipped holds for the session (S23): Start from
+# 22 s after the skip (30 s of game or more) and on through the reload tutorial, where watching
+# would make the gun: still the arcade gun, and no file. The next start runs it again.
 function Test-CmRipSkip {
 	if (-not $Reuse) { Remove-CmGuns }
-	$params = @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 10; XrSim = $true; Config = "$cmWiden,config:vr.HandsPrep=yes"
-		At = @('2=xr left/menu 1 150', '3=xr right/b 1 200')
-		Expect = 'VR hands: no model yet, taking the guns from the game', 'VR hands: skipped after',
-			'XR: menu: not while the guns are being made'
+	$first = 'VR hands: no model yet, taking the guns from the game'
+	$keys = @("$first|1|xr left/menu 1 150", "$first|2|xr right/b 1 200")
+	$starts = @(22, 25, 28 | ForEach-Object { "VR hands: skipped after|$_|xr right/a 1 200" })
+	$params = @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 48; XrSim = $true; Config = "$cmWiden,config:vr.HandsPrep=yes"
+		On = @($keys + $starts)
+		Expect = $first, 'VR hands: skipped after', 'XR: menu: not while the guns are being made'
 		# (the loader says "no ..., the arcade gun it is" at INFO, which the log leaves out)
-		Reject = @('XR: initialisation failed', 'XR: menu open', 'XR: the game''s own model from') }
+		Reject = @('XR: initialisation failed', 'XR: menu open', 'XR: the game''s own model from',
+			'VR hands: the cabinet gun from this game') }
 	$why = Invoke-VrTest $params
 	if ($why) { return $why }
 	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made though the run was skipped" }
 	$params.Name = 'accept-cm-rip-skip2'
-	$params.Expect = @('VR hands: no model yet, taking the guns from the game')
+	$params.Seconds = 10
+	$params.On = $keys
+	$params.Expect = @($first)
 	$why = Invoke-VrTest $params
 	if ($why) { return "the next start: $why" }
 	return $null

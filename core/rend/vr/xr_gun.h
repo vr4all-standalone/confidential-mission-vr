@@ -36,7 +36,8 @@ constexpr glm::vec3 HandPalm { 0.f, -0.078f, 0.068f };
 
 // The pistol drawn: the agent's own from the game (xr_hands.h; in The Maze of the Kings
 // the hero's staff) when the running game has one and vr.GameHands is on, else the arcade
-// gun. Model space is then gun space of xr_hands.h, with its origin in the fist.
+// gun. Model space is then gun space of xr_hands.h, with its origin in the fist (for a gun
+// alone, gun only in HND1 v2, Confidential Mission's: the top of its grip, where the fist goes).
 bool gameGun();
 // The muzzle in model space, of whichever pistol it is.
 glm::vec3 gunMuzzle();

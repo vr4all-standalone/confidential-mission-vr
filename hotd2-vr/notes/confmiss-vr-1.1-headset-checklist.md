@@ -73,6 +73,7 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 Before these, delete `gun-cm-cabinet.bin` from the app's data folder (or reinstall), so the first start makes it.
 
 - [ ] The first start shows the panel ("CONFIDENTIAL MISSION VR", "Taking the guns from your copy of the game") instead of the game, and it goes within about two minutes (the log: "VR hands: done after N s of game").
-- [ ] B skips it: the game starts with the built-in arcade gun, and the next start shows the panel again.
+- [ ] B skips it: the game starts with the built-in arcade gun and keeps it all session, through the reload tutorial too (no "VR hands: the cabinet gun from this game" in the log), and the next start shows the panel again.
 - [ ] The cabinet gun in the hand faces the right way (barrel forward, grip down in your hand), at about the right size (about 27 cm long), with the muzzle flash and the laser starting at its muzzle.
 - [ ] The second start has no panel ("VR hands: the guns, made before" in the log), and the cabinet gun is in the hand again.
+- [ ] The cabinet gun's colours look even, not blotchy or faceted (its colours are one frame's lit vertex colours, averaged per triangle).

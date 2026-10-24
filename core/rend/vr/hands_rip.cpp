@@ -113,13 +113,14 @@ bool haveModel()
 	return file_exists(modelPath()) || (!legacyModelPath().empty() && file_exists(legacyModelPath()));
 }
 
-bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys);
+bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete);
 
-void stopPrep(const char *why)
+// The run over: back to the game as it was, still watching for the scene in play (next), or not.
+void stopPrep(const char *why, State next = Watching)
 {
 	if (state != Preparing)
 		return;
-	state = Watching;
+	state = next;
 	settings.input.fastForwardMode = fastForwardWas;
 	lightgunSet(0, OffScreen, OffScreen, 0);
 	NOTICE_LOG(RENDERER, "VR hands: %s after %.0f s of game", why, gameSeconds() - startedAt);
@@ -194,7 +195,11 @@ void onVBlank()
 		return;
 	if (skipRequested)
 	{
-		stopPrep("skipped");
+		// Confidential Mission (S23): skipped is skipped for the session, no gun made by watching
+		// play either (the reload tutorial comes right after Start), so the arcade gun stays and
+		// the next start asks again. Task 12's hook: the rifle, which only comes in play, is the
+		// one to go on watching for (mark the other guns done, and Watching).
+		stopPrep("skipped", cmRun ? Off : Watching);
 		return;
 	}
 	const double t = gameSeconds() - startedAt;
@@ -211,7 +216,7 @@ void onVBlank()
 				std::lock_guard<std::mutex> lock(gunMutex);
 				for (int i = 0; i < 3; i++)
 					if (!gunDone[i] && !gunBest[i].empty())
-						saved = saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i]) || saved;
+						saved = saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i], false) || saved;
 			}
 			if (saved)
 				progress = 1.f;
@@ -327,8 +332,9 @@ bool save(const std::vector<u8>& data, const std::string& path)
 	return nowide::rename(temp.c_str(), path.c_str()) == 0;
 }
 
-// One of Confidential Mission's guns made: into its file, and drawn from now on.
-bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys)
+// One of Confidential Mission's guns made (complete: all of it, as buildGun flagged it): into
+// its file, and drawn from now on.
+bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete)
 {
 	const std::string path = gunPath(gun);
 	if (!save(model, path))
@@ -336,7 +342,7 @@ bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 poly
 		WARN_LOG(RENDERER, "VR hands: can't write %s", path.c_str());
 		return false;
 	}
-	if (polys >= gun.wholePolys)
+	if (complete)
 		NOTICE_LOG(RENDERER, "VR hands: the %s from this game, %zu bytes to %s", gun.name, model.size(), path.c_str());
 	else
 		NOTICE_LOG(RENDERER, "VR hands: the %s from this game, %zu bytes to %s (%u of its %u polygons)", gun.name,
@@ -442,14 +448,18 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 			WARN_LOG(RENDERER, "VR hands: the %s, but %s", gun.name, error.c_str());
 			continue;
 		}
-		if (!whole)
+		if (!whole || !complete)
 		{
+			// short of all of it: kept for when the run gives up (whole by this count but not
+			// to buildGun's, so not flagged complete: not tried again for a while)
 			INFO_LOG(RENDERER, "VR hands: %u of the %s's %u polygons, kept in case", runCount, gun.name, (u32)gun.wholePolys);
 			gunBest[i] = std::move(model);
 			gunBestPolys[i] = runCount;
+			if (whole)
+				gunFailedAt[i] = passes;
 			continue;
 		}
-		if (!saveGun(gun, i, model, runCount))
+		if (!saveGun(gun, i, model, runCount, true))
 			gunFailedAt[i] = passes;
 	}
 	for (int i = 0; i < 3; i++)
