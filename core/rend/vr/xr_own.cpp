@@ -297,6 +297,26 @@ void readController(ControllerFile& f, const std::string& sidecar, const std::st
 	const glm::mat4 node = glm::translate(glm::mat4(1.f), position) * glm::mat4_cast(glm::normalize(glm::quat(q[3], q[0], q[1], q[2])));
 	f.modelToAim = glm::scale(glm::mat4(1.f), glm::vec3(s)) * glm::inverse(node);
 	f.usable = true;
+	// the labels' points (optional): one that isn't right is left out, the rest kept
+	const auto buttons = doc.find("buttons");
+	if (buttons == doc.end())
+		return;
+	if (!buttons->is_object())
+	{
+		f.buttonFaults.push_back("\"buttons\" is not { \"<button>\": [x, y, z], ... }");
+		return;
+	}
+	for (auto it = buttons->begin(); it != buttons->end(); ++it)
+	{
+		glm::vec3 p;
+		std::string why;
+		if (std::find_if(std::begin(ButtonNames), std::end(ButtonNames), [&](const char *name) { return it.key() == name; }) == std::end(ButtonNames))
+			f.buttonFaults.push_back("\"" + cutUtf8(it.key(), 24) + "\" is not a button (a, b, x, y, menu, stick, trigger, grip)");
+		else if (vec3(*buttons, it.key().c_str(), p, why))
+			f.buttons.emplace_back(it.key(), p);
+		else
+			f.buttonFaults.push_back(why);
+	}
 }
 
 }	// namespace

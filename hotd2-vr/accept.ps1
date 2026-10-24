@@ -774,8 +774,8 @@ function Test-CmControllersRun {
 	$name = 'accept-cm-controllers'
 	$params = Get-CmControllersParams $name $cmWidenArcade
 	$params.Expect = 'XR: runtime extensions: ', 'XR: controller models built in \(the runtime has no XR_FB_render_model\)',
-		'XR: controllers shown: left and right$', 'XR: controllers shown: none$'
-	$params.Reject += 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime'
+		'XR: controllers shown: left and right$', 'XR: controllers shown: none$', 'XR: labels: left x at .* in the grip pose \(built in\)$'
+	$params.Reject += 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime', 'XR: labels: .*\(from the file\)'
 	$why = Invoke-VrTest $params
 	if ($why) { return $why }
 	$why = Test-RunShots $name 't025-in.png', 't026-out.png', 't057-playin.png', 't058-playout.png'
@@ -1405,6 +1405,12 @@ function Invoke-OwnFolders([scriptblock]$body, [string[]]$Fixture = @(), [string
 			$script:ownMuzzle = @($out | Where-Object { $_ -match '^muzzle ' } | ForEach-Object { @(($_ -split ' ')[1..3] | ForEach-Object { [double]::Parse($_, $inv) }) })
 			$script:ownTextures = [ordered]@{}
 			foreach ($line in $out) { if ($line -match '^textures (\S+) (\d+)$') { $script:ownTextures[$Matches[1]] = [long]$Matches[2] } }
+			$script:ownLabels = [ordered]@{}
+			foreach ($line in $out) {
+				if ($line -match '^label (\w+) (\w+) (\S+) (\S+) (\S+)$') {
+					$script:ownLabels["$($Matches[1]) $($Matches[2])"] = @(3..5 | ForEach-Object { [double]::Parse($Matches[$_], $inv) })
+				}
+			}
 		}
 		return & $body
 	}
@@ -1574,6 +1580,28 @@ function Test-OwnFolders {
 # both hands; the left hand in front of the eye at 24 s (before play starts) differs from the built-in controller there
 # (cm-controllers' shot). Without left.glb (accept-cm-own-controllers-right): the left hand's file isn't read and its
 # shot differs from the box's (the built-in shape is back), the right hand's still is.
+# Task 15b: the how-to-play labels' lines end on the sidecars' "buttons" points (the box's left x, y, stick; right a, b,
+# trigger, stick: each "XR: labels: <hand> <button> at (x, y, z) in the aim pose (from the file)", logged once, within 2 mm
+# of the fixture's point placed as the model is); the left "menu" point, 5 m off (--bad-button), is refused with one log line
+# and keeps the built-in place. In the -right run the sidecar has no "buttons" (--no-buttons): the built-in places, saying so.
+function Test-CmOwnLabels([string]$name) {
+	$why = @()
+	foreach ($key in 'left x', 'left y', 'left stick', 'right a', 'right b', 'right trigger', 'right stick') {
+		$hand, $button = $key -split ' '
+		$want = $script:ownLabels[$key]
+		$line = Select-String -LiteralPath (Get-RunLog $name) -Pattern "XR: labels: $hand $button at \((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\) in the aim pose \(from the file\)" -CaseSensitive | Select-Object -First 1
+		if (-not $want) { $why += "no fixture point for $key"; continue }
+		if (-not $line) { $why += "no 'XR: labels: $hand $button at (...) in the aim pose (from the file)'"; continue }
+		$v = @(1..3 | ForEach-Object { [double]::Parse($line.Matches[0].Groups[$_].Value, $inv) })
+		$d = [Math]::Sqrt([Math]::Pow($v[0] - $want[0], 2) + [Math]::Pow($v[1] - $want[1], 2) + [Math]::Pow($v[2] - $want[2], 2))
+		$msg = "$key line ends at $($v -join ' '), the fixture's point $($want -join ' '): $([Math]::Round($d * 1000, 2)) mm"
+		if ($d -le 0.002) { Write-Host "  PASS $msg" } else { $why += "FAIL $msg (over 2 mm)" }
+		$n = Get-LogCount $name "XR: labels: $hand $button at "
+		if ($n -ne 1) { $why += "$n lines 'XR: labels: $hand $button at' (want 1: logged once)" }
+	}
+	$why | ForEach-Object { Write-Host "  $_" }
+	return $(if ($why) { $why -join '; ' } else { $null })
+}
 function Test-CmOwnControllers {
 	$builtIn = Join-Path $repo 'build-win\vrtest\accept-cm-controllers\t025-in.png'
 	if (-not (Test-Path -LiteralPath $builtIn) -and -not $Reuse) {
@@ -1582,10 +1610,17 @@ function Test-CmOwnControllers {
 		if ($why) { return "cm-controllers: $why" }
 	}
 	$name = 'accept-cm-own-controllers'
-	$why = Invoke-OwnFolders -Fixture '--controllers' {
+	$why = Invoke-OwnFolders -Fixture '--controllers', '--bad-button' {
 		$params = Get-CmControllersParams $name $cmWidenArcade
-		$params.Expect = 'XR: controller model from controllers.left\.glb \(36 triangles, 3 primitives in 2 parts\)', 'XR: controller model from controllers.right\.glb \(36 triangles, 3 primitives in 2 parts\)'
+		$params.Expect = 'XR: controller model from controllers.left\.glb \(36 triangles, 3 primitives in 2 parts\)', 'XR: controller model from controllers.right\.glb \(36 triangles, 3 primitives in 2 parts\)',
+			'XR: controller model from controllers.left\.glb: label point left out \(the built-in place\): "menu" is \S+ from the model, over a quarter of its size',
+			'XR: labels: left menu at .* in the grip pose \(built in: no "menu" from controllers.left\.json\)$'
+		$params.Reject += 'XR: controller model from controllers.right\.glb: label point left out'
 		$why = Invoke-VrTest $params
+		if ($why) { return $why }
+		$why = Test-LogCount $name 'label point left out' 1
+		if ($why) { return $why }
+		$why = Test-CmOwnLabels $name
 		if ($why) { return $why }
 		$why = Test-RunShots $name 't025-in.png', 't026-out.png'
 		if ($why) { return $why }
@@ -1598,10 +1633,13 @@ function Test-CmOwnControllers {
 	}
 	if ($why) { return $why }
 	$right = 'accept-cm-own-controllers-right'
-	return Invoke-OwnFolders -Fixture '--controllers', '--only-right' {
+	return Invoke-OwnFolders -Fixture '--controllers', '--only-right', '--no-buttons' {
 		$params = Get-CmControllersParams $right $cmWidenArcade
-		$params.Expect = @('XR: controller model from controllers.right\.glb \(36 triangles, 3 primitives in 2 parts\)')
-		$params.Reject += 'XR: controller model from controllers.left'
+		$params.Expect = @('XR: controller model from controllers.right\.glb \(36 triangles, 3 primitives in 2 parts\)',
+			'XR: labels: right a at .* in the grip pose \(built in: no "a" from controllers.right\.json\)$',
+			'XR: labels: right stick at .* in the grip pose \(built in: no "stick" from controllers.right\.json\)$',
+			'XR: labels: left x at .* in the grip pose \(built in\)$')
+		$params.Reject += 'XR: controller model from controllers.left', 'XR: labels: .*\(from the file\)'
 		$why = Invoke-VrTest $params
 		if ($why) { return $why }
 		$why = Test-RunShots $right 't025-in.png'

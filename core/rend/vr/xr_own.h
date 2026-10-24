@@ -31,9 +31,17 @@
 	controllers/left.glb, right.glb + left.json, right.json (each hand on its own):
 		{ "aim": { "position": [x, y, z], "rotation": [qx, qy, qz, qw] },	the aim origin (OpenXR's aim
 				pose: -z along the ray, +y up) in the GLB's space and units
-		  "scale": 0.01 }			metres per GLB unit (0.01: a model in cm), 0.0001 to 100
+		  "scale": 0.01,			metres per GLB unit (0.01: a model in cm), 0.0001 to 100
+		  "buttons": { "x": [x, y, z], ... } }	optional: where the how-to-play labels' lines end, in the
+				GLB's space and units, by button (ButtonNames: a, b, x, y, menu, stick, trigger, grip; a and
+				x, b and y each stand for the other, the same place): the top of the button or the stick's
+				cap, the trigger's front
 	Drawn with that node on the aim pose: room <- aim pose * scale * inverse(aim node) <- GLB, the GLB
-	in its scene's space (its node transforms applied), as the aim node is.
+	in its scene's space (its node transforms applied), as the aim node is; a "buttons" point the same way
+	(xr_controllers.h labelPoint). Each point 3 numbers, finite as floats and within +-MaxCoordinate, and
+	(checked when the GLB is read, xr_controllers.cpp) within a quarter of the model's size (its bounds'
+	longest side) of its bounds; a point that isn't, or a name not known, is left out with one log line,
+	and its label keeps the built-in place.
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -41,6 +49,7 @@
 #include "types.h"
 #include <glm/glm.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace vr::xr::own
@@ -72,7 +81,14 @@ struct ControllerFile
 	bool usable = false;	// the sidecar read and in range (else why not)
 	std::string why;
 	glm::mat4 modelToAim { 1.f };	// GLB space -> aim space: scale * inverse(aim node)
+	// "buttons": the points read (by name, GLB space; near the model not checked yet), and why any other
+	// was left out (for the log, with the model's)
+	std::vector<std::pair<std::string, glm::vec3>> buttons;
+	std::vector<std::string> buttonFaults;
 };
+
+// The names a controller sidecar's "buttons" may have, in xr_controllers.h's Button order.
+constexpr const char *ButtonNames[] { "a", "b", "x", "y", "menu", "stick", "trigger", "grip" };
 
 // The folders read again: guns/*.glb, controllers/left.glb and right.glb, and their sidecars, in every
 // root, merged; a gun's files looked at again only when they changed (names, sizes, times). On the

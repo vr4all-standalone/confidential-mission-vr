@@ -5,7 +5,9 @@
 */
 #include "xr_labels.h"
 #include "xr_controllers.h"
+#include "xr_own.h"
 #include "xr_panel.h"
+#include "log/Log.h"
 
 #include <algorithm>
 #include <cmath>
@@ -83,15 +85,28 @@ struct Placed
 	float hx, hy;
 	glm::vec3 from, to;
 };
-// One hand's labels as laid out for a grip pose, seen from an eye
+// One hand's labels as laid out for a grip pose and its buttons' places (room space, in the list's order),
+// seen from an eye
 struct Layout
 {
 	glm::mat4 grip { 0.f };
+	std::vector<glm::vec3> at;
 	glm::vec3 eye { 0.f };
 	const Words *words = nullptr;
 	std::vector<Placed> placed;
 };
 Layout layouts[2];
+
+// Where each hand's label lines end on its controller, as last logged
+struct Logged
+{
+	controllers::Button button;
+	bool ownModel, fromFile;
+	glm::vec3 local;
+	bool operator==(const Logged& o) const { return button == o.button && ownModel == o.ownModel && fromFile == o.fromFile && local == o.local; }
+};
+std::vector<Logged> logged[2];
+const char *const HandName[2] { "left", "right" };
 
 const Words& wordsFor(const char *profile)
 {
@@ -136,15 +151,12 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 {
 	layout.placed.clear();
 	const std::vector<Label>& list = words.hand[hand];
-	if (list.empty())
+	const std::vector<glm::vec3>& at = layout.at;
+	if (list.empty() || at.size() != list.size())
 		return;
-	std::vector<glm::vec3> at;
 	glm::vec3 middle(0.f);
-	for (const Label& label : list)
-	{
-		at.push_back(glm::vec3(grip * glm::vec4(controllers::anchor(hand, label.button), 1.f)));
-		middle += at.back();
-	}
+	for (const glm::vec3& p : at)
+		middle += p;
 	middle /= (float)at.size();
 	glm::vec3 across, up, toEye;
 	facing(middle, eye, glm::vec3(grip[0]), across, up, toEye);
@@ -208,19 +220,50 @@ glm::mat4 billboard(const glm::vec3& centre, const glm::vec3& eye)
 
 }	// namespace
 
-void draw(const glm::mat4& viewProj, int hand, const glm::mat4& grip, const char *profile)
+void draw(const glm::mat4& viewProj, int hand, const glm::mat4& grip, const glm::mat4& aim, const char *profile)
 {
 	if (hand != 0 && hand != 1)
 		return;
 	const glm::vec3 eye = eyeOf(viewProj);
 	const Words& words = wordsFor(profile);
 	Layout& layout = layouts[hand];
-	if (layout.grip != grip || layout.words != &words || layout.placed.empty() || glm::length(eye - layout.eye) > EyeMoves)
+	// where the lines end on the controller drawn (its own model's points move with the aim pose)
+	const std::vector<Label>& list = words.hand[hand];
+	controllers::LabelPoint points[8];
+	const size_t count = std::min<size_t>(list.size(), 8);
+	bool moved = layout.at.size() != count;
+	for (size_t i = 0; i < count; i++)
+	{
+		points[i] = controllers::labelPoint(hand, list[i].button, grip, aim);
+		moved = moved || layout.at[i] != points[i].room;
+	}
+	if (moved || layout.grip != grip || layout.words != &words || layout.placed.empty() || glm::length(eye - layout.eye) > EyeMoves)
 	{
 		layout.grip = grip;
 		layout.eye = eye;
 		layout.words = &words;
+		layout.at.resize(count);
+		for (size_t i = 0; i < count; i++)
+			layout.at[i] = points[i].room;
 		layOut(layout, hand, grip, words, eye);
+	}
+	// the log: where each line ends on the controller, when that changes (not with the pose)
+	bool same = logged[hand].size() == count;
+	for (size_t i = 0; i < count && same; i++)
+		same = logged[hand][i] == Logged { list[i].button, points[i].ownModel, points[i].fromFile, points[i].local };
+	if (!same)
+	{
+		logged[hand].clear();
+		for (size_t i = 0; i < count; i++)
+		{
+			const controllers::LabelPoint& p = points[i];
+			logged[hand].push_back({ list[i].button, p.ownModel, p.fromFile, p.local });
+			const char *name = own::ButtonNames[list[i].button];
+			const std::string why = p.fromFile ? "from the file"
+					: p.ownModel ? std::string("built in: no \"") + name + "\" from " + controllers::ownSidecar(hand) : "built in";
+			NOTICE_LOG(RENDERER, "XR: labels: %s %s at (%.4f, %.4f, %.4f) in the %s pose (%s)", HandName[hand], name,
+					p.local.x, p.local.y, p.local.z, p.fromFile ? "aim" : "grip", why.c_str());
+		}
 	}
 	// the lines and their dots first, the labels over them
 	for (const Placed& p : layout.placed)
@@ -254,6 +297,8 @@ void term()
 {
 	for (Layout& layout : layouts)
 		layout = Layout();
+	for (std::vector<Logged>& l : logged)
+		l.clear();
 }
 
 }

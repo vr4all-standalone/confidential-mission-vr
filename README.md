@@ -267,11 +267,13 @@ of 2048 x 2048, 16 MB each; a 1024 one takes 4 MB).
 
 `controllers/left.glb` + `left.json`, `controllers/right.glb` + `right.json`, each hand on its
 own: drawn instead of the built-in controller wherever one shows (a hand without a gun, while
-how to play shows: before play starts, and the menu's How to play). The how-to-play labels stay
-where the built-in controller's buttons are.
+how to play shows: before play starts, and the menu's How to play). The how-to-play labels'
+lines end on the buttons the sidecar's `"buttons"` gives; a button it doesn't give keeps the
+built-in controller's place.
 
 ```json
-{ "aim": { "position": [0, 2, -6], "rotation": [0.2588, 0, 0, 0.9659] }, "scale": 0.01 }
+{ "aim": { "position": [0, 2, -6], "rotation": [0.2588, 0, 0, 0.9659] }, "scale": 0.01,
+  "buttons": { "x": [-1.5, 3, -3], "y": [-1.5, 3, -5.5], "menu": [1.5, 3, -2.5], "stick": [1.5, 3, -5.5] } }
 ```
 
 | Field | What it is | Example |
@@ -279,9 +281,15 @@ where the built-in controller's buttons are.
 | `aim.position` | where the controller's pointing ray starts, in the GLB's space and units | `[0, 2, -6]` |
 | `aim.rotation` | its direction there, a quaternion x, y, z, w (the ray along -z, +y up) | `[0.2588, 0, 0, 0.9659]` (30 degrees up) |
 | `scale` | metres per GLB unit | `0.01` (a model in centimetres) |
+| `buttons` | optional: where each how-to-play label's line ends, in the GLB's space and units, by button: `a`, `b`, `x`, `y`, `menu`, `stick`, `trigger`, `grip` (`a` and `x`, `b` and `y` stand for each other). Put each on the top of the button or the stick's cap, and the trigger's on its front face | `{ "x": [-1.5, 3, -3], "stick": [1.5, 3, -5.5] }` |
 
 That point goes on the controller's aim pose (OpenXR's): room = aim pose x scale x inverse(aim node).
 The aim node is in the GLB's scene space, after the GLB's own node transforms, as the model is drawn.
+A `buttons` point goes along with the model the same way. Each must be three numbers within a quarter
+of the model's size (its longest side) of the model; one that isn't, or a name that isn't a button,
+is left out with a line in the log, and that label keeps the built-in place. The labels with each
+controller kind: left X, Y, Menu and the stick; right A, B, the trigger and the stick (the PC
+controllers' buttons point at the places doing the same job).
 
 ### Making a gun file: make-gun.py
 
@@ -304,7 +312,8 @@ log says what was read:
 - `XR: own gun guns/mygun.glb offered: "My gun" (<n> triangles, <t> textures, <x.x> MB)`, or `XR: own gun guns/mygun.glb skipped: <why>`
 - when chosen: `XR: own gun "My gun" from guns/mygun.glb (<n> triangles, <p> primitives in <k> parts #rrggbb ..., <t> textures; muzzle x y z)` and `XR: own gun "My gun" on the GPU (<t> images, <x.x> MB, mipmapped)`
 - `XR: gun: My gun (chosen)` and `XR: P1 muzzle: My gun at x y z from the aim pose`
-- `XR: controller model from controllers/left.glb (<n> triangles, <p> primitives in <k> parts)`, or `... skipped: <why>`
+- `XR: controller model from controllers/left.glb (<n> triangles, <p> primitives in <k> parts)`, or `... skipped: <why>`; a `buttons` point left out: `XR: controller model from controllers/left.glb: label point left out (the built-in place): <why>`
+- when the labels first show: `XR: labels: left x at (x, y, z) in the aim pose (from the file)` for each label, or `... in the grip pose (built in: no "x" from controllers/left.json)`
 - a bundled file as `bundled models/guns/zapper.glb`; `XR: own models from <folders> (<n> guns, controllers left right)` lists the folders read
 
 ## Options

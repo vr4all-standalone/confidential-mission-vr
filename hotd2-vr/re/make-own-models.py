@@ -3,6 +3,7 @@ Test fixtures for the player's own models and the bundled ones (Task 14b, S37; a
 cm-own-controllers, cm-bundled): self-made boxes written at test time, so no third-party model is ever in the repo.
 
   python -I make-own-models.py <root> [--guns] [--controllers] [--no-sidecar] [--only-right] [--early] [--only-box]
+                                [--no-buttons] [--bad-button]
 
 <root>\guns\boxgun.glb + boxgun.json: a box gun (grip, body, barrel), each its own base colour (red, green,
 blue), the body 8 slabs of the same green (10 primitives that make 3 parts), the barrel (a muzzle brake, wider
@@ -14,11 +15,16 @@ boxes, each with its own 2048 x 2048 PNG (128 MB of RGBA a gun, 384 MB in all: e
 no total across the guns). --early: aa-early.glb + .json ("Early gun", the box gun's GLB), sorting before boxgun.
 --only-box: the box gun alone (and aa-early with --early), none of the others. <root>\controllers\left.glb,
 right.glb + .json: a box controller in cm (3 primitives, 2 parts: dark grey in two halves, orange), its aim node
-2 cm up, 6 cm forward, tilted 30 degrees.
+2 cm up, 6 cm forward, tilted 30 degrees; its sidecar's "buttons" (the how-to-play labels' points, Task 15b) at
+known spots on the orange plate's top and the body's front (left: x, y, menu, stick, trigger; right: a, b, stick,
+trigger). --no-buttons: the sidecars without "buttons". --bad-button: the left one's "menu" 5 m off (refused: its
+label keeps the built-in place).
 
 Prints the box gun's muzzle in gun space (barrel -z, y up, metres, the grip's top the origin) as the app
-should find it from the sidecar: "muzzle <x> <y> <z>"; and for each gun the app should offer by its checks
-alone, its textures' RGBA bytes: "textures <stem> <bytes>".
+should find it from the sidecar: "muzzle <x> <y> <z>"; for each gun the app should offer by its checks
+alone, its textures' RGBA bytes: "textures <stem> <bytes>"; and for each controller "buttons" point the app
+should take, where the label's line ends in the hand's aim pose (metres: scale * inverse(aim node) * point):
+"label <hand> <button> <x> <y> <z>".
 """
 import argparse
 import json
@@ -199,7 +205,26 @@ def write_guns(root, sidecar, early, only_box=False):
         print('textures %s %d' % (stem, 8 * side * side * 4))
 
 
-def write_controllers(root, hands):
+# The box controller's label points (cm, GLB space): the face buttons and the stick on the orange plate's top (y 3),
+# the trigger on the body's front (z -6); the right hand's mirrored in x.
+BUTTONS = {'left': {'x': [-1.5, 3.0, -3.0], 'y': [-1.5, 3.0, -5.5], 'menu': [1.5, 3.0, -2.5], 'stick': [1.5, 3.0, -5.5],
+                    'trigger': [0.0, -1.0, -6.0]},
+           'right': {'a': [1.5, 3.0, -3.0], 'b': [1.5, 3.0, -5.5], 'stick': [-1.5, 3.0, -5.5], 'trigger': [0.0, -1.0, -6.0]}}
+
+
+def to_aim(point, aim, scale):
+    """a GLB point in the aim pose, as the app places the model there: scale * inverse(aim node) * point"""
+    qx, qy, qz, qw = aim['rotation']
+    v = [point[k] - aim['position'][k] for k in range(3)]
+    # the node's rotation undone: v rotated by the conjugate quaternion
+    x, y, z = v
+    cx, cy, cz = -qx, -qy, -qz
+    tx, ty, tz = 2 * (cy * z - cz * y), 2 * (cz * x - cx * z), 2 * (cx * y - cy * x)
+    r = (x + qw * tx + cy * tz - cz * ty, y + qw * ty + cz * tx - cx * tz, z + qw * tz + cx * ty - cy * tx)
+    return [scale * c for c in r]
+
+
+def write_controllers(root, hands, buttons=True, bad_button=False):
     os.makedirs(os.path.join(root, 'controllers'), exist_ok=True)
     half = math.radians(30) / 2
     for hand in hands:
@@ -209,9 +234,17 @@ def write_controllers(root, hands):
         c.primitive(box([-3.0, -2.0, 0.0], [3.0, 2.0, 6.0]), (0.18, 0.18, 0.2))
         c.primitive(box([-3.5, 2.0, -7.0], [3.5, 3.0, -2.0]), (1.0, 0.45, 0.05))
         c.write(os.path.join(root, 'controllers', hand + '.glb'))
+        side = {'aim': {'position': [0.0, 2.0, -6.0], 'rotation': [math.sin(half), 0.0, 0.0, math.cos(half)]}, 'scale': 0.01}
+        if buttons:
+            points = dict(BUTTONS[hand])
+            if bad_button and hand == 'left':
+                points['menu'] = [500.0, 0.0, 0.0]
+            side['buttons'] = points
+            for name, p in points.items():
+                if max(abs(c) for c in p) < 100:
+                    print('label %s %s %.5f %.5f %.5f' % ((hand, name) + tuple(to_aim(p, side['aim'], side['scale']))))
         with open(os.path.join(root, 'controllers', hand + '.json'), 'w') as f:
-            json.dump({'aim': {'position': [0.0, 2.0, -6.0], 'rotation': [math.sin(half), 0.0, 0.0, math.cos(half)]},
-                       'scale': 0.01}, f, indent=1)
+            json.dump(side, f, indent=1)
 
 
 def main():
@@ -223,11 +256,13 @@ def main():
     ap.add_argument('--only-right', action='store_true', help='controllers: right.glb only')
     ap.add_argument('--early', action='store_true', help='guns: aa-early.glb too, sorting before boxgun.glb')
     ap.add_argument('--only-box', action='store_true', help='guns: the box gun alone (and aa-early with --early)')
+    ap.add_argument('--no-buttons', action='store_true', help='controllers: the sidecars without "buttons"')
+    ap.add_argument('--bad-button', action='store_true', help='controllers: the left one\'s "menu" point 5 m off')
     a = ap.parse_args()
     if a.guns:
         write_guns(a.root, not a.no_sidecar, a.early, a.only_box)
     if a.controllers:
-        write_controllers(a.root, ['right'] if a.only_right else ['left', 'right'])
+        write_controllers(a.root, ['right'] if a.only_right else ['left', 'right'], not a.no_buttons, a.bad_button)
     print('muzzle %.4f %.4f %.4f' % tuple(gun_muzzle(GUN)))
 
 

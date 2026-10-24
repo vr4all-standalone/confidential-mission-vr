@@ -15,6 +15,8 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <cfloat>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -84,6 +86,11 @@ Model runtime[2];
 Model own[2];
 glm::mat4 ownToAim[2];
 bool ownLoaded[2];
+// its sidecar's "buttons" points (GLB space) that passed, by Button; the sidecar as logged
+glm::vec3 ownButton[2][Buttons];
+bool ownHasButton[2][Buttons];
+std::string ownSidecarShown[2];
+static_assert(sizeof(own::ButtonNames) / sizeof(own::ButtonNames[0]) == Buttons, "a sidecar name for each Button");
 unsigned ownGeneration;		// own::controllersGeneration() they were read at
 std::string ownKey[2];		// each hand's file and its stamp as read: only a hand whose files changed is read again
 
@@ -445,6 +452,8 @@ void refreshOwn()
 		ownKey[hand] = key;
 		release(own[hand]);
 		ownLoaded[hand] = false;
+		std::fill(std::begin(ownHasButton[hand]), std::end(ownHasButton[hand]), false);
+		ownSidecarShown[hand].clear();
 		if (!file.present)
 			continue;
 		std::string why = file.why;
@@ -465,11 +474,41 @@ void refreshOwn()
 			WARN_LOG(RENDERER, "XR: controller model from %s skipped: %s", file.shown.c_str(), why.c_str());
 			continue;
 		}
+		// the labels' points: each near the model (a quarter of its size from its bounds at most: else in other units?)
+		glm::vec3 lo(FLT_MAX), hi(-FLT_MAX);
+		for (size_t i = 0; i + 2 < mesh.positions.size(); i += 3)
+		{
+			const glm::vec3 p(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]);
+			lo = glm::min(lo, p);
+			hi = glm::max(hi, p);
+		}
+		const float size = std::max({ hi.x - lo.x, hi.y - lo.y, hi.z - lo.z });
+		std::vector<std::string> faults = file.buttonFaults;
+		for (const auto& point : file.buttons)
+		{
+			const float off = glm::length(glm::max(glm::max(lo - point.second, point.second - hi), glm::vec3(0.f)));
+			if (!(off <= 0.25f * size))
+			{
+				char why[160];
+				snprintf(why, sizeof(why), "\"%s\" is %.3g from the model, over a quarter of its size (%.3g): in other units?", point.first.c_str(), off, size);
+				faults.push_back(why);
+				continue;
+			}
+			for (int b = 0; b < Buttons; b++)
+				if (point.first == own::ButtonNames[b])
+				{
+					ownButton[hand][b] = point.second;
+					ownHasButton[hand][b] = true;
+				}
+		}
 		fromGlb(own[hand], std::move(mesh), true);
 		ownToAim[hand] = file.modelToAim;
 		ownLoaded[hand] = true;
+		ownSidecarShown[hand] = file.shown.substr(0, file.shown.size() - 4) + ".json";
 		NOTICE_LOG(RENDERER, "XR: controller model from %s (%u triangles, %zu primitive%s in %zu part%s)", file.shown.c_str(), own[hand].triangles,
 				own[hand].primitives, own[hand].primitives == 1 ? "" : "s", own[hand].parts.size(), own[hand].parts.size() == 1 ? "" : "s");
+		for (const std::string& why : faults)
+			WARN_LOG(RENDERER, "XR: controller model from %s: label point left out (the built-in place): %s", file.shown.c_str(), why.c_str());
 	}
 }
 
@@ -622,6 +661,34 @@ glm::vec3 anchor(int hand, Button button)
 	return glm::vec3(0.f);
 }
 
+LabelPoint labelPoint(int hand, Button button, const glm::mat4& grip, const glm::mat4& aim)
+{
+	// (a and x, b and y: the same place, either name)
+	static const Button Twin[Buttons] { X, Y, A, B, Menu, Stick, Trigger, Grip };
+	LabelPoint p;
+	if ((hand == Left || hand == Right) && button >= 0 && button < Buttons && ownLoaded[hand] && own[hand].uploaded)
+	{
+		// the model draw() drew: room <- aim * ownToAim <- GLB
+		p.ownModel = true;
+		const int b = ownHasButton[hand][button] ? button : ownHasButton[hand][Twin[button]] ? Twin[button] : -1;
+		if (b >= 0)
+		{
+			p.fromFile = true;
+			p.local = glm::vec3(ownToAim[hand] * glm::vec4(ownButton[hand][b], 1.f));
+			p.room = glm::vec3(aim * glm::vec4(p.local, 1.f));
+			return p;
+		}
+	}
+	p.local = anchor(hand, button);
+	p.room = glm::vec3(grip * glm::vec4(p.local, 1.f));
+	return p;
+}
+
+std::string ownSidecar(int hand)
+{
+	return hand == Left || hand == Right ? ownSidecarShown[hand] : std::string();
+}
+
 void term()
 {
 	release(builtIn);
@@ -630,6 +697,11 @@ void term()
 	for (Model& m : own)
 		release(m);
 	ownLoaded[Left] = ownLoaded[Right] = false;
+	for (int hand : { Left, Right })
+	{
+		std::fill(std::begin(ownHasButton[hand]), std::end(ownHasButton[hand]), false);
+		ownSidecarShown[hand].clear();
+	}
 	ownGeneration = 0;
 	ownKey[Left].clear();
 	ownKey[Right].clear();

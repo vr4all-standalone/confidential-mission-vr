@@ -3006,7 +3006,7 @@ bool frame()
 			if (config::VrXrGun && labelsOn())
 				for (int hand : { Left, Right })
 					if (controllerShown[hand] && holds(hand) == Holds::Controller)
-						labels::draw(viewProj, hand, controllerGrip[hand], profiles[hand].c_str());
+						labels::draw(viewProj, hand, controllerGrip[hand], controllerAim[hand], profiles[hand].c_str());
 		}
 		if (i == 0)
 		{
