@@ -158,6 +158,26 @@ The how-to-play labels use the user's exact text:
 - **Check the mapping:** confirm in code that the left trigger really is player 2's shot. If the left trigger fires for player 1 before player 2 joins, the labels still use the user's text, and the report must say so.
 - **Docs:** README and the checklist use the same list.
 
+## 9. The black screen at the stage 2 boss (investigate, fix if we can)
+
+The user (2026-10-24): "at the end of the 2nd level boss with the helicopter and the tank. when the tank shoots rockets and hits player at the end screen goes black for a few seconds. just fyi im not sure if you can fix it but that is another minor issue".
+
+Find the cause and fix it if it's ours.
+
+**Reference:** the flat game (`vr.Xr=no`). If the flat picture also goes dark there, it's the game's own effect. In that case, the VR view should show what the flat game shows (e.g. the same dim or flash on the panel or the world), not more black than the flat game.
+
+**Likely suspects:** the hit effect is a full-screen or near-camera polygon. Possible causes:
+- the re-projection placing it in front of the eyes;
+- the HUD-by-W split sending it to the wrong layer;
+- the clip/far-out rules;
+- a fade value we apply world-wide.
+
+**Fix and test:**
+- A fix comes with a sim scenario that reaches the moment and shows the frames are no longer black.
+- Reach it with RAM pokes, a stage start, or a local save state. A save state is game data: it stays local and is never committed.
+
+**If it's the game's own effect**, or can't be fixed safely: the report says so with evidence, and it goes on the known-issues list.
+
 ## Declined: shipping the in-game guns
 
 The user suggested shipping the ripped pistol and rifle in the APK ("idk up to you"). We don't.
