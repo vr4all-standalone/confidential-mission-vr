@@ -488,6 +488,11 @@ const std::vector<GunFile>& guns()
 	return gunFiles;
 }
 
+bool sameStem(const std::string& a, const std::string& b)
+{
+	return lower(a) == lower(b);
+}
+
 const ControllerFile& controller(int hand)
 {
 	return controllerFiles[hand == 0 ? 0 : 1];

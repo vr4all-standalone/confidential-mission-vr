@@ -163,6 +163,10 @@ where it is.
 - [ ] **Do:** step the Gun row (+ and -).
   **Expect:** Auto, Agents' pistol, Cabinet gun, Arcade gun, Namco gun, Zapper (the last two bundled), round and round;
   each shows in the hand at once, while the game is paused.
+- [ ] **Do:** step the Gun row onto Zapper and onto Namco gun, a few times each (their files are read when the row
+  lands on them); then start a game with one of them chosen.
+  **Expect:** stepping onto Zapper/Namco on the Gun row: note any hitch, and how long (the paused view freezing or
+  juddering; a guess in ms is fine). The same for the first frame of the game started with one of them.
 - [ ] **Do:** click the Gun row's halves with the trigger.
   **Expect:** after each change the dot stays on the Gun row (the new gun's muzzle moves it a few cm; rows are 6.3 cm apart).
 - [ ] **Do:** with each gun (agents' pistol, cabinet gun, arcade gun, Zapper, Namco gun) shoot at the screen.

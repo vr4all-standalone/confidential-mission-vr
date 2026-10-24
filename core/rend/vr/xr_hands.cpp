@@ -686,7 +686,7 @@ GunKind chosenGun()
 	if (config::VrGameHands)
 		gunModel(GunKind::Rifle);
 	// (a setting below 0 is Auto, as the menu's row shows it; 4 and over the player's own gun that
-	// vr.GunFile names: its file name without .glb)
+	// vr.GunFile names: its file name without .glb, in any case, as the scan folds it)
 	refreshOwn();
 	int setting = config::VrGun;
 	if (setting < 0)
@@ -694,7 +694,7 @@ GunKind chosenGun()
 	const bool folder = setting >= OwnGuns;
 	int own = -1;
 	for (size_t i = 0; folder && i < ownGuns.size() && own < 0; i++)
-		if (ownGuns[i]->file.stem == config::VrGunFile.get())
+		if (own::sameStem(ownGuns[i]->file.stem, config::VrGunFile.get()))
 			own = (int)i;
 	const bool ownThere = own >= 0 && readOwn(own);
 	// only the chosen one held (its textures can be big)

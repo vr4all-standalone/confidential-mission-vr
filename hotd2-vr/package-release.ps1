@@ -22,6 +22,12 @@
   named on a "File:" line of its CREDITS.txt (File: guns/zapper.glb), and git must track nothing
   in hotd2-vr\models; -CheckOnly checks those two as well.
 
+  The licence, LICENSE.txt: GPL-3.0 and cgltf's MIT notice (and, with the bundled models, a line
+  that they aren't under it). The vr build writes it into the APK as assets/LICENSE.txt
+  (build.gradle.kts, LicenceText: the APK is downloaded on its own too), and the zip gets that same
+  file, copied out of the APK. Both are checked for it, with the GPL-3.0 text and cgltf's notice
+  (core\deps\cgltf\LICENSE) in it; -CheckOnly checks that too.
+
   A release is built from a commit, the one its published source is: the working tree must be
   clean (the gamesdk submodule's local change aside), and the APK's versionName (1.1.0-g<commit>),
   its libflycast.so and flycast.exe must all name HEAD (a -SkipBuild after a new commit fails
@@ -94,6 +100,27 @@ function Find-UncreditedModels([string]$archive) {
 	} finally { $zip.Dispose() }
 }
 
+# What's wrong with the licence text in a zip or APK (nothing when it's fine): the APK's assets/LICENSE.txt, the zip's
+# LICENSE.txt, with the GPL-3.0 text and cgltf's MIT notice (core\deps\cgltf\LICENSE: cgltf is in the build, it reads
+# the GLB models) in it, whitespace aside.
+function Find-LicenceFault([string]$archive) {
+	$name = if ([IO.Path]::GetExtension($archive) -eq '.apk') { 'assets/LICENSE.txt' } else { 'LICENSE.txt' }
+	$text = $null
+	$zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $archive).Path)
+	try {
+		$entry = $zip.GetEntry($name)
+		if ($entry) {
+			$reader = New-Object IO.StreamReader($entry.Open())
+			try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+		}
+	} finally { $zip.Dispose() }
+	if ($null -eq $text) { return "no $name" }
+	$flat = $text -replace '\s+', ' '
+	$cgltf = ((Get-Content -Raw (Join-Path $repo 'core\deps\cgltf\LICENSE')) -replace '\s+', ' ').Trim()
+	if ($flat -notmatch 'GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007') { return "$name has no GPL-3.0 text" }
+	if (-not $cgltf -or -not $flat.Contains($cgltf)) { return "$name has no cgltf notice (core\deps\cgltf\LICENSE)" }
+}
+
 function Test-Archives([string[]]$archives) {
 	$bad = $false
 	foreach ($a in $archives) {
@@ -112,6 +139,13 @@ function Test-Archives([string[]]$archives) {
 			$uncredited | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
 		} else {
 			Write-Host "credits check: $(Split-Path -Leaf $a) names every model it has in its CREDITS.txt"
+		}
+		$licence = Find-LicenceFault $a
+		if ($licence) {
+			$bad = $true
+			Write-Host "$a lacks the licence text: $licence" -ForegroundColor Red
+		} else {
+			Write-Host "licence check: $(Split-Path -Leaf $a) has the licence text, GPL-3.0 and cgltf's MIT notice"
 		}
 	}
 	-not $bad
@@ -383,28 +417,11 @@ if ($modelFiles.Count) {
 		"own licences: CREDITS.txt names each one, its author, its licence and what was changed.`n`nLicence: this build")
 }
 Set-Content -Path (Join-Path $stage 'README.txt') -Encoding ascii -Value ($readme -replace "`r?`n", "`r`n")
-# the licence: GPL-3.0 for the build (the gun model's CC BY 4.0 goes with GPL-3.0, not GPL-2.0;
-# Flycast's "or later" allows it). Its text: the copy that comes with Flycast's picoTCP.
-$gpl3 = Get-Content -Raw (Join-Path $repo 'core\deps\picotcp\LICENSE.GPLv3')
-if ($gpl3 -notmatch 'GNU GENERAL PUBLIC LICENSE\s+Version 3, 29 June 2007') { throw 'GPL-3.0 text not found' }
-# cgltf (core\deps\cgltf, it reads the controllers' models) is MIT: its notice goes with the build
-$cgltf = ((Get-Content -Raw (Join-Path $repo 'core\deps\cgltf\LICENSE')) -replace "`r?`n", "`r`n").Trim()
-if ($cgltf -notmatch '^Copyright \(c\) 2018-2021 Johannes Kuhlmann\s+Permission is hereby granted') { throw 'cgltf MIT notice not found' }
-Set-Content -Path (Join-Path $stage 'LICENSE.txt') -Encoding ascii -NoNewline -Value (@'
-Confidential Mission VR, PC version: licence
-
-flycast.exe is built from Flycast (GPL-2.0-or-later), mikermak's hotd2-vr and Confidential
-Mission VR's changes to it (GPL-2.0-or-later too), and the gun model "Namco Arcade Gun" by
-Martoscar (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). CC BY 4.0 goes together
-with GPL-3.0 but not GPL-2.0, so this build is distributed under the GNU General Public License
-version 3, below. Its source code is published with every release, on the same page as this zip.
-
-flycast.exe also contains cgltf by Johannes Kuhlmann (https://github.com/jkuhlmann/cgltf), which
-reads the controllers' models, under the MIT licence:
-
-'@ + "`r`n" + $cgltf + "`r`n`r`n" + $(if ($modelFiles.Count) {
-	"The 3D models in data\models are not part of flycast.exe and not under its licence: each is its`r`n" +
-	"author's, under its own licence, as CREDITS.txt says.`r`n`r`n" }) + $gpl3)
+# the licence: the APK's assets/LICENSE.txt (GPL-3.0 and cgltf's MIT notice, written by the vr build: build.gradle.kts,
+# LicenceText), the same file in the zip; Test-Archives checks both (without it both fail, and neither is left in dist\)
+$licence = Read-ZipEntry $apk 'assets/LICENSE.txt'
+if ($null -ne $licence) { [IO.File]::WriteAllBytes((Join-Path $stage 'LICENSE.txt'), $licence) }
+else { Write-Host 'The APK has no assets/LICENSE.txt (the licence text): build it again (without -SkipBuild).' -ForegroundColor Red }
 # the zip, its entry names with forward slashes (Windows PowerShell 5.1's Compress-Archive writes data\models\...)
 Add-Type -AssemblyName System.IO.Compression
 $out = [IO.File]::Open($zip, 'CreateNew')

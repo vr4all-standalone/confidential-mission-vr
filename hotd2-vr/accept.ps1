@@ -55,7 +55,8 @@
   accept-cm-own-gun's menu saved, played again with a file sorting before it (it plays cm-own-gun first without its
   emu.cfg.after). own-folders: the folders' restore when a fixture can't be removed (no game run; a player's
   build-win\guns\ goes to guns.own-folders-hold meanwhile). cm-bundled (S37) plays accept-cm-bundled: fixtures in the
-  player's folders and in a bundled folder of its own (build-win\data\models), merged file by file.
+  player's folders and in a bundled folder of its own (build-win\data\models), merged file by file; then
+  accept-cm-bundled-case (S45): the player's BoxGun.glb over the bundled boxgun.glb, vr.GunFile boxgun kept.
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
 $ErrorActionPreference = 'Stop'
@@ -1657,13 +1658,30 @@ function Test-CmOwnControllers {
 # bundled set), the bundled aa-early is offered and chosen (vr.Gun 4, vr.GunFile aa-early), and the log names the
 # bundled files "bundled models/...". The user's own and bundled models are held aside meanwhile.
 function Test-CmBundled {
-	return Invoke-OwnFolders -Fixture '--guns', '--only-box', '--controllers', '--only-right' -Bundled '--guns', '--only-box', '--early', '--controllers' {
+	$why = Invoke-OwnFolders -Fixture '--guns', '--only-box', '--controllers', '--only-right' -Bundled '--guns', '--only-box', '--early', '--controllers' {
 		Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-bundled'; Seconds = 20; XrSim = $true; Config = "$cmWiden,config:vr.Gun=4,config:vr.GunFile=aa-early"
 			Expect = @('XR: own models from .*models.* \(2 guns, controllers',
 				'XR: own gun bundled models.guns.aa-early\.glb offered: "Early gun"', 'XR: own gun guns.boxgun\.glb offered: "Box gun"',
 				'XR: own gun "Early gun" from bundled models.guns.aa-early\.glb', 'XR: gun: Early gun \(chosen\)$',
 				'XR: controller model from bundled models.controllers.left\.glb \(36 triangles', 'XR: controller model from controllers.right\.glb \(36 triangles')
 			Reject = @('XR: initialisation failed', 'bundled models.guns.boxgun', 'bundled models.controllers.right') }
+	}
+	if ($why) { return $why }
+	# A player's file named in another case over a bundled one (Ruling S45): the player's BoxGun.glb over the bundled
+	# boxgun.glb, the choice saved as the bundled one's row saved it (vr.Gun 4, vr.GunFile boxgun). The scan folds the
+	# case (the player's file goes instead of the bundled one), and so does the vr.GunFile match: the player's box gun is
+	# the one chosen, not Auto's.
+	return Invoke-OwnFolders -Fixture '--guns', '--only-box' -Bundled '--guns', '--only-box' {
+		$guns = Join-Path $repo 'build-win\guns'
+		foreach ($ext in 'glb', 'json') {
+			# a rename in case only, by way of another name (a case-blind file system may refuse it in one step)
+			Move-Item -LiteralPath (Join-Path $guns "boxgun.$ext") -Destination (Join-Path $guns "boxgun-case.$ext")
+			Move-Item -LiteralPath (Join-Path $guns "boxgun-case.$ext") -Destination (Join-Path $guns "BoxGun.$ext")
+		}
+		Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-bundled-case'; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=4,config:vr.GunFile=boxgun"
+			Expect = @('XR: own gun guns.BoxGun\.glb offered: "Box gun"', 'XR: own gun "Box gun" from guns.BoxGun\.glb',
+				'XR: gun: Box gun \(chosen\)$')
+			Reject = @('XR: initialisation failed', 'bundled models.guns.boxgun') }
 	}
 }
 

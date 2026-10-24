@@ -101,6 +101,9 @@ void scan();
 unsigned gunsGeneration();
 unsigned controllersGeneration();
 const std::vector<GunFile>& guns();
+// The same gun file name (a stem, without .glb) in any case, as scan() folds the names: vr.GunFile against a
+// gun's stem (a player's Zapper.glb goes instead of the bundled zapper.glb, and keeps its choice)
+bool sameStem(const std::string& a, const std::string& b);
 // hand: 0 left, 1 right
 const ControllerFile& controller(int hand);
 // The whole of a file, at most maxBytes: false if missing, unreadable or bigger.

@@ -64,12 +64,12 @@ struct WidenRegistration
 } widenRegistration;
 
 // vr.Gun's place in its choices (xr_hands.h gunChoices(); a gun of the player's own by vr.GunFile, 4
-// and over all meaning that; not there: Auto's)
+// and over all meaning that, its name in any case; not there: Auto's)
 int gunAt(const std::vector<GunChoice>& choices)
 {
 	const int setting = std::min((int)config::VrGun, OwnGuns);
 	for (size_t i = 0; i < choices.size(); i++)
-		if (choices[i].setting == setting && (choices[i].file == nullptr || config::VrGunFile.get() == choices[i].file))
+		if (choices[i].setting == setting && (choices[i].file == nullptr || own::sameStem(config::VrGunFile.get(), choices[i].file)))
 			return (int)i;
 	return 0;
 }

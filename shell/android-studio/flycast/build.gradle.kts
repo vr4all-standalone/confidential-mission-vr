@@ -177,6 +177,60 @@ abstract class BundledModels : DefaultTask() {
 }
 val bundledModels = file("../../../hotd2-vr/models")
 
+// hotd2-vr: the licence the app goes out under, assets/LICENSE.txt in the vr build (the APK is downloaded on its own):
+// GPL-3.0 (the copy that comes with Flycast's picoTCP), cgltf's MIT notice (core/deps/cgltf, it reads the GLB models)
+// and, with the bundled models, a line that they aren't under it. package-release.ps1 copies this file out of the
+// APK as the PC zip's LICENSE.txt, so the two are the same text, and checks both for the GPL and cgltf's notice.
+abstract class LicenceText : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val gpl3: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val cgltf: RegularFileProperty
+
+    @get:Input
+    abstract val withModels: Property<Boolean>
+
+    @get:OutputDirectory
+    abstract val assets: DirectoryProperty
+
+    @TaskAction
+    fun write() {
+        val gpl = gpl3.get().asFile.readText()
+        if (!Regex("GNU GENERAL PUBLIC LICENSE\\s+Version 3, 29 June 2007").containsMatchIn(gpl))
+            throw GradleException("hotd2-vr: no GPL-3.0 text in ${gpl3.get().asFile}")
+        val mit = cgltf.get().asFile.readText().trim()
+        if (!Regex("^Copyright \\(c\\) [0-9-]+ Johannes Kuhlmann\\s+Permission is hereby granted").containsMatchIn(mit))
+            throw GradleException("hotd2-vr: no MIT notice in ${cgltf.get().asFile}")
+        val head = listOf(
+            "Confidential Mission VR: licence",
+            "",
+            "Confidential Mission VR (the Quest app, and flycast.exe in the PC version) is built from",
+            "Flycast (GPL-2.0-or-later), mikermak's hotd2-vr and Confidential Mission VR's changes to it",
+            "(GPL-2.0-or-later too), and the gun model \"Namco Arcade Gun\" by Martoscar (CC BY 4.0,",
+            "https://creativecommons.org/licenses/by/4.0/). CC BY 4.0 goes together with GPL-3.0 but not",
+            "GPL-2.0, so the app is distributed under the GNU General Public License version 3, below. Its",
+            "source code is published with every release, on the same page as the APK and the zip.",
+            "",
+            "It also contains cgltf by Johannes Kuhlmann (https://github.com/jkuhlmann/cgltf), which reads",
+            "the 3D models of the guns and the controllers, under the MIT licence:",
+            "", "")
+        val models = if (!withModels.get()) emptyList() else listOf(
+            "The 3D models that come with the app (assets/models in the Quest app, data\\models in the PC",
+            "version) are not part of the program and not under its licence: each is its author's, under",
+            "its own licence, as CREDITS.txt says.",
+            "", "")
+        val text = head.joinToString("\n") + mit + "\n\n" + models.joinToString("\n") + gpl
+        val out = assets.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        // CRLF: the zip's copy is read on Windows
+        File(out, "LICENSE.txt").writeText(text.replace("\r\n", "\n").replace("\n", "\r\n"), Charsets.US_ASCII)
+    }
+}
+
 // hotd2-vr: the vr build type is the app Confidential Mission VR, with an application ID of its own
 // (BaseGLActivity.VR_APPLICATION_ID matches it). ${applicationId} in the manifest follows.
 // Its versionName is the app's own (hubVersion and the commit), not Flycast's tags.
@@ -184,6 +238,12 @@ androidComponents {
     onVariants(selector().withBuildType("vr")) { variant ->
         variant.applicationId.set("com.vrlightgunhub.confmiss")
         variant.outputs.forEach { it.versionName.set("$hubVersion-g${gitShortHash()}") }
+        val licence = tasks.register<LicenceText>("${variant.name}LicenceText") {
+            gpl3.set(file("../../../core/deps/picotcp/LICENSE.GPLv3"))
+            cgltf.set(file("../../../core/deps/cgltf/LICENSE"))
+            withModels.set(bundledModels.isDirectory)
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(licence, LicenceText::assets)
         if (bundledModels.isDirectory) {
             val copy = tasks.register<BundledModels>("${variant.name}BundledModels") {
                 models.set(bundledModels)

@@ -433,12 +433,14 @@ The start screen's file check has a JVM test: `gradlew.bat :flycast:testDebugUni
 3. **The packages.** `powershell -File hotd2-vr\package-release.ps1` builds both versions and
    puts `confidential-mission-vr-quest.apk` and `confidential-mission-vr-pcvr.zip` (`flycast.exe`,
    `emu.cfg`, `README.txt`, `LICENSE.txt`, `Play Confidential Mission.cmd`, and with the bundled
-   models `CREDITS.txt` and `data\models\`) in `dist\`. It refuses an APK signed with the public
+   models `CREDITS.txt` and `data\models\`) in `dist\`. Both carry the licence, `LICENSE.txt`
+   (GPL-3.0 and cgltf's MIT notice): the Quest build writes it into the APK as
+   `assets/LICENSE.txt`, and the zip gets the same file out of the APK. It refuses an APK signed with the public
    debug key (`-AllowDebugKey` takes one for a test build), an APK that isn't Confidential
    Mission VR (its package, version and label, and the start screen as its only library entry),
    a zip with other files or a `README.txt` naming another game, either file if its file list
    has anything of a game in it (disc images, keys, rips, frame grabs, models made from a game)
-   or a model its `CREDITS.txt` doesn't name, an APK whose bundled models aren't those of
+   or a model its `CREDITS.txt` doesn't name, either file without that licence text, an APK whose bundled models aren't those of
    `hotd2-vr\models\`, and anything under `hotd2-vr/models` tracked by git. `-SkipBuild`
    packages what was built last; `-CheckOnly <archives>` only checks the contents (and git).
 4. **The source.** Publish the source of the release's commit with it (the GPL asks for that):
@@ -520,6 +522,9 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
   by declan02530, CC BY 4.0. They are files of their own next to the app, not part of its
   code, each under its own licence.
 - [OpenXR loader](https://github.com/KhronosGroup/OpenXR-SDK) by Khronos, Apache-2.0.
+- [cgltf](https://github.com/jkuhlmann/cgltf) by Johannes Kuhlmann, MIT (reads the GLB models:
+  the bundled ones and your own). Its notice is in `LICENSE.txt`, in the APK (`assets/LICENSE.txt`)
+  and in the zip.
 - Roboto (Flycast's own copy, on the headset's panel) by Google, Apache-2.0.
 - [MediaPipe](https://github.com/google-ai-edge/mediapipe) by Google, Apache-2.0
   (finger-gun tracker); [Capstone](https://www.capstone-engine.org/), BSD.
