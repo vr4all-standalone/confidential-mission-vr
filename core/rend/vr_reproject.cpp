@@ -493,6 +493,13 @@ static std::vector<GameProfile> makeProfiles()
 	// both u32 whose low byte is read; +0x60 the shots fired, a u16 that goes up once per shot
 	// the game fires, through reloads, but not for a pull on an empty gun.
 	p.gunRam = { 0x0C1557B8, 276, 0x4C, 0x50, 0x60 };
+	// Its guns, from the player's own game (hands_rip.h): the red cabinet gun in the reload
+	// tutorial after the first Start (v11-research-game.md, A1 candidate 2): tex 400000 (plain,
+	// red from its vertex colours), 279 polygons when whole (both windings, so all of it), at W
+	// 43-74, one draw apart from the cabinet model beside it; the sights share the texture, flat
+	// at W 0.965-1.00003 (A2).
+	p.model.kind = hands::Source::CmGuns;
+	p.model.guns[0] = { "cabinet gun", "gun-cm-cabinet.bin", { 0x400000 }, 279, 200, 0.27f, 0.95f, 1.005f, false };
 	list.push_back(p);
 	return list;
 }

@@ -1551,7 +1551,8 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		// (a hand that holds its controller shows that instead: before play, after Show controls)
 		g.visible = config::VrShowGun && holds(g.hand) == Holds::Gun;
 		// (the slide and the open hand only for a gun that's held: not while the hand holds its controller)
-		if (game && slide && holds(g.hand) == Holds::Gun)
+		// (a gun alone, Confidential Mission's: no hand of the game's for the other one)
+		if (game && slide && !handsModel()->gunOnly && holds(g.hand) == Holds::Gun)
 			updateOtherHand(time, 1 - g.hand, tracked[1 - g.hand], locations[1 - g.hand], pose * placement, gunScale, mirror);
 		else
 		{
@@ -2676,8 +2677,27 @@ bool frame()
 	const glm::vec3 red(0.86f, 0.13f, 0.1f), white(0.92f), grey(0.66f);
 	const hands::Source *source = gameModelSource();
 	const bool staff = source != nullptr && source->kind == hands::Source::HerosStaff;
-	const char *title = staff ? "THE MAZE OF THE KINGS VR" : "THE HOUSE OF THE DEAD 2 VR";
-	if (preparing)
+	const bool cmGuns = source != nullptr && source->kind == hands::Source::CmGuns;
+	const char *title = cmGuns ? "CONFIDENTIAL MISSION VR" : staff ? "THE MAZE OF THE KINGS VR" : "THE HOUSE OF THE DEAD 2 VR";
+	if (preparing && cmGuns)
+	{
+		panel.lines = {
+			{ title, 0.085f, red },
+			{ "", 0.03f, white },
+			{ "Taking the guns from your copy of the game", 0.064f, white },
+			{ "About a minute or two, only this once", 0.047f, grey },
+		};
+		panel.progress = hands::prepProgress();
+		panel.footer = "B: skip (the built-in gun this time)";
+	}
+	else if (std::chrono::steady_clock::now() < doneUntil && cmGuns)
+		panel.lines = {
+			{ title, 0.085f, red },
+			{ "", 0.03f, white },
+			{ "Got it. The gun from your game is in your hand.", 0.064f, white },
+			{ "Reload: B, or point it away from the screen and pull.", 0.047f, grey },
+		};
+	else if (preparing)
 	{
 		panel.lines = {
 			{ title, 0.085f, red },

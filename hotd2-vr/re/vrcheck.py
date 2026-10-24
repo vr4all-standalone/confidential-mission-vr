@@ -16,6 +16,7 @@ window shots leave undrawn.
                                                 [--max F] [--max-jump F]
     python -I vrcheck.py same <a.png> <b.png> [--box x0,y0,x1,y1] [--max-diff 2.0]
     python -I vrcheck.py differ <a.png> <b.png> [--box x0,y0,x1,y1] [--min-diff 6.0]
+    python -I vrcheck.py hnd <model.bin> [--polys N] [--length L] [--gun-only] [--complete]
     python -I vrcheck.py selftest
 
 RAM offsets are printed as the profile takes them (address & 0x01FFFFFF: the dump starts at
@@ -539,6 +540,95 @@ def compare(args):
     return 0 if diff >= args.min_diff else 1
 
 
+#
+# A game's own model (HND1: hands.bin, staff-mok.bin, gun-*.bin; the format is in
+# core/rend/vr/xr_hands.cpp)
+#
+
+HND_GUN_ONLY, HND_COMPLETE = 1, 2
+
+
+def _read_hnd(path):
+    """version, flags, source polys (None before version 2), muzzle, the gun's vertex positions
+    (the frame and slide meshes, n x 3), all triangles, textures."""
+    data = open(path, 'rb').read()
+    if data[:4] != b'HND1':
+        raise SystemExit(f'{os.path.basename(path)}: not an HND1 model')
+    version, = struct.unpack_from('<I', data, 4)
+    if version not in (1, 2):
+        raise SystemExit(f'{os.path.basename(path)}: HND1 version {version} not read here')
+    head = struct.unpack_from('<23f', data, 8)
+    off = 8 + 23 * 4
+    flags, polys = 0, None
+    if version >= 2:
+        flags, polys = struct.unpack_from('<II', data, off)
+        off += 8
+    textures, = struct.unpack_from('<I', data, off)
+    off += 4
+    for _ in range(textures):
+        w, h, _f = struct.unpack_from('<III', data, off)
+        off += 12 + w * h * 4
+    meshes, = struct.unpack_from('<I', data, off)
+    off += 4
+    gun, triangles = [], 0
+    for m in range(meshes):
+        parts, = struct.unpack_from('<I', data, off)
+        off += 4
+        for _ in range(parts):
+            _tex, n = struct.unpack_from('<II', data, off)
+            off += 8
+            if off + n * 36 > len(data):
+                raise SystemExit(f'{os.path.basename(path)}: cut short')
+            v = np.frombuffer(data, '<f4', n * 9, off).reshape(n, 9)
+            off += n * 36
+            triangles += n // 3
+            if m < 2:
+                gun.append(v[:, :3].astype(np.float64))
+    pts = np.concatenate(gun) if gun else np.zeros((0, 3))
+    return version, flags, polys, np.array(head[0:3], np.float64), pts, triangles, textures
+
+
+def hnd(args):
+    """A game's own model: its version, flags, source polygon count, triangles and the gun's
+    extents (metres), and the checks: at least --polys of the game's polygons went into it
+    (version 2), its length along the barrel (z) within 5 % of --length, the muzzle well in front
+    (z < -0.4 x the length) and on the middle line (|x| < 1 cm), the gun's middle below the
+    muzzle (the grip hangs down), and the flags asked for."""
+    version, flags, polys, muzzle, pts, triangles, textures = _read_hnd(args.model)
+    name = os.path.basename(args.model)
+    what = ', '.join(w for b, w in ((HND_GUN_ONLY, 'gun only'), (HND_COMPLETE, 'complete')) if flags & b) or '-'
+    print(f'{name}: HND1 v{version} flags {flags} ({what}) source polys {"-" if polys is None else polys} '
+          f'triangles {triangles} textures {textures}')
+    if not len(pts):
+        print(f'FAIL {name}: no gun mesh')
+        return 1
+    lo, hi, mid = pts.min(0), pts.max(0), pts.mean(0)
+    length = hi[2] - lo[2]
+    print(f'{name}: gun x {lo[0]:.3f}..{hi[0]:.3f} y {lo[1]:.3f}..{hi[1]:.3f} z {lo[2]:.3f}..{hi[2]:.3f} '
+          f'(length {length:.3f} m), muzzle {muzzle[0]:.3f} {muzzle[1]:.3f} {muzzle[2]:.3f}, middle y {mid[1]:.3f}')
+    fails = []
+    if args.polys is not None:
+        if polys is None:
+            fails.append(f'version {version} has no source polygon count (want {args.polys} or more)')
+        elif polys < args.polys:
+            fails.append(f'{polys} source polys, want {args.polys} or more')
+    want = args.length if args.length is not None else length
+    if args.length is not None and abs(length - want) > 0.05 * want:
+        fails.append(f'length {length:.3f} m, want {want:.3f} +-5 %')
+    if not muzzle[2] < -0.4 * want:
+        fails.append(f'muzzle z {muzzle[2]:.3f}, want below {-0.4 * want:.3f} (in front)')
+    if not abs(muzzle[0]) < 0.01:
+        fails.append(f'muzzle x {muzzle[0]:.3f}, want within 0.01 of 0')
+    if not mid[1] < muzzle[1]:
+        fails.append(f"middle y {mid[1]:.3f} not below the muzzle's {muzzle[1]:.3f} (the grip hangs down)")
+    for flag, asked, what in ((HND_GUN_ONLY, args.gun_only, 'gun only'), (HND_COMPLETE, args.complete, 'complete')):
+        if asked and not flags & flag:
+            fails.append(f'not flagged {what}')
+    for f in fails:
+        print(f'FAIL {name}: {f}')
+    return 1 if fails else 0
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog='vrcheck.py', description=__doc__.split('\n\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -614,6 +704,13 @@ def main(argv):
         s.add_argument('--box', default='full', help='x0,y0,x1,y1 as fractions (default: the whole picture)')
         s.add_argument(limit, type=float, default=default, help=f'mean absolute difference per channel (0-255) {what} this')
         s.set_defaults(run=compare)
+    s = sub.add_parser('hnd')
+    s.add_argument('model')
+    s.add_argument('--polys', type=int, help="at least this many of the game's polygons went into it (HND1 v2)")
+    s.add_argument('--length', type=float, help='metres along the barrel (z), within 5 %%')
+    s.add_argument('--gun-only', action='store_true', help='flagged gun only (no hands)')
+    s.add_argument('--complete', action='store_true', help='flagged complete')
+    s.set_defaults(run=hnd)
     s = sub.add_parser('selftest')
     s.set_defaults(run=lambda args: selftest())
     args = ap.parse_args(argv)
@@ -770,6 +867,31 @@ def _write_png(path, rgb, filters=(0,)):
     with open(path, 'wb') as f:
         f.write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
                 + chunk(b'IDAT', zlib.compress(b''.join(rows))) + chunk(b'IEND', b''))
+
+
+def _synthetic_hnd(path, mirror=False, version=2, flags=HND_GUN_ONLY | HND_COMPLETE, polys=279):
+    """A boxy gun as HND1: a barrel 27 cm long along -z (y 0..4 cm) and a grip below its back
+    (y -10..0 cm), origin at the grip's top; the muzzle at (0, 2, -22) cm. mirror: z the other
+    way (the muzzle at +z)."""
+    def box(lo, hi):
+        (x0, y0, z0), (x1, y1, z1) = lo, hi
+        c = [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
+        faces = ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3))
+        return [c[i] for a, b, cc, d in faces for i in (a, b, cc, a, cc, d)]
+    verts = box((-0.015, 0.0, -0.22), (0.015, 0.04, 0.05)) + box((-0.012, -0.10, 0.0), (0.012, 0.0, 0.04))
+    sz = -1.0 if mirror else 1.0
+    out = bytearray(b'HND1') + struct.pack('<I', version)
+    out += struct.pack('<3f', 0.0, 0.02, -0.22 * sz) + struct.pack('<3f', 0.0, 0.02, -0.22 * sz) + struct.pack('<f', 0.0)
+    out += struct.pack('<16f', *(1.0 if i % 5 == 0 else 0.0 for i in range(16)))
+    if version >= 2:
+        out += struct.pack('<II', flags, polys)
+    out += struct.pack('<I', 1) + struct.pack('<III', 1, 1, 0) + bytes((255, 255, 255, 255))
+    out += struct.pack('<I', 4) + struct.pack('<III', 1, 0, len(verts))
+    for x, y, z in verts:
+        out += struct.pack('<8f', x, y, z * sz, 0.0, 1.0, 0.0, 0.0, 0.0) + bytes((200, 30, 30, 255))
+    out += struct.pack('<III', 0, 0, 0)
+    with open(path, 'wb') as f:
+        f.write(out)
 
 
 def selftest():
@@ -980,6 +1102,28 @@ def selftest():
         check(['differ', shot_s, shot_u, '--min-diff', '3.5'], 0, ['s.png u.png diff 3.750'])
         check(['same', shot_s, shot_v], 's.png, v.png: sizes differ (64x64, 32x32)', [])
         check(['differ', shot_s, shot_u, '--box', '0.6,0,0.6,1'], '--box 0.6,0,0.6,1: want 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1', [])
+
+        # hnd: a synthetic gun-only model, then mirrored (the muzzle behind), and as version 1
+        gun_m = os.path.join(tmp, 'gun.bin')
+        _synthetic_hnd(gun_m)
+        gun_head = 'gun.bin: HND1 v2 flags 3 (gun only, complete) source polys 279 triangles 24 textures 1'
+        gun_ext = ('gun.bin: gun x -0.015..0.015 y -0.100..0.040 z -0.220..0.050 (length 0.270 m), '
+                   'muzzle 0.000 0.020 -0.220, middle y -0.015')
+        check(['hnd', gun_m, '--polys', '279', '--length', '0.27', '--gun-only', '--complete'], 0, [gun_head, gun_ext])
+        check(['hnd', gun_m, '--polys', '280'], 1, [gun_head, gun_ext, 'FAIL gun.bin: 279 source polys, want 280 or more'])
+        check(['hnd', gun_m, '--length', '0.3'], 1, [gun_head, gun_ext, 'FAIL gun.bin: length 0.270 m, want 0.300 +-5 %'])
+        _synthetic_hnd(gun_m, mirror=True)
+        check(['hnd', gun_m, '--polys', '279', '--length', '0.27', '--gun-only'], 1, [
+            gun_head, 'gun.bin: gun x -0.015..0.015 y -0.100..0.040 z -0.050..0.220 (length 0.270 m), '
+            'muzzle 0.000 0.020 0.220, middle y -0.015', 'FAIL gun.bin: muzzle z 0.220, want below -0.108 (in front)'])
+        _synthetic_hnd(gun_m, flags=HND_COMPLETE)
+        check(['hnd', gun_m, '--gun-only'], 1, ['gun.bin: HND1 v2 flags 2 (complete) source polys 279 triangles 24 textures 1',
+                                                gun_ext, 'FAIL gun.bin: not flagged gun only'])
+        _synthetic_hnd(gun_m, version=1)
+        gun_v1 = 'gun.bin: HND1 v1 flags 0 (-) source polys - triangles 24 textures 1'
+        check(['hnd', gun_m, '--polys', '1'], 1, [gun_v1, gun_ext,
+                                                  'FAIL gun.bin: version 1 has no source polygon count (want 1 or more)'])
+        check(['hnd', gun_m, '--length', '0.27'], 0, [gun_v1, gun_ext])
 
     for f in failures:
         print('FAIL ' + f, end='' if f.endswith('\n') else '\n')

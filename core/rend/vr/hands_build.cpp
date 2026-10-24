@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <iterator>
 #include <map>
@@ -134,7 +135,10 @@ dvec3 centre(const Rip& rip, const Polys& polys)
 // Triangles in game eye space, each wound so its normal faces out: by the winding the game
 // culled with (ISP cull mode 2/3), the sign settled by a vote over all of them (outwards from
 // the middle), else outwards from the middle.
-Tris triangles(const Rip& rip, const Polys& polys)
+// The polygons' triangles in game eye space, all wound outwards. White, or with
+// vertexColours each the mean of its corners' colours (a gun drawn in the game's vertex
+// colours over a plain texture: Confidential Mission's cabinet gun).
+Tris triangles(const Rip& rip, const Polys& polys, bool vertexColours = false)
 {
 	struct Item { Tri t; int sign, outward; };
 	std::vector<Item> items;
@@ -165,6 +169,9 @@ Tris triangles(const Rip& rip, const Polys& polys)
 				item.t.uv[k] = dvec2(v[idx[k]].u, v[idx[k]].v);
 			}
 			std::fill(std::begin(item.t.col), std::end(item.t.col), 255);
+			if (vertexColours)
+				for (int k = 0; k < 3; k++)
+					item.t.col[k] = (uint8_t)((v[a].col[k] + v[b].col[k] + v[c].col[k] + 1) / 3);
 			item.t.tex = key;
 			item.sign = sign;
 			item.outward = outward;
@@ -734,9 +741,11 @@ void unpack16(uint32_t c, uint32_t fmt, uint8_t *rgba)
 }
 
 // The model as the bytes of hands.bin (the format is in xr_hands.cpp): the meshes are the
-// frame, the slide, the gun hand and the open hand.
+// frame, the slide, the gun hand and the open hand. Version 1 (the hands, the staff), or 2
+// with its flags (ModelFlags) and how many of the game's polygons went into it.
 bool write(const dvec3& muzzle, const dvec3& grab, double travel, const float (&onSlide)[16], const Tris *const (&meshes)[4],
-		const TextureSource& textures, std::vector<uint8_t>& out, std::string& error)
+		const TextureSource& textures, std::vector<uint8_t>& out, std::string& error,
+		uint32_t version = 1, uint32_t flags = 0, uint32_t sourcePolys = 0)
 {
 	// textures: in the order they're first used, index 0 plain white (untextured parts)
 	std::vector<Key> keys;
@@ -754,13 +763,18 @@ bool write(const dvec3& muzzle, const dvec3& grab, double travel, const float (&
 
 	out.clear();
 	out.insert(out.end(), { 'H', 'N', 'D', '1' });
-	put(out, (uint32_t)1);
+	put(out, version);
 	for (const dvec3& v : { muzzle, grab })
 		for (int k = 0; k < 3; k++)
 			put(out, (float)v[k]);
 	put(out, (float)travel);
 	for (float f : onSlide)
 		put(out, f);
+	if (version >= 2)
+	{
+		put(out, flags);
+		put(out, sourcePolys);
+	}
 	put(out, (uint32_t)(keys.size() + 1));
 	put(out, (uint32_t)1);
 	put(out, (uint32_t)1);
@@ -1266,6 +1280,126 @@ bool buildStaff(const Rip& rip, const StaffParts& parts, const TextureSource& te
 			return true;
 	}
 	return false;
+}
+
+bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const TextureSource& textures,
+		std::vector<uint8_t>& out, std::string& error, bool *complete)
+{
+	if (complete != nullptr)
+		*complete = false;
+	// its polygons in each capture: its textures, in front of the camera, not the sights
+	auto pick = [&](const Rip& rip) {
+		Polys polys;
+		for (const RipPoly& p : rip.polys)
+		{
+			if (p.v.size() < 3 || !target.has(p.texture()))
+				continue;
+			bool good = true, sight = true;
+			for (const RipVertex& v : p.v)
+			{
+				good = good && std::isfinite(v.z) && v.z > 0.f;
+				sight = sight && v.z > 0.f && target.skips(1.f / v.z);
+			}
+			if (good && !sight)
+				polys.push_back(&p);
+		}
+		return polys;
+	};
+	// (Task 11 merges the captures in the gun's own space; until then the fullest one)
+	const Rip *rip = nullptr;
+	Polys polys;
+	for (const Rip& r : captures)
+	{
+		Polys p = pick(r);
+		if (p.size() > polys.size())
+		{
+			polys = std::move(p);
+			rip = &r;
+		}
+	}
+	if (rip == nullptr || polys.size() < target.minPolys)
+	{
+		error = "only " + std::to_string(polys.size()) + " of its " + std::to_string(target.wholePolys) + " polygons";
+		return false;
+	}
+	const Tris eyeT = triangles(*rip, polys, true);
+
+	// gun space as for the pistol: the barrel along -z, y away from the grip; first in game
+	// units around its middle
+	dvec3 axes[3];
+	gunAxes(eyeT, axes);
+	const dvec3 mid = mean(corners(eyeT));
+	const Tris g = toSpace(eyeT, mid, axes, 1.0);
+	dvec3 lo, hi;
+	bounds(g, lo, hi);
+	const double length = hi.z - lo.z;
+	if (!(length > 1e-6))
+	{
+		error = "it has no length";
+		return false;
+	}
+	// The grip: under the barrel's underside (the lowest point of the front third). Its lower
+	// half is the grip alone (a trigger guard doesn't hang that low): the line through the
+	// middles of two slices across it (front to back), up to the underside, is the grip's
+	// top. In the middle across (it's symmetric).
+	const std::vector<dvec3> pts = corners(g);
+	double under = hi.y;
+	for (const dvec3& p : pts)
+		if (p.z < lo.z + length / 3)
+			under = std::min(under, p.y);
+	const double half = (under + lo.y) / 2, drop = half - lo.y;
+	auto slice = [&](double from, double to, double& y, double& z) {
+		double zLo = 1e300, zHi = -1e300;
+		for (const dvec3& p : pts)
+			if (p.y >= from && p.y <= to)
+			{
+				zLo = std::min(zLo, p.z);
+				zHi = std::max(zHi, p.z);
+			}
+		y = (from + to) / 2;
+		z = (zLo + zHi) / 2;
+		return zLo <= zHi;
+	};
+	double y1, z1, y2, z2;
+	if (under - lo.y < 0.1 * length || !slice(half - 0.2 * drop, half, y1, z1) || !slice(lo.y + 0.2 * drop, lo.y + 0.4 * drop, y2, z2))
+	{
+		error = "no grip under the barrel";
+		return false;
+	}
+	const double gripZ = z1 + (z1 - z2) / (y1 - y2) * (under - y1);
+	const dvec3 top((lo.x + hi.x) / 2, under, gripZ);
+	const dvec3 origin = mid + top.x * axes[0] + top.y * axes[1] + top.z * axes[2];
+	const Tris gun = toSpace(eyeT, origin, axes, target.lengthM / length);
+
+	// the muzzle: the middle of the front-most face
+	bounds(gun, lo, hi);
+	dvec3 flo(1e300), fhi(-1e300);
+	for (const dvec3& p : corners(gun))
+		if (p.z < lo.z + 0.002)
+		{
+			flo = glm::min(flo, p);
+			fhi = glm::max(fhi, p);
+		}
+	const dvec3 muzzle((flo.x + fhi.x) / 2, (flo.y + fhi.y) / 2, lo.z);
+	const dvec3 centroid = mean(corners(gun));
+	if (muzzle.z > -0.4 * target.lengthM || std::abs(muzzle.x) > 0.01 || centroid.y >= muzzle.y)
+	{
+		char why[160];
+		snprintf(why, sizeof(why), "it doesn't come out as a gun (muzzle %.3f %.3f %.3f, middle y %.3f)",
+				muzzle.x, muzzle.y, muzzle.z, centroid.y);
+		error = why;
+		return false;
+	}
+	const bool whole = polys.size() >= target.wholePolys;
+	if (complete != nullptr)
+		*complete = whole;
+	float onSlide[16] {};
+	for (int i = 0; i < 4; i++)
+		onSlide[i * 5] = 1.f;
+	const Tris none;
+	const Tris *meshes[] { &gun, &none, &none, &none };
+	return write(muzzle, muzzle, 0.0, onSlide, meshes, textures, out, error, 2,
+			ModelGunOnly | (whole ? ModelComplete : 0), (uint32_t)polys.size());
 }
 
 }

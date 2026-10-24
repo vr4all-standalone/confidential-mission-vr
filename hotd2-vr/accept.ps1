@@ -18,7 +18,10 @@
   and so do cm-menu and cm-menu-quit (accept-cm-menu, accept-cm-menu-quit), and cm-controllers
   and cm-controllers-rt (accept-cm-controllers, accept-cm-controllers-rt; the latter's GLB is
   build-win\vrtest\test-controller.glb, made by re\make-test-glb.py when it is missing), and cm-hands
-  and cm-hands-shot (accept-cm-hands, accept-cm-hands-shot).
+  and cm-hands-shot (accept-cm-hands, accept-cm-hands-shot). The gun run: cm-rip-cabinet plays
+  accept-cm-rip-cabinet (it deletes build-win\data\gun-cm-*.bin first and leaves the cabinet gun's
+  file there), cm-rip-hand accept-cm-rip-hand and -arcade (it needs that file), cm-rip-skip
+  accept-cm-rip-skip and -skip2 (it deletes the files again).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -849,6 +852,94 @@ function Test-CmHandsShot {
 	return Test-ArmingShot $name
 }
 
+#
+# The gun run (Task 10, core/rend/vr/hands_rip.h): with no gun-cm-*.bin in build-win\data the first
+# start runs the game by itself (on the PC with vr.HandsPrep): Start at 30 s of game, the reload
+# tutorial, whose cabinet gun (tex 400000, 279 polygons) becomes gun-cm-cabinet.bin (HND1 v2, gun
+# only), within 120 s of game. Every later Confidential Mission run draws that gun instead of the
+# arcade gun (a run that starts a game without the file makes it too, at the tutorial).
+#
+$cmGunData = Join-Path $repo 'build-win\data'
+$cmCabinetFile = Join-Path $cmGunData 'gun-cm-cabinet.bin'
+function Remove-CmGuns {
+	Get-ChildItem -LiteralPath $cmGunData -Filter 'gun-cm-*.bin*' -ErrorAction SilentlyContinue | Remove-Item -Force
+}
+
+# The run, flat: no files, a .part left by a run that died (written over); the cabinet gun saved,
+# the run done by 120 s of game; the model's checks (vrcheck hnd).
+function Test-CmRipCabinet {
+	$name = 'accept-cm-rip-cabinet'
+	if (-not $Reuse) {
+		Remove-CmGuns
+		[IO.File]::WriteAllText("$cmCabinetFile.part", 'junk from a run that died')
+	}
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 150; Config = 'config:vr.HandsPrep=yes'
+		Expect = 'VR hands: no model yet, taking the guns from the game',
+			'VR hands: the cabinet gun from this game, \d+ bytes to .*gun-cm-cabinet\.bin', 'VR hands: done after \d+ s of game'
+		Reject = @('VR hands: .*, but ') }
+	if ($why) { return $why }
+	$hit = Select-String -LiteralPath (Get-RunLog $name) -Pattern 'VR hands: done after (\d+) s of game' -CaseSensitive | Select-Object -First 1
+	$n = [int]$hit.Matches[0].Groups[1].Value
+	Write-Host "  done after $n s of game (want 120 or less)"
+	if ($n -gt 120) { return "the gun run took $n s of game, over 120" }
+	if (Test-Path -LiteralPath "$cmCabinetFile.part") { return "$cmCabinetFile.part is still there" }
+	if (-not (Test-Path -LiteralPath $cmCabinetFile)) { return "no $cmCabinetFile" }
+	return Invoke-VrCheck 'hnd', $cmCabinetFile, '--polys', '279', '--length', '0.27', '--gun-only'
+}
+
+# The cabinet gun in the right hand through the simulator, widened (vr.Gun 2: the cabinet gun, which
+# Task 13's Auto must keep): the hand in front of the left eye from 20 s, the first A (30 s) gives it
+# the gun, a window shot at 35 s; against the same shot with the arcade gun (vr.GameHands off) in the
+# right hand's part of the view.
+function Get-CmRipHandParams([string]$name, [string]$config) {
+	@{ Game = 'confmiss'; Name = $name; Seconds = 37; XrSim = $true; Config = $config
+		At = @('20=pose right 0.1 1.45 -0.3 0 0') + @(Get-CmStartsXr | Where-Object { [double]($_ -split '=')[0] -lt 36 }) + '35=shot held'
+		Reject = @('XR: initialisation failed') }
+}
+function Test-CmRipHand {
+	if (-not (Test-Path -LiteralPath $cmCabinetFile)) { return "no $cmCabinetFile (cm-rip-cabinet makes it)" }
+	$name = 'accept-cm-rip-hand'
+	$params = Get-CmRipHandParams $name "$cmWiden,config:vr.Gun=2"
+	$params.Expect = @('XR: the game''s own model from .*gun-cm-cabinet\.bin')
+	$params.Reject += 'XR: no .*gun-cm-cabinet\.bin'
+	$why = Invoke-VrTest $params
+	if ($why) { return $why }
+	$arcade = 'accept-cm-rip-hand-arcade'
+	$params = Get-CmRipHandParams $arcade "$cmWiden,config:vr.GameHands=no"
+	$params.Reject += 'XR: the game''s own model from'
+	$why = Invoke-VrTest $params
+	if ($why) { return "arcade gun: $why" }
+	foreach ($run in $name, $arcade) {
+		$why = Test-RunShots $run 't035-held.png'
+		if ($why) { return $why }
+	}
+	$why = Invoke-VrCheck 'differ', (Join-Path $repo "build-win\vrtest\$name\t035-held.png"),
+		(Join-Path $repo "build-win\vrtest\$arcade\t035-held.png"), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
+	if ($why) { return "the cabinet gun looks like the arcade gun: $why" }
+	return $null
+}
+
+# B skips the run (3 s: the gun comes up at ~6), and the menu button does nothing during it (2 s):
+# the arcade gun, no file.
+# The next start (the same again) runs it again.
+function Test-CmRipSkip {
+	if (-not $Reuse) { Remove-CmGuns }
+	$params = @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 10; XrSim = $true; Config = "$cmWiden,config:vr.HandsPrep=yes"
+		At = @('2=xr left/menu 1 150', '3=xr right/b 1 200')
+		Expect = 'VR hands: no model yet, taking the guns from the game', 'VR hands: skipped after',
+			'XR: menu: not while the guns are being made'
+		# (the loader says "no ..., the arcade gun it is" at INFO, which the log leaves out)
+		Reject = @('XR: initialisation failed', 'XR: menu open', 'XR: the game''s own model from') }
+	$why = Invoke-VrTest $params
+	if ($why) { return $why }
+	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made though the run was skipped" }
+	$params.Name = 'accept-cm-rip-skip2'
+	$params.Expect = @('VR hands: no model yet, taking the guns from the game')
+	$why = Invoke-VrTest $params
+	if ($why) { return "the next start: $why" }
+	return $null
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
@@ -857,6 +948,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-menu' = 'Test-CmMenu'; 'cm-menu-quit' = 'Test-CmMenuQuit'
 	'cm-controllers' = 'Test-CmControllers'; 'cm-controllers-rt' = 'Test-CmControllersRt'
 	'cm-hands' = 'Test-CmHands'; 'cm-hands-shot' = 'Test-CmHandsShot'
+	'cm-rip-cabinet' = 'Test-CmRipCabinet'; 'cm-rip-hand' = 'Test-CmRipHand'; 'cm-rip-skip' = 'Test-CmRipSkip'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

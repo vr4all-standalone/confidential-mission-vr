@@ -4,15 +4,18 @@
 
 	hands.bin in the data directory (little endian, made from the player's own game by
 	hands_rip.cpp, or on the PC by hotd2-vr/assets/rip_hands.py), and in the same format the
-	hero's staff of The Maze of the Kings, staff-mok.bin (only the running game's file is
-	read, again when another game starts):
-		"HND1", u32 version 1
+	hero's staff of The Maze of the Kings, staff-mok.bin, and Confidential Mission's guns,
+	gun-cm-*.bin (only the running game's file is read, again when another game starts):
+		"HND1", u32 version (1, or 2 with the two u32s below)
 		f32 muzzle[3], grab[3], travel, onSlide[16] (column major)
+		version 2: u32 flags (1 gun only: no hand meshes, travel 0; 2 complete: all of the
+			gun was in the game's frame), u32 sourcePolys (the game's polygons it was made from)
 		u32 textures, each: u32 width, height, flags (1 clamp u, 2 clamp v, 4 mirror u,
 			8 mirror v, 16 alpha test), then width * height RGBA bytes
 		u32 meshes (frame, slide, gun hand, open hand), each: u32 parts, each: u32 texture,
 			u32 vertices, then the vertices: f32 position[3], normal[3], uv[2], u8 rgba[4]
-	A model without a slide (the staff) has travel 0 and no parts in the slide mesh.
+	A model without a slide (the staff, a gun only) has travel 0 and no parts in the slide
+	mesh; a gun only none in the hands' either (the other hand keeps its controller).
 
 	Lit like the arcade gun (xr_gun.cpp): a fixed key light and a dim fill, so the hands
 	read as solid in the game's dark scenes, rather than with the light baked in that one
@@ -115,7 +118,7 @@ bool load()
 	char magic[4] {};
 	read(magic, 4);
 	const u32 version = u32At();
-	if (!ok || memcmp(magic, "HND1", 4) != 0 || version != 1)
+	if (!ok || memcmp(magic, "HND1", 4) != 0 || (version != 1 && version != 2))
 	{
 		fclose(f);
 		WARN_LOG(RENDERER, "XR: %s is not a hands model this build reads", path.c_str());
@@ -127,6 +130,13 @@ bool load()
 	model.info.grab = glm::make_vec3(&head[3]);
 	model.info.travel = head[6];
 	model.info.onSlide = glm::make_mat4(&head[7]);
+	u32 flags = 0, sourcePolys = 0;
+	if (version >= 2)
+	{
+		flags = u32At();
+		sourcePolys = u32At();
+	}
+	model.info.gunOnly = (flags & 1) != 0;
 	const u32 textures = u32At();
 	for (u32 i = 0; ok && i < textures && i < 64; i++)
 	{
@@ -173,8 +183,11 @@ bool load()
 	}
 	const hands::Source *source = gameModelSource();
 	model.staff = source != nullptr && source->kind == hands::Source::HerosStaff;
-	NOTICE_LOG(RENDERER, "XR: the game's own model from %s (%zu textures, %zu vertices%s)", path.c_str(),
-			model.textures.size(), model.vertices.size() / VertexSize, model.info.travel > 0.f ? "" : ", no slide");
+	NOTICE_LOG(RENDERER, "XR: the game's own model from %s (%zu textures, %zu vertices%s%s)", path.c_str(),
+			model.textures.size(), model.vertices.size() / VertexSize, model.info.travel > 0.f ? "" : ", no slide",
+			!model.info.gunOnly ? "" : (flags & 2) ? ", gun only" : ", gun only, not all of it");
+	if (version >= 2)
+		INFO_LOG(RENDERER, "XR: HND1 version %u, flags %u, from %u of the game's polygons", version, flags, sourcePolys);
 	return true;
 }
 

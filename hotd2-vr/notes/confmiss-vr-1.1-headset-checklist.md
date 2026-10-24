@@ -67,3 +67,12 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 - [ ] The labels go at the first A (the right hand turns into the gun) or the first trigger pull (that hand turns into the gun, and the pull fires).
 - [ ] X: the left hand turns into player 2's gun; when player 2 is out again (the game asks for player 2 in its corner), it is a controller again, without labels.
 - [ ] The menu's Show controls: both hands controllers with their labels again; the next trigger pull gives the gun(s) back and fires.
+
+## Task 10
+
+Before these, delete `gun-cm-cabinet.bin` from the app's data folder (or reinstall), so the first start makes it.
+
+- [ ] The first start shows the panel ("CONFIDENTIAL MISSION VR", "Taking the guns from your copy of the game") instead of the game, and it goes within about two minutes (the log: "VR hands: done after N s of game").
+- [ ] B skips it: the game starts with the built-in arcade gun, and the next start shows the panel again.
+- [ ] The cabinet gun in the hand faces the right way (barrel forward, grip down in your hand), at about the right size (about 27 cm long), with the muzzle flash and the laser starting at its muzzle.
+- [ ] The second start has no panel ("VR hands: the guns, made before" in the log), and the cabinet gun is in the hand again.

@@ -2,7 +2,8 @@
 	Making the agent's hands and pistol (hands.bin) from one render pass of the game itself
 	(hotd2-vr): the C++ twin of hotd2-vr/assets/rip_hands.py, so the headset makes them from
 	the player's own copy of the game, with no PC and nothing of the game in the app. The
-	same for the hero's staff in The Maze of the Kings (staff-mok.bin), in the same format.
+	same for the hero's staff in The Maze of the Kings (staff-mok.bin), in the same format,
+	and Confidential Mission's guns (gun-cm-*.bin), gun only.
 
 	Standalone (glm and the standard library only), so it can be checked against the Python
 	tool on the PC with the same rip.
@@ -45,6 +46,32 @@ struct StaffParts
 };
 // A whole rod: its head piece (42 polygons) and its shaft (24)
 constexpr uint32_t StaffRodPolys = 66;
+
+// A gun the game draws by itself, with no hand on it (Confidential Mission's: its cabinet gun in
+// the reload tutorial), per game's profile (vr_reproject.cpp), made into a gun-only model.
+struct GunTarget
+{
+	const char *name;			// "cabinet gun"
+	const char *file;			// "gun-cm-cabinet.bin", in the data directory
+	uint32_t textures[4];		// its textures (VRAM addresses); 0: unused
+	uint16_t wholePolys;		// its polygons when all of it is there
+	uint16_t minPolys;			// a capture needs at least this many
+	float lengthM;				// the built model's length along the barrel, metres
+	float skipWMin, skipWMax;	// polygons with every corner's W in this band are not the gun (HUD sights)
+	bool merge;					// merge captures across frames (Task 11)
+
+	bool used() const { return file != nullptr && file[0] != 0; }
+	bool has(uint32_t tex) const {
+		for (uint32_t t : textures)
+			if (t != 0 && t == tex)
+				return true;
+		return false;
+	}
+	bool skips(float w) const { return w >= skipWMin && w <= skipWMax; }
+};
+
+// HND1 version 2's flags
+enum ModelFlags : uint32_t { ModelGunOnly = 1, ModelComplete = 2 };
 
 // One polygon (a triangle strip) of a render pass, as the TA got it: vertices in framebuffer
 // pixels, z = 1/W.
@@ -91,5 +118,16 @@ bool build(const Rip& rip, const Parts& parts, const TextureSource& textures, st
 // reason when the pass doesn't show all of it.
 bool buildStaff(const Rip& rip, const StaffParts& parts, const TextureSource& textures, std::vector<uint8_t>& out,
 		std::string& error, bool shortened = true);
+
+// A gun alone, from its polygons in one or more passes (each capture holds the target's polygons
+// of one pass; hands_rip.cpp picks them), as HND1 version 2, flagged gun only: no hands, no
+// slide (it travels 0). Gun space as for the pistol (barrel along -z, found by its longest
+// edges; +y away from the grip), the origin at the top of the grip, in the middle, the length
+// along the barrel the target's lengthM, the muzzle the middle of its front face. Without
+// merge (target.merge) the capture with the most of its polygons is the model. *complete:
+// all of it was there (wholePolys), and so flagged. False with a reason when the captures
+// don't have enough of it or its shape doesn't come out as a gun.
+bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const TextureSource& textures,
+		std::vector<uint8_t>& out, std::string& error, bool *complete);
 
 }

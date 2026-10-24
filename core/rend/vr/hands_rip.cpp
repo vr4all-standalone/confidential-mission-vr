@@ -1,6 +1,6 @@
 /*
-	The agent's hands and pistol, or the hero's staff, from the player's own game (hotd2-vr).
-	See hands_rip.h.
+	The agent's hands and pistol, the hero's staff, or Confidential Mission's guns, from the
+	player's own game (hotd2-vr). See hands_rip.h.
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -55,11 +55,26 @@ constexpr double GiveUpAfter = 330.0;
 constexpr double StaffRun = 33.0;
 constexpr double StaffGiveUpAfter = 150.0;
 
+// The run for Confidential Mission's guns: Start once at 30 s of game (findings startOk), its
+// SEGA logo's; the reload tutorial with the cabinet gun comes a second later (measured on the
+// PC). (Task 11: on to the stage 1 intro for the agents' pistol.)
+constexpr double CmStartAt = 30.0;
+constexpr double CmRun = 32.0;
+constexpr double CmGiveUpAfter = 120.0;
+
 enum State { Off, Watching, Preparing };
 std::atomic<int> state { Off };
 std::atomic<bool> newModel, skipRequested;
 std::atomic<float> progress;
 std::atomic<bool> staffRun;	// the run is for the hero's staff
+std::atomic<bool> cmRun;	// ...for Confidential Mission's guns
+// Confidential Mission's guns (Source::guns): made (or not wanted), and the fullest capture
+// short of all of it so far, built, for when the run gives up (gunMutex)
+std::atomic<bool> gunDone[3];
+std::mutex gunMutex;
+std::vector<u8> gunBest[3];
+u32 gunBestPolys[3], gunFailedAt[3];
+bool cmStartLogged;
 double startedAt;			// game seconds at the start
 bool fastForwardWas;
 // why the last try at the staff didn't make it (for when the run gives up)
@@ -80,9 +95,25 @@ double gameSeconds() {
 	return sh4_sched_now64() / (double)SH4_MAIN_CLOCK;
 }
 
-bool haveModel() {
+std::string gunPath(const GunTarget& gun) {
+	return get_writable_data_path(gun.file);
+}
+
+bool haveModel()
+{
+	const Source *source = gameModelSource();
+	if (source != nullptr && source->kind == Source::CmGuns)
+	{
+		// every gun's file (Task 12: but the rifle's, which comes in play)
+		for (const GunTarget& gun : source->guns)
+			if (gun.used() && !file_exists(gunPath(gun)))
+				return false;
+		return true;
+	}
 	return file_exists(modelPath()) || (!legacyModelPath().empty() && file_exists(legacyModelPath()));
 }
+
+bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys);
 
 void stopPrep(const char *why)
 {
@@ -113,6 +144,18 @@ void onStart()
 	state = Watching;
 	passes = failedAt = 0;
 	staffRun = source->kind == Source::HerosStaff;
+	cmRun = source->kind == Source::CmGuns;
+	{
+		std::lock_guard<std::mutex> lock(gunMutex);
+		for (int i = 0; i < 3; i++)
+		{
+			const GunTarget& gun = source->guns[i];
+			gunDone[i] = !cmRun || !gun.used() || file_exists(gunPath(gun));
+			gunBest[i].clear();
+			gunBestPolys[i] = gunFailedAt[i] = 0;
+		}
+	}
+	cmStartLogged = false;
 	{
 		std::lock_guard<std::mutex> lock(failureMutex);
 		lastFailure.clear();
@@ -139,6 +182,8 @@ void onStart()
 	state = Preparing;
 	if (staffRun)
 		NOTICE_LOG(RENDERER, "VR hands: no model yet, running the attract demo for the hero's staff (%s)", modelPath().c_str());
+	else if (cmRun)
+		NOTICE_LOG(RENDERER, "VR hands: no model yet, taking the guns from the game");
 	else
 		NOTICE_LOG(RENDERER, "VR hands: no model yet, running the game to its game over scene for it");
 }
@@ -153,6 +198,35 @@ void onVBlank()
 		return;
 	}
 	const double t = gameSeconds() - startedAt;
+	if (cmRun)
+	{
+		progress = (float)std::min(t / CmRun, 0.97);
+		if (t > CmGiveUpAfter)
+		{
+			// what there is: each gun not seen whole, from the fullest capture of it
+			bool saved = false;
+			const Source *source = gameModelSource();
+			if (source != nullptr && source->kind == Source::CmGuns)
+			{
+				std::lock_guard<std::mutex> lock(gunMutex);
+				for (int i = 0; i < 3; i++)
+					if (!gunDone[i] && !gunBest[i].empty())
+						saved = saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i]) || saved;
+			}
+			if (saved)
+				progress = 1.f;
+			stopPrep(saved ? "done" : "no gun came up whole (gave up)");
+			return;
+		}
+		const bool start = t >= CmStartAt && t < CmStartAt + PressHold;
+		if (start && !cmStartLogged)
+		{
+			cmStartLogged = true;
+			INFO_LOG(RENDERER, "VR hands: Start at %.1f s", t);
+		}
+		lightgunSet(0, OffScreen, OffScreen, start ? 4 : 0);
+		return;
+	}
 	if (staffRun)
 	{
 		// Hands off: the attract demo plays by itself.
@@ -235,9 +309,8 @@ struct Registration
 	}
 } registration;
 
-bool save(const std::vector<u8>& data)
+bool save(const std::vector<u8>& data, const std::string& path)
 {
-	const std::string path = modelPath();
 	if (path.empty())
 		return false;
 	const std::string temp = path + ".part";
@@ -254,13 +327,147 @@ bool save(const std::vector<u8>& data)
 	return nowide::rename(temp.c_str(), path.c_str()) == 0;
 }
 
+// One of Confidential Mission's guns made: into its file, and drawn from now on.
+bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys)
+{
+	const std::string path = gunPath(gun);
+	if (!save(model, path))
+	{
+		WARN_LOG(RENDERER, "VR hands: can't write %s", path.c_str());
+		return false;
+	}
+	if (polys >= gun.wholePolys)
+		NOTICE_LOG(RENDERER, "VR hands: the %s from this game, %zu bytes to %s", gun.name, model.size(), path.c_str());
+	else
+		NOTICE_LOG(RENDERER, "VR hands: the %s from this game, %zu bytes to %s (%u of its %u polygons)", gun.name,
+				model.size(), path.c_str(), polys, (u32)gun.wholePolys);
+	gunDone[i] = true;
+	newModel = true;
+	return true;
+}
+
+u32 textureOf(const PolyParam& pp) {
+	return pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
+}
+
+// A polygon of the gun: its texture, and not flat in the sights' band.
+bool gunPoly(const rend_context& ctx, const PolyParam& pp, const GunTarget& gun)
+{
+	if (!gun.has(textureOf(pp)) || pp.count < 3 || pp.first + pp.count > ctx.verts.size())
+		return false;
+	for (u32 i = pp.first; i < pp.first + pp.count; i++)
+	{
+		const float z = ctx.verts[i].z;
+		if (!(z > 0.f) || !gun.skips(1.f / z))
+			return true;
+	}
+	return false;
+}
+
+// Confidential Mission's guns, each pass: for each gun still to get, its longest run of
+// polygons one after the other in a list (the cabinet gun is one draw; in the tutorial the
+// cabinet model beside it, the same texture, is another, with something else between them).
+// The first pass with all of it (wholePolys) makes the gun; a run short of that but of
+// minPolys or more, longer than any before, is built and kept for when the run gives up.
+void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPass& prev, const Source& source)
+{
+	passes++;
+	const TextureSource textures = [](u32 tcw, u32 tsp, Image& image) {
+		return decodeTexture(&vram[0], VRAM_SIZE, PALETTE_RAM, PAL_RAM_CTRL, tcw, tsp, image);
+	};
+	std::lock_guard<std::mutex> lock(gunMutex);
+	for (int i = 0; i < 3; i++)
+	{
+		const GunTarget& gun = source.guns[i];
+		if (gunDone[i] || (gunFailedAt[i] != 0 && passes - gunFailedAt[i] < 30))
+			continue;
+		const std::vector<PolyParam> *runList = nullptr;
+		u32 runFrom = 0, runCount = 0;
+		auto scan = [&](const std::vector<PolyParam>& polys, u32 from, u32 to) {
+			u32 start = from, count = 0;
+			for (u32 k = from; k < to && k < polys.size(); k++)
+			{
+				if (!gunPoly(ctx, polys[k], gun))
+				{
+					count = 0;
+					continue;
+				}
+				if (count++ == 0)
+					start = k;
+				if (count > runCount)
+				{
+					runList = &polys;
+					runFrom = start;
+					runCount = count;
+				}
+			}
+		};
+		scan(ctx.global_param_op, std::max(prev.op_count, 1u), pass.op_count);
+		scan(ctx.global_param_pt, prev.pt_count, pass.pt_count);
+		scan(ctx.global_param_tr, prev.tr_count, pass.tr_count);
+		const bool whole = runCount >= gun.wholePolys;
+		if (runCount < gun.minPolys || (!whole && runCount <= gunBestPolys[i]))
+			continue;
+
+		std::vector<Rip> captures(1);
+		Rip& rip = captures[0];
+		int fbWidth, fbHeight;
+		getPvrFramebufferSize(ctx, fbWidth, fbHeight);
+		rip.fbWidth = fbWidth;
+		rip.fbHeight = fbHeight;
+		const GameCamera cam = gameCamera(ctx);
+		rip.focalX = cam.dcSize.x * 0.5f / cam.tanHalf.x;
+		rip.focalY = cam.dcSize.y * 0.5f / cam.tanHalf.y;
+		for (u32 k = runFrom; k < runFrom + runCount; k++)
+		{
+			const PolyParam& pp = (*runList)[k];
+			RipPoly& p = rip.polys.emplace_back();
+			p.isp = pp.isp.full;
+			p.tsp = pp.tsp.full;
+			p.tcw = pp.tcw.full;
+			p.pcw = pp.pcw.full;
+			p.v.reserve(pp.count);
+			for (u32 v = pp.first; v < pp.first + pp.count; v++)
+			{
+				const Vertex& vx = ctx.verts[v];
+				p.v.push_back({ vx.x, vx.y, vx.z, vx.u, vx.v, { vx.col[0], vx.col[1], vx.col[2], vx.col[3] } });
+			}
+		}
+		std::vector<u8> model;
+		std::string error;
+		bool complete = false;
+		if (!buildGun(captures, gun, textures, model, error, &complete))
+		{
+			gunFailedAt[i] = passes;
+			WARN_LOG(RENDERER, "VR hands: the %s, but %s", gun.name, error.c_str());
+			continue;
+		}
+		if (!whole)
+		{
+			INFO_LOG(RENDERER, "VR hands: %u of the %s's %u polygons, kept in case", runCount, gun.name, (u32)gun.wholePolys);
+			gunBest[i] = std::move(model);
+			gunBestPolys[i] = runCount;
+			continue;
+		}
+		if (!saveGun(gun, i, model, runCount))
+			gunFailedAt[i] = passes;
+	}
+	for (int i = 0; i < 3; i++)
+		if (!gunDone[i])
+			return;
+	// all of them
+	progress = 1.f;
+	stopPrep("done");
+	state = Off;
+}
+
 }	// namespace
 
 std::string modelPath()
 {
 	// each game its own (HOTD2's, either version: hands.bin)
 	const Source *source = gameModelSource();
-	return source == nullptr ? std::string() : get_writable_data_path(source->file);
+	return source == nullptr ? std::string() : get_writable_data_path(source->modelFile());
 }
 
 std::string legacyModelPath()
@@ -280,6 +487,11 @@ void observePass(const rend_context& ctx, const RenderPass& pass, const RenderPa
 	const Source *source = gameModelSource();
 	if (state == Off || source == nullptr)
 		return;
+	if (source->kind == Source::CmGuns)
+	{
+		observeGuns(ctx, pass, prev, *source);
+		return;
+	}
 	const bool staff = source->kind == Source::HerosStaff;
 	passes++;
 	auto each = [&](auto&& fn) {
@@ -358,7 +570,7 @@ void observePass(const rend_context& ctx, const RenderPass& pass, const RenderPa
 			WARN_LOG(RENDERER, "VR hands: the game over scene, but %s", error.c_str());
 		return;
 	}
-	if (!save(model))
+	if (!save(model, modelPath()))
 	{
 		failedAt = passes;
 		WARN_LOG(RENDERER, "VR hands: can't write %s", modelPath().c_str());

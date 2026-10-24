@@ -13,6 +13,13 @@
 	The Maze of the Kings goes the same way to its attract demo, with no input at all: the
 	first frame with the hero and his staff, whole, in it (about half a minute of game).
 
+	Confidential Mission draws its guns by themselves, with no hand on them (Source::CmGuns,
+	gun-cm-*.bin, gun only): Start once at 30 s of game takes its SEGA logo to the reload
+	tutorial, where its cabinet gun is turned about on screen; the first frame with all of it
+	is the cabinet gun (Task 11 goes on from there to the agents' pistol in the stage 1 intro).
+	The run gives up at 120 s of game, with the fullest capture it saw if it has one. It runs
+	while any of the guns' files is missing; B skips it here too.
+
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
 #pragma once
@@ -29,11 +36,16 @@ namespace vr::hands
 // and the file it's kept in, in the data directory.
 struct Source
 {
-	enum Kind { None, AgentsPistol, HerosStaff } kind = None;
+	enum Kind { None, AgentsPistol, HerosStaff, CmGuns } kind = None;
 	const char *file = "";
 	Parts pistol {};		// AgentsPistol: the textures in the game over scene
 	StaffParts staff {};	// HerosStaff: the textures in the attract demo and the story's intro
-	const char *name() const { return kind == HerosStaff ? "the hero's staff" : "the agent's hands and pistol"; }
+	GunTarget guns[3] {};	// CmGuns: the guns, each its own file (the cabinet gun first; unused: no file)
+	// The file modelPath() names (CmGuns: the cabinet gun's, until Task 13 chooses)
+	const char *modelFile() const { return kind == CmGuns ? guns[0].file : file; }
+	const char *name() const {
+		return kind == CmGuns ? "the guns" : kind == HerosStaff ? "the hero's staff" : "the agent's hands and pistol";
+	}
 };
 
 // Where the running game's model is kept (the user data directory; none for a game without
