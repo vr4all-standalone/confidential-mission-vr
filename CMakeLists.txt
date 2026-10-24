@@ -1283,6 +1283,7 @@ if(NOT LIBRETRO)
 			core/rend/vr/xr_controllers.cpp core/rend/vr/xr_controllers.h core/rend/vr/controller_model.h
 			core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h
 			core/rend/vr/xr_hands.cpp core/rend/vr/xr_hands.h
+			core/rend/vr/xr_labels.cpp core/rend/vr/xr_labels.h
 			core/rend/vr/xr_menu.cpp core/rend/vr/xr_menu.h
 			core/rend/vr/xr_panel.cpp core/rend/vr/xr_panel.h
 			core/rend/vr/xr_sim.cpp core/rend/vr/xr_sim.h)
@@ -1481,6 +1482,7 @@ if(NOT LIBRETRO)
 				core/rend/vr/xr_controllers.cpp core/rend/vr/xr_controllers.h core/rend/vr/controller_model.h
 				core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h
 				core/rend/vr/xr_hands.cpp core/rend/vr/xr_hands.h
+				core/rend/vr/xr_labels.cpp core/rend/vr/xr_labels.h
 				core/rend/vr/xr_menu.cpp core/rend/vr/xr_menu.h
 				core/rend/vr/xr_panel.cpp core/rend/vr/xr_panel.h
 				core/rend/vr/xr_sim.cpp core/rend/vr/xr_sim.h)

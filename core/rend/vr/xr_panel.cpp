@@ -26,6 +26,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <map>
 #include <memory>
 
 namespace vr::xr
@@ -47,7 +49,7 @@ bool fontTried, fontLoaded;
 
 GLuint program;
 GLuint quadVao, quadVbo;
-GLint uMvp = -1;
+GLint uMvp = -1, uTint = -1;
 // A panel's picture on the GPU, and what it says now (made again only when that changes)
 struct Picture
 {
@@ -56,6 +58,14 @@ struct Picture
 	int width = 0, height = 0;	// its storage's size (0: none yet)
 };
 Picture linesPicture, rowsPicture;
+// one line's pictures (textTexture), by px, colour and text; and a white texel for lines and dots
+struct TextPicture
+{
+	GLuint texture = 0;
+	int width = 0, height = 0;
+};
+std::map<std::string, TextPicture> textPictures;
+GLuint whiteTexture;
 // the picture being painted
 int canvasWidth, canvasHeight;
 std::vector<u8> pixels;
@@ -121,8 +131,8 @@ void background(int width, int height)
 	fill(width - 5, 0, width, height, red);
 }
 
-// One line, its baseline at y: its left end at x (align 0), its middle (0.5) or its right end (1).
-void text(const std::string& s, float px, float x, int y, const glm::vec3& colour, float align = 0.5f)
+// How wide a line is at px, in pixels
+float textWidth(const std::string& s, float px)
 {
 	const float scale = stbtt_ScaleForPixelHeight(&font, px);
 	float width = 0.f;
@@ -134,6 +144,14 @@ void text(const std::string& s, float px, float x, int y, const glm::vec3& colou
 		if (i + 1 < s.size())
 			width += scale * stbtt_GetCodepointKernAdvance(&font, (u8)s[i], (u8)s[i + 1]);
 	}
+	return width;
+}
+
+// One line, its baseline at y: its left end at x (align 0), its middle (0.5) or its right end (1).
+void text(const std::string& s, float px, float x, int y, const glm::vec3& colour, float align = 0.5f)
+{
+	const float scale = stbtt_ScaleForPixelHeight(&font, px);
+	const float width = textWidth(s, px);
 	// (centred: worked out as the lines panel always did, to the bit)
 	x = align == 0.5f ? (x * 2.f - width) * 0.5f : x - width * align;
 	std::vector<u8> glyph;
@@ -181,6 +199,31 @@ void paint(const Panel& panel)
 	}
 	if (!panel.footer.empty())
 		text(panel.footer, Height * 0.042f, Width * 0.5f, Height - 28, glm::vec3(0.55f));
+}
+
+// A label's picture (textTexture): the line on a dark plate with round, soft-edged corners and a
+// margin around it.
+void paintLabel(const std::string& s, float px, const glm::vec3& colour)
+{
+	const int margin = (int)std::lround(px * 0.4f);
+	canvasWidth = (int)std::ceil(textWidth(s, px)) + margin * 2;
+	canvasHeight = (int)std::lround(px * 1.45f);
+	pixels.assign((size_t)canvasWidth * canvasHeight * 4, 0);
+	const float radius = canvasHeight * 0.3f;
+	for (int y = 0; y < canvasHeight; y++)
+		for (int x = 0; x < canvasWidth; x++)
+		{
+			const float cx = std::clamp(x + 0.5f, radius, canvasWidth - radius);
+			const float cy = std::clamp(y + 0.5f, radius, canvasHeight - radius);
+			const float inside = std::clamp(radius + 0.5f - std::hypot(x + 0.5f - cx, y + 0.5f - cy), 0.f, 1.f);
+			u8 *p = &pixels[((size_t)y * canvasWidth + x) * 4];
+			p[0] = 16;
+			p[1] = 15;
+			p[2] = 17;
+			p[3] = (u8)std::lround(225.f * inside);
+		}
+	// (capitals in the middle, as the rows panel puts them)
+	text(s, px, (float)margin, (int)std::lround(canvasHeight * 0.5f + px * 0.3f), colour, 0.f);
 }
 
 int rowsHeight(const RowsPanel& panel)
@@ -243,16 +286,18 @@ void main()
 	OpenGlSource fragment;
 	fragment.addSource(PixelCompatShader).addSource(R"(
 uniform sampler2D tex;
+uniform lowp vec4 tint;
 in highp vec2 vtx_uv;
 void main()
 {
-	gl_FragColor = texture(tex, vtx_uv);
+	gl_FragColor = texture(tex, vtx_uv) * tint;
 }
 )");
 	program = gl_CompileAndLink(vertex.generate().c_str(), fragment.generate().c_str());
 	if (program == 0)
 		return false;
 	uMvp = glGetUniformLocation(program, "mvp");
+	uTint = glGetUniformLocation(program, "tint");
 	glcache.UseProgram(program);
 	glUniform1i(glGetUniformLocation(program, "tex"), 0);
 	quadVao = createVertexArray();
@@ -301,8 +346,9 @@ void bindPicture(Picture& picture, const std::string& says, Paint paintIt)
 	}
 }
 
-// The bound picture on a quad hx by hy metres each way from the middle of `model`, facing +z.
-void drawQuad(const glm::mat4& viewProj, const glm::mat4& model, float hx, float hy)
+// The bound picture on a quad hx by hy metres each way from the middle of `model`, facing +z,
+// its colour times `tint`.
+void drawQuad(const glm::mat4& viewProj, const glm::mat4& model, float hx, float hy, const glm::vec4& tint = glm::vec4(1.f))
 {
 	const float quad[] {
 		-hx,  hy, 0.f,  0.f, 0.f,
@@ -315,6 +361,7 @@ void drawQuad(const glm::mat4& viewProj, const glm::mat4& model, float hx, float
 	glcache.UseProgram(program);
 	const glm::mat4 mvp = viewProj * model;
 	glUniformMatrix4fv(uMvp, 1, GL_FALSE, &mvp[0][0]);
+	glUniform4f(uTint, tint.r, tint.g, tint.b, tint.a);
 	glcache.Disable(GL_SCISSOR_TEST);
 	glcache.Disable(GL_STENCIL_TEST);
 	glcache.Disable(GL_DEPTH_TEST);
@@ -402,6 +449,57 @@ int rowAt(const glm::mat4& model, const RowsPanel& panel, const glm::vec3& origi
 	return row < (int)panel.rows.size() ? row : -1;
 }
 
+unsigned textTexture(const std::string& text, float px, const glm::vec3& colour, int& width, int& height)
+{
+	width = height = 0;
+	if (text.empty() || !loadFont())
+		return 0;
+	char key[48];
+	std::snprintf(key, sizeof(key), "%d %d %d %d\n", (int)std::lround(px * 100.f), (int)std::lround(colour.r * 255.f),
+			(int)std::lround(colour.g * 255.f), (int)std::lround(colour.b * 255.f));
+	TextPicture& picture = textPictures[key + text];
+	if (picture.texture == 0)
+	{
+		paintLabel(text, px, colour);
+		glActiveTexture(GL_TEXTURE0);
+		glGenTextures(1, &picture.texture);
+		glcache.BindTexture(GL_TEXTURE_2D, picture.texture);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasWidth, canvasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		glcache.BindTexture(GL_TEXTURE_2D, 0);
+		picture.width = canvasWidth;
+		picture.height = canvasHeight;
+	}
+	width = picture.width;
+	height = picture.height;
+	return picture.texture;
+}
+
+void drawTexture(const glm::mat4& viewProj, const glm::mat4& model, unsigned texture, float hx, float hy, const glm::vec4& tint)
+{
+	if (!initGl())
+		return;
+	glActiveTexture(GL_TEXTURE0);
+	if (texture == 0)
+	{
+		if (whiteTexture == 0)
+		{
+			const u8 white[4] { 255, 255, 255, 255 };
+			glGenTextures(1, &whiteTexture);
+			glcache.BindTexture(GL_TEXTURE_2D, whiteTexture);
+			glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+		}
+		texture = whiteTexture;
+	}
+	glcache.BindTexture(GL_TEXTURE_2D, texture);
+	drawQuad(viewProj, model, hx, hy, tint);
+}
+
 void termPanel()
 {
 	if (program != 0)
@@ -412,11 +510,18 @@ void termPanel()
 			glcache.DeleteTextures(1, &picture->texture);
 		*picture = Picture();
 	}
+	for (auto& [key, picture] : textPictures)
+		if (picture.texture != 0)
+			glcache.DeleteTextures(1, &picture.texture);
+	textPictures.clear();
+	if (whiteTexture != 0)
+		glcache.DeleteTextures(1, &whiteTexture);
+	whiteTexture = 0;
 	if (quadVbo != 0) glDeleteBuffers(1, &quadVbo);
 	deleteVertexArray(quadVao);
 	program = 0;
 	quadVao = quadVbo = 0;
-	uMvp = -1;
+	uMvp = uTint = -1;
 }
 
 }

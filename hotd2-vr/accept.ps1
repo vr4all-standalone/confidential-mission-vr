@@ -17,7 +17,8 @@
   cm-haptics, -low, -off, -mag and -reload play one each (accept-cm-haptics...) the same way,
   and so do cm-menu and cm-menu-quit (accept-cm-menu, accept-cm-menu-quit), and cm-controllers
   and cm-controllers-rt (accept-cm-controllers, accept-cm-controllers-rt; the latter's GLB is
-  build-win\vrtest\test-controller.glb, made by re\make-test-glb.py when it is missing).
+  build-win\vrtest\test-controller.glb, made by re\make-test-glb.py when it is missing), and cm-hands
+  and cm-hands-shot (accept-cm-hands, accept-cm-hands-shot).
   spike-keys plays accept-spike-keys: the harness's scene keys (vr-test.ps1 -On, poke, vr.WatchRam).
 #>
 param([string[]]$Only = @(), [switch]$Reuse)
@@ -778,6 +779,50 @@ function Test-CmControllersRt {
 	return $null
 }
 
+# What each hand holds and the how-to-play labels (Task 9) through the simulator, widened: the
+# right hand in front of the left eye from 20 s, a controller with its labels (shot at 25 s); the
+# first A (30 s) gives it the gun and the labels go (shot at 35 s). X lets player 2 join at 60 s
+# (the left hand takes its gun), player 2 idles out at ~70 s (findings p2out: a controller
+# again). The menu at 90 s, the right stick up twice (from Resume it wraps to Quit, then Show
+# controls) and A: both hands controllers with labels again, until the right trigger's pull at
+# 94 s gives the gun back. The menu again at 96 s, Show controls chosen by the right trigger and
+# held through the close: the labels stay. The labels and the gun differ in the right hand's part
+# of the view.
+function Test-CmHands {
+	$name = 'accept-cm-hands'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 102; XrSim = $true; Config = $cmWiden
+		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
+			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150',
+			'94=xr right/trigger 1 100', '96=xr left/menu 1 150', "96.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 8 -U 0.5)",
+			'97=xr right/trigger 1 800')
+		Expect = 'XR: labels off \(start\)', 'XR: right hand: controller -> gun \(start\)',
+			'XR: left hand: controller -> gun \(player 2 joins\)', 'XR: left hand: gun -> controller \(player 2 out\)',
+			'XR: show controls', 'XR: right hand: controller -> gun \(shot\)'
+		Reject = @('XR: initialisation failed') }
+	if ($why) { return $why }
+	# Show controls chosen by the trigger (97 s), held through the menu's close: that pull isn't the
+	# game's next one, so the labels stay (one "labels off (shot)", from 94 s, for two Show controls).
+	$shows = Get-LogCount $name 'XR: show controls$'
+	$offs = Get-LogCount $name 'XR: labels off \(shot\)'
+	Write-Host "  $shows lines 'XR: show controls' (want 2), $offs lines 'XR: labels off (shot)' (want 1)"
+	if ($shows -ne 2 -or $offs -ne 1) { return "Show controls by the trigger: $shows show controls, $offs labels off (shot)" }
+	$why = Test-RunShots $name 't025-labels.png', 't035-gun.png'
+	if ($why) { return $why }
+	$dir = Join-Path $repo "build-win\vrtest\$name"
+	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't025-labels.png'), (Join-Path $dir 't035-gun.png'), '--box', '0.3,0.3,0.9,0.95'
+	if ($why) { return "the labels and the gun look the same: $why" }
+	return $null
+}
+
+# The first trigger pull (28 s, no Start before it) gives the right hand the gun and fires; the
+# labels go with it.
+function Test-CmHandsShot {
+	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-hands-shot'; Seconds = 34; XrSim = $true; Config = $cmWiden
+		At = @('28=xr right/trigger 1 100')
+		Expect = 'XR: right hand: controller -> gun \(shot\)', 'XR: labels off \(shot\)'
+		Reject = @('XR: initialisation failed') }
+}
+
 $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Test-CmBoot'; 'cm-widen' = 'Test-CmWiden'
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
@@ -785,6 +830,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-haptics-mag' = 'Test-CmHapticsMag'; 'cm-haptics-reload' = 'Test-CmHapticsReload'
 	'cm-menu' = 'Test-CmMenu'; 'cm-menu-quit' = 'Test-CmMenuQuit'
 	'cm-controllers' = 'Test-CmControllers'; 'cm-controllers-rt' = 'Test-CmControllersRt'
+	'cm-hands' = 'Test-CmHands'; 'cm-hands-shot' = 'Test-CmHandsShot'
 	'spike-keys' = 'Test-SpikeKeys' }
 # "hotd2,mok" arrives as one string through powershell -File
 $names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { @($scenarios.Keys) }

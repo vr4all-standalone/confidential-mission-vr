@@ -14,6 +14,9 @@
 namespace vr::xr
 {
 
+// What a hand holds (holds()): its controller (drawn, with the how-to-play labels before play), or a gun.
+enum class Holds { Controller, Gun };
+
 struct Eye
 {
 	unsigned fbo;
@@ -52,7 +55,14 @@ void recenter();
 // Quit to the start screen: on Android BaseGLActivity.quitToStart through JNI (the start screen
 // opens, the game's activity finishes); on the PC Flycast exits (dc_exit, at the next applyPause).
 void quitToStart();
-// The controllers and their labels again, until the next shot (Task 9; for now it only says so).
+// What a hand holds now (0 left, 1 right). A game starts with a controller in each hand and the
+// labels on (xr_labels.h). Player 1's gun hand (the right, or the hand whose trigger was pulled:
+// the single gun's move) holds the gun from the first right Start or trigger pull, the labels going
+// then; the left holds player 2's gun while player 2 is in. In single play the other hand holds its
+// controller. Haptics go to the gun's hand, so this is where a gun is drawn. Render thread.
+Holds holds(int hand);
+// The menu's Show controls: both hands controllers with their labels again, until the next trigger
+// pull in the game, which gives back what they held and fires as usual.
 void showControls();
 // A shot's knock in a hand, at vr.Haptics' strength as it is now: the menu's sample of it.
 void sampleKnock(int hand);
@@ -67,6 +77,7 @@ inline void requestPause(bool) {}
 inline void applyPause() {}
 inline void recenter() {}
 inline void quitToStart() {}
+inline Holds holds(int) { return Holds::Gun; }
 inline void showControls() {}
 inline void sampleKnock(int) {}
 #endif

@@ -60,3 +60,10 @@ build: the app's files directory, or the PC: next to `flycast.exe`) and say wher
 - [ ] On PC VR (SteamVR, Virtual Desktop: a runtime without XR_FB_render_model) the built-in shape is in the hands instead ("XR: controller models built in (...)"): it reads as a controller held the right way, buttons up under the thumb, the trigger under the index finger; the left one has the small menu button where a Quest 3's is.
 - [ ] Only free hands show a controller: the gun hand shows the gun, and with the game's hands on, the other hand shows the game's open hand. With the menu open, a free hand's pointer line starts at its controller. `vr.ShowControllers = no` in emu.cfg hides the controllers and nothing else.
 - [ ] If the Quest's controllers look plain light grey, the runtime sent KTX2 textures (not decoded yet); the shape should still be Meta's. (The log's "XR: render model" lines then end in "untextured (image/ktx2)".)
+
+## Task 9
+
+- [ ] Before the first Start or shot, both hands show the Quest 3's own controllers with short labels by the buttons: right "A Start", "B Reload", "Trigger Shoot", "Stick click Laser"; left "X Player 2", "Y Reload P2", "Menu", "Stick click Recenter". Each is readable at arm's length without leaning in, and each line ends on its own button on the Quest 3's models (note any that point beside it: which, and how far off).
+- [ ] The labels go at the first A (the right hand turns into the gun) or the first trigger pull (that hand turns into the gun, and the pull fires).
+- [ ] X: the left hand turns into player 2's gun; when player 2 is out again (the game asks for player 2 in its corner), it is a controller again, without labels.
+- [ ] The menu's Show controls: both hands controllers with their labels again; the next trigger pull gives the gun(s) back and fires.

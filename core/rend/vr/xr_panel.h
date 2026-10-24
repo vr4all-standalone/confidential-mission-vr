@@ -1,7 +1,8 @@
 /*
 	Panels with text in the headset (hotd2-vr): a few centred lines for what the app has to say
-	when there's no game to show (making the agent's hands at the first start, hands_rip.h), and
-	a panel of rows to choose from (the settings menu, xr_menu.h).
+	when there's no game to show (making the agent's hands at the first start, hands_rip.h), a
+	panel of rows to choose from (the settings menu, xr_menu.h), and small pictures of one line
+	each (the controllers' labels, xr_labels.h).
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -66,6 +67,17 @@ bool rowsPanelHit(const glm::mat4& model, const RowsPanel& panel, const glm::vec
 // The row the ray points at, or -1 (it misses, or it's on the title or the footer); *u: where
 // across the panel, 0 at its left edge, 1 at its right one.
 int rowAt(const glm::mat4& model, const RowsPanel& panel, const glm::vec3& origin, const glm::vec3& dir, float *u);
+
+// One line of text as a small picture of its own (the controllers' labels, xr_labels.h): letters px
+// high in `colour`, on a dark plate with round corners and a margin; width and height: its size in
+// pixels. Painted and uploaded once for each text, px and colour (cached by them: the same arguments
+// give the same texture again, nothing uploaded); termPanel lets go of them. 0 (0 x 0) without the font.
+unsigned textTexture(const std::string& text, float px, const glm::vec3& colour, int& width, int& height);
+// A texture (0: plain white, for a line or a dot) on a quad hx by hy metres each way from the
+// middle of `model`, facing +z, its top at +y; like drawPanel, over what's there (no depth test),
+// blended, its colour times `tint`.
+void drawTexture(const glm::mat4& viewProj, const glm::mat4& model, unsigned texture, float hx, float hy,
+		const glm::vec4& tint = glm::vec4(1.f));
 
 void termPanel();
 
