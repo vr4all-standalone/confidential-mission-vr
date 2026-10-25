@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="hotd2-vr/assets/readme-banner.svg" alt="Confidential Mission VR" width="100%" />
+<img src="hotd2-vr/assets/readme-banner.jpg" alt="Confidential Mission VR: a guard with a rifle in the lock-on ring, stage 1" width="100%" />
 
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
@@ -29,8 +29,9 @@ NAOMI emulator. There is no remake here: the original game runs, and the emulato
 draws into a VR view.
 
 > **⚖️ No game included.** An unofficial fan project, not affiliated with or endorsed by Sega,
-> Namco, Meta or the Flycast project. This repository and its releases contain no Sega code,
-> data, graphics or sound: you need your own copy of the game, the MAME set `confmiss`.
+> Namco, Meta or the Flycast project. The apps contain no Sega code, data, graphics or sound,
+> and neither does this repository, apart from the banner above (a screenshot of the game,
+> © SEGA): you need your own copy of the game, the MAME set `confmiss`.
 
 Status: experimental. Made for the Quest 3 and played on it; Quest 3S, Quest 2, Quest Pro and
 PC VR headsets are not tested yet (see [The game](#the-game)).
@@ -687,6 +688,6 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
   #1 to hotd2-vr).
 - The app's icon is drawn for it from plain shapes (`hotd2-vr/assets/make-icon.py`).
 - Inspired by [DR-89/time-crisis-vr](https://github.com/DR-89/time-crisis-vr).
-- Confidential Mission is Sega's game. Namco is a trademark of Bandai Namco, Zapper of Nintendo, Meta Quest of Meta.
+- Confidential Mission is Sega's game; the banner is a screenshot of it (© SEGA). Namco is a trademark of Bandai Namco, Zapper of Nintendo, Meta Quest of Meta.
 
 Unofficial fan project, not affiliated with Sega. No game is included.
