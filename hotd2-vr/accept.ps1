@@ -1099,7 +1099,8 @@ function Test-CmRipSkip {
 		$params = @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 48; XrSim = $true; Config = "$cmWiden,config:vr.HandsPrep=yes,config:vr.Gun=1"
 			On = @($keys + $starts)
 			Expect = $first, 'VR hands: skipped after', 'XR: menu: not while the guns are being made',
-				'VR hands: watching for the assault rifle in play', $cmSkippedGun
+				'VR hands: watching for the assault rifle in play', $cmSkippedGun,
+				'XR: first start: Making your guns from your game files \(once\)( / .*)? \| B: skip \(the Arcade gun this time\)$'
 			Reject = @('XR: initialisation failed', 'XR: menu open', 'XR: the game''s own model from',
 				'the cabinet gun from this game', 'VR hands: the agents'' pistol from this game') }
 		$why = Invoke-VrTest $params
@@ -1150,15 +1151,22 @@ function Test-CmRipSkipRifle {
 $cmPistolFile = Join-Path $cmGunData 'gun-cm-pistol.bin'
 $cmPistolLine = 'VR hands: the agents'' pistol from this game \((complete|incomplete: [^)]*)\), \d+ bytes to .*gun-cm-pistol\.bin'
 $cmPistolSaved = 'VR hands: the agents'' pistol from this game \(complete\), \d+ bytes to .*gun-cm-pistol\.bin'
-function Invoke-CmRipPistol([string]$name, [string]$config, [string]$want) {
+# -Xr: through the simulator, the headset's panel and its lines too (CM VR 1.2 Task 6: the done panel's reload line).
+function Invoke-CmRipPistol([string]$name, [string]$config, [string]$want, [switch]$Xr) {
 	if (-not $Reuse) {
 		Remove-CmGuns
 		$why = Copy-CmRifleSeed
 		if ($why) { return $why }
 	}
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 240; Config = $config
-		Expect = 'VR hands: no model yet, taking the guns from the game', $want, 'VR hands: done after \d+ s of game'
+	$params = @{ Game = 'confmiss'; Name = $name; Seconds = 240; Config = $config
+		Expect = @('VR hands: no model yet, taking the guns from the game', $want, 'VR hands: done after \d+ s of game')
 		Reject = @('VR hands: .*, but ', 'the cabinet gun from this game') }
+	if ($Xr) {
+		$params.XrSim = $true
+		$params.Expect += 'XR: first start: Making your guns from your game files \(once\)( / .*)? \| B: skip \(the Arcade gun this time\)$',
+			'XR: first start: Got it\..* / Reload: B, or point it away from the screen and pull\.$'
+	}
+	$why = Invoke-VrTest $params
 	if ($why) { return $why }
 	$n = Get-LogNumber (Get-RunLog $name) 'VR hands: done after (\d+) s of game'
 	Write-Host "  done after $n s of game (want $cmRipDone or less)"
@@ -1168,7 +1176,7 @@ function Invoke-CmRipPistol([string]$name, [string]$config, [string]$want) {
 	return $null
 }
 function Test-CmRipPistol {
-	$why = Invoke-CmRipPistol 'accept-cm-rip-pistol' 'config:vr.HandsPrep=yes' $cmPistolSaved
+	$why = Invoke-CmRipPistol 'accept-cm-rip-pistol' 'config:vr.HandsPrep=yes' $cmPistolSaved -Xr
 	if ($why) { return $why }
 	return Invoke-VrCheck 'hnd', $cmPistolFile, '--polys', '91', '--length', '0.30', '--gun-only', '--complete'
 }

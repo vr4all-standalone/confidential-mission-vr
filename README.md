@@ -51,9 +51,13 @@ For Quest 3, 3S, 2 and Pro (Quest 2 and Pro: not tested yet, tell me how it runs
    [What you need](#what-you-need). With SideQuest (*Manage files*), or connect the headset to a
    PC with USB, allow access in the headset, and open *Quest > Internal shared storage > Download*.
 4. **Play.** Start *Confidential Mission VR* from your Library (*Unknown sources*). Its start
-   screen asks for *All files access* the first time (to find the game in Download), checks
-   the three files and names any that is missing and where it goes. *Play Confidential
-   Mission* starts the game in VR.
+   screen checks the three files: its badge says READY (in green) when all three are there,
+   MISSING FILES with a line for each one that isn't, or ALLOW ACCESS until the app may read
+   the Download folder. *Play Confidential Mission* starts the game in VR, and is greyed out
+   until then. *Where to put your files* opens the instructions and the access step (*Allow*:
+   *All files access*, the first time) and *Look again* checks once more. The first start
+   makes your guns from your own game files, once (about a minute or two; B skips it, with
+   the Arcade gun that time).
 
 Updates install over the old version; settings and saves stay.
 

@@ -26,6 +26,10 @@ struct Panel
 	std::vector<PanelLine> lines;
 	float progress = -1.f;	// a bar under the text, 0..1 (below 0: none)
 	std::string footer;		// small, at the bottom
+	// Its colours: by default the game's own look (near black, a red frame, a red bar); CM VR 1.2's
+	// panels take the start screen's (the lines' colours are their own)
+	glm::vec3 back { 16 / 255.f, 15 / 255.f, 17 / 255.f }, frame { 0.62f, 0.06f, 0.06f };
+	glm::vec3 barTrack { 0.24f, 0.24f, 0.26f }, barFill { 0.8f, 0.1f, 0.1f }, footerColour { 0.55f };
 };
 
 // The panel, 1.3 m wide, 1.6 m in front of where the game camera is, at eye height. The

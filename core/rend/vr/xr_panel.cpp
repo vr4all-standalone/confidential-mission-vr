@@ -111,24 +111,24 @@ void fill(int x0, int y0, int x1, int y1, const glm::vec3& colour, float alpha =
 			blend(x, y, colour, alpha);
 }
 
-// A new picture: the dark background and a thin red frame, like the game's own.
-void background(int width, int height)
+// A new picture: the dark background and a thin red frame, like the game's own (or a panel's colours).
+void background(int width, int height, const glm::vec3& back = glm::vec3(16 / 255.f, 15 / 255.f, 17 / 255.f),
+		const glm::vec3& frame = glm::vec3(0.62f, 0.06f, 0.06f))
 {
 	canvasWidth = width;
 	canvasHeight = height;
 	pixels.assign((size_t)width * height * 4, 0);
 	for (size_t i = 0; i < pixels.size(); i += 4)
 	{
-		pixels[i] = 16;
-		pixels[i + 1] = 15;
-		pixels[i + 2] = 17;
+		pixels[i] = (u8)(back.r * 255.f + 0.5f);
+		pixels[i + 1] = (u8)(back.g * 255.f + 0.5f);
+		pixels[i + 2] = (u8)(back.b * 255.f + 0.5f);
 		pixels[i + 3] = 235;
 	}
-	const glm::vec3 red(0.62f, 0.06f, 0.06f);
-	fill(0, 0, width, 5, red);
-	fill(0, height - 5, width, height, red);
-	fill(0, 0, 5, height, red);
-	fill(width - 5, 0, width, height, red);
+	fill(0, 0, width, 5, frame);
+	fill(0, height - 5, width, height, frame);
+	fill(0, 0, 5, height, frame);
+	fill(width - 5, 0, width, height, frame);
 }
 
 // How wide a line is at px, in pixels
@@ -178,7 +178,7 @@ void text(const std::string& s, float px, float x, int y, const glm::vec3& colou
 
 void paint(const Panel& panel)
 {
-	background(Width, Height);
+	background(Width, Height, panel.back, panel.frame);
 	float total = 0.f;
 	for (const PanelLine& line : panel.lines)
 		total += line.size * Height * 1.45f;
@@ -194,11 +194,11 @@ void paint(const Panel& panel)
 	if (panel.progress >= 0.f)
 	{
 		const int x0 = Width * 18 / 100, x1 = Width - x0, top = (int)y + 24, bottom = top + 14;
-		fill(x0, top, x1, bottom, glm::vec3(0.24f, 0.24f, 0.26f));
-		fill(x0, top, x0 + (int)((x1 - x0) * std::clamp(panel.progress, 0.f, 1.f)), bottom, glm::vec3(0.8f, 0.1f, 0.1f));
+		fill(x0, top, x1, bottom, panel.barTrack);
+		fill(x0, top, x0 + (int)((x1 - x0) * std::clamp(panel.progress, 0.f, 1.f)), bottom, panel.barFill);
 	}
 	if (!panel.footer.empty())
-		text(panel.footer, Height * 0.042f, Width * 0.5f, Height - 28, glm::vec3(0.55f));
+		text(panel.footer, Height * 0.042f, Width * 0.5f, Height - 28, panel.footerColour);
 }
 
 // A label's picture (textTexture): the line on a dark plate with round, soft-edged corners and a
@@ -386,7 +386,8 @@ void drawPanel(const glm::mat4& viewProj, const Panel& panel)
 	std::string says;
 	for (const PanelLine& line : panel.lines)
 		says += line.text + '\n';
-	says += panel.footer + '\n' + std::to_string(panel.progress < 0.f ? -1 : (int)(panel.progress * 200.f));
+	says += panel.footer + '\n' + std::to_string(panel.progress < 0.f ? -1 : (int)(panel.progress * 200.f))
+			+ '\n' + std::to_string((int)(panel.back.r * 255.f)) + ' ' + std::to_string((int)(panel.barFill.g * 255.f));
 	bindPicture(linesPicture, says, [&] { paint(panel); });
 	const float hx = WidthMetres * 0.5f, hy = hx * Height / Width;
 	drawQuad(viewProj, glm::translate(glm::mat4(1.f), glm::vec3(0.f, 0.f, -Distance)), hx, hy);

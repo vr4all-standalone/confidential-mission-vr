@@ -2840,23 +2840,35 @@ bool frame()
 	const bool staff = source != nullptr && source->kind == hands::Source::HerosStaff;
 	const bool cmGuns = source != nullptr && source->kind == hands::Source::CmGuns;
 	const char *title = cmGuns ? "CONFIDENTIAL MISSION VR" : staff ? "THE MAZE OF THE KINGS VR" : "THE HOUSE OF THE DEAD 2 VR";
+	// CM VR 1.2: Confidential Mission's panels in its start screen's colours (VR4All's: the panel, its
+	// line, violet, cream, muted grey, lime)
+	const glm::vec3 violet(169 / 255.f, 155 / 255.f, 1.f), cream(248 / 255.f, 245 / 255.f, 239 / 255.f), muted(155 / 255.f, 165 / 255.f, 180 / 255.f);
+	if (cmGuns)
+	{
+		panel.back = glm::vec3(21 / 255.f, 25 / 255.f, 35 / 255.f);
+		panel.frame = panel.barTrack = glm::vec3(52 / 255.f, 57 / 255.f, 71 / 255.f);
+		panel.barFill = glm::vec3(217 / 255.f, 243 / 255.f, 108 / 255.f);
+		panel.footerColour = muted;
+	}
 	if (preparing && cmGuns)
 	{
 		panel.lines = {
-			{ title, 0.085f, red },
-			{ "", 0.03f, white },
-			{ "Taking the guns from your copy of the game", 0.064f, white },
-			{ "About a minute or two, only this once", 0.047f, grey },
+			{ title, 0.085f, violet },
+			{ "", 0.03f, cream },
+			{ "Making your guns from your game files (once)", 0.064f, cream },
+			{ "About a minute or two, only this once", 0.047f, muted },
 		};
 		panel.progress = hands::prepProgress();
-		panel.footer = "B: skip (the built-in gun this time)";
+		panel.footer = "B: skip (the Arcade gun this time)";
 	}
 	else if (std::chrono::steady_clock::now() < doneUntil && cmGuns)
 		panel.lines = {
-			{ title, 0.085f, red },
-			{ "", 0.03f, white },
-			{ "Got it. The gun from your game is in your hand.", 0.064f, white },
-			{ "Reload: B, or point it away from the screen and pull.", 0.047f, grey },
+			{ title, 0.085f, violet },
+			{ "", 0.03f, cream },
+			{ "Got it. The gun from your game is in your hand.", 0.064f, cream },
+			// (as the menu's Reload has it: vr.Reload 1, pointing away is enough)
+			{ config::VrReload == 1 ? "Reload: B, or point it away from the screen." : "Reload: B, or point it away from the screen and pull.",
+					0.047f, muted },
 		};
 	else if (preparing)
 	{
@@ -2879,6 +2891,17 @@ bool frame()
 					: "Reload: grab the back of the pistol with your other hand and pull.", 0.047f, grey },
 		};
 	const bool showPanel = !panel.lines.empty();
+	// What the panel says, in the log each time it changes: the lines under the title, and the footer
+	static std::string panelSaid;
+	std::string said;
+	for (size_t i = 1; i < panel.lines.size(); i++)
+		if (!panel.lines[i].text.empty())
+			said += (said.empty() ? "" : " / ") + panel.lines[i].text;
+	if (!panel.footer.empty())
+		said += " | " + panel.footer;
+	if (showPanel && said != panelSaid)
+		NOTICE_LOG(RENDERER, "XR: first start: %s", said.c_str());
+	panelSaid = showPanel ? said : std::string();
 	// The panel alone in a dark room, or the VR menu over the paused game. Paused with no game
 	// frame kept, the menu is in the dark room: the GL context went away (Android: the app's
 	// surface, Quest home) and the renderer's Term let go of the frame; it comes back with the game.
