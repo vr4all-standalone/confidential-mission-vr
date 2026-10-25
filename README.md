@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release: v1.2.1](https://img.shields.io/badge/Release-v1.2.1_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release: v1.2.2](https://img.shields.io/badge/Release-v1.2.2_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
@@ -217,8 +217,7 @@ Quest Touch:
 | grip + thumbstick up/down | world size (kept) |
 | thumbstick | the game's D-pad (menus) |
 
-The two-player meanings are the menu's Two players at its default, "P1 left hand - P2 right hand"; at "P1 right hand -
-P2 left hand" the right controller's buttons stay player 1's and the left's player 2's.
+The two-player meanings are the menu's Two players at its default, "P1 left / P2 right"; at "P1 right / P2 left" the right controller's buttons stay player 1's and the left's player 2's.
 
 The how-to-play labels by the controllers' buttons (before play starts, and the menu's How to play while you play alone):
 - right controller: A - P1 Start · B - P1 Reload · Trigger - P1 Shoot · Stick - Laser
@@ -257,7 +256,7 @@ With two players, player 1 is on the left hand and player 2 on the right, matchi
 screen: player 1's gun (red aim) moves to the left hand and player 2's (blue aim) appears in the
 right. Each controller's buttons are then its own player's: X is player 1's Start and Y its
 reload, A player 2's Start and B its reload (the X you joined with counts as player 2's Start
-until you let it go). The menu's Two players at "P1 right hand - P2 left hand" turns this round:
+until you let it go). The menu's Two players at "P1 right / P2 left" turns this round:
 player 1 keeps the right hand, as in 1.2.0. When player 2 is out of the game (the game asks for
 player 2's Start again), it's one gun again, in player 1's hand, and either trigger takes it as
 before. X only joins while the game takes player 2; at other times it does nothing.
@@ -309,7 +308,7 @@ even with the laser off.
 | Gun | the gun in your hand: In-game pistol, Arcade gun, Zapper, then any of your own (`vr.Gun`, `vr.GunFile`; see The guns below, and Your own models). There is no Auto: the in-game pistol is the default. A gun not made yet is skipped; an in-game pistol made without all of it says "(incomplete)" and can still be chosen. If the chosen gun isn't there, the hand takes the in-game pistol; without that (the first start skipped, or not done yet), the Arcade gun; and if no gun file loads at all, a plain built-in gun. The new gun shows at once, while the game is paused |
 | Gun angle | the gun tilted in your hand, -30° to +30° in 1° steps, + the muzzle up (`vr.GunAngle`): for a controller that holds a gun at a different angle than your hand points. The laser and the shots follow the barrel, in both hands, the assault rifle too |
 | Reload | Shoot off-screen (a pull away from the game's view reloads, as in the arcade) or Point off-screen (pointing away is enough; `vr.Reload`). B and Y reload either way |
-| Two players | P1 left hand - P2 right hand (the default) or P1 right hand - P2 left hand (`vr.TwoPlayerP1Hand`): which controller is player 1's once player 2 is in, with its gun, trigger, Start and reload; the other is player 2's. At the default, as the game shows the players, X is player 1's Start and Y its reload, A player 2's Start and B its reload, and the how-to-play labels follow. Changed with two players in, the guns change hands when the menu closes; changed playing alone, it applies at the next join. Playing alone it changes nothing: A is player 1's Start and either hand's trigger takes the gun |
+| Two players | P1 left / P2 right (the default) or P1 right / P2 left (`vr.TwoPlayerP1Hand`): which controller is player 1's once player 2 is in, with its gun, trigger, Start and reload; the other is player 2's. At the default, as the game shows the players, X is player 1's Start and Y its reload, A player 2's Start and B its reload, and the how-to-play labels follow. Changed with two players in, the guns change hands when the menu closes; changed playing alone, it applies at the next join. Playing alone it changes nothing: A is player 1's Start and either hand's trigger takes the gun |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Light, Medium (the default) or Strong (`vr.Haptics`): Light is 1.2's Normal, Medium 1.2's Strong, Strong half as long again; each change gives a sample knock at the new level in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
@@ -573,7 +572,7 @@ This builds the `vr` build type (arm64, optimised, OpenXR) to
 `shell\android-studio\flycast\build\outputs\apk\vr\flycast-vr.apk`. It installs as its own
 app, *Confidential Mission VR* (`com.vrlightgunhub.confmiss`), next to a normal Flycast. Its
 version is `hubVersion` in `shell/android-studio/flycast/build.gradle.kts` and the commit
-(`1.2.1-g<commit>`; versionCode 10). Without the release key (below) it is signed with the public debug key,
+(`1.2.2-g<commit>`; versionCode 11). Without the release key (below) it is signed with the public debug key,
 and Gradle says so: fine for trying things out, not for a release.
 
 `cm-vr\build-win.cmd` builds the Windows version (Visual Studio 2022 Build Tools) with
@@ -615,7 +614,7 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
    `CREDITS.txt`); without it both come without models.
 3. **The packages.** The version is `hubVersion` and `versionCode` in
    `shell/android-studio/flycast/build.gradle.kts` and `$appVersion` in `package-release.ps1`
-   (1.2.1, versionCode 10, for this release). `powershell -File cm-vr\package-release.ps1` builds both versions and
+   (1.2.2, versionCode 11, for this release). `powershell -File cm-vr\package-release.ps1` builds both versions and
    puts `confidential-mission-vr-quest.apk` and `confidential-mission-vr-pcvr.zip` (`flycast.exe`,
    `emu.cfg`, `README.txt`, `LICENSE.txt`, `Play Confidential Mission.cmd`, and with the bundled
    models `CREDITS.txt` and `data\models\`) in `dist\`. Both carry the licence, `LICENSE.txt`

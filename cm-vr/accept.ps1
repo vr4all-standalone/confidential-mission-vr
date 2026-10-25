@@ -165,7 +165,7 @@ $cmWiden = 'config:vr.FovScale=2,config:vr.WidenFov=yes'
 # (the user's own models in build-win\data\models): "XR: gun: built-in gun (chosen: vr.BuiltInGun)".
 $cmWidenArcade = "$cmWiden,config:vr.GameHands=no,config:vr.BuiltInGun=yes"
 # The two-player runs from before CM VR 1.2.1 had player 1 keep the right hand once player 2 joins; the menu's Two
-# players at "P1 right hand - P2 left hand" keeps that path tested as it was (the default, P1 left: cm-p1-left).
+# players at "P1 right / P2 left" keeps that path tested as it was (the default, P1 left: cm-p1-left).
 $cmP1Right = 'config:vr.TwoPlayerP1Hand=right'
 $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000, 9000), @(5000, 1000), @(5000, 9000), @(1000, 5000), @(9000, 5000))
 
@@ -2239,7 +2239,7 @@ function Test-CmCutscene {
 	return $null
 }
 
-# The menu's Two players at its default, "P1 left hand - P2 right hand" (CM VR 1.2.1: the run's emu.cfg has no
+# The menu's Two players at its default, "P1 left / P2 right" (CM VR 1.2.1: the run's emu.cfg has no
 # vr.TwoPlayerP1Hand; with two players the game shows P1 on the left), through the simulator, widened. Playing alone it
 # is 1.2.0's default whatever the row says: before the first Start the labels are the default set (right: A - P1 Start,
 # B - P1 Reload, Trigger - P1 Shoot, Stick - Laser; left: X - P2 Start, Y - P2 Reload, Trigger - P2 Shoot, Stick -
@@ -2255,7 +2255,7 @@ function Test-CmCutscene {
 # game refills player 1's gun itself, tried), B at 67 s player 2 (0c155918). The menu at 68 s, up 2 to How to play: A
 # turns it on at 69.1 s (the two-player labels, P1 on the left: left X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot,
 # Stick - Recenter, Menu; right A - P2 Start, B - P2 Reload, Trigger - P2 Shoot, Stick - Laser) and off at 69.8 s; up 6
-# to Two players, right at 72.6 s: "P1 right hand - P2 left hand", saved in emu.cfg at once; B closes it at 73.2 s and
+# to Two players, right at 72.6 s: "P1 right / P2 left", saved in emu.cfg at once; B closes it at 73.2 s and
 # the guns swap hands, player 2 still in; the right pull at 74.2 s is player 1's: its light gun's trigger, and its buzz
 # in the right hand. (The game takes no shots there: after the first room it took none of player 1's right pulls up to
 # 82.5 s, tried; so no shot counter.) (The log's clock is ~0.25 s behind the -At times.)
@@ -2277,8 +2277,8 @@ function Test-CmP1Left {
 			"XR: player 2 joins: a gun in each hand \(player 1's in the left\)$", 'XR: menu open \(paused\)',
 			"XR: menu at 1\.20 m, 13 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
 			'XR: menu How to play$', 'XR: how to play on$', 'XR: how to play off \(chosen\)$',
-			'XR: menu Two players -> P1 right hand - P2 left hand$', 'XR: menu closed \(resumed\)', "XR: the guns swap hands: player 1's in the right$"
-		Reject = 'XR: initialisation failed', 'XR: menu Two players -> P1 left hand', "XR: player 2 joins: .*player 1's in the right" }
+			'XR: menu Two players -> P1 right / P2 left$', 'XR: menu closed \(resumed\)', "XR: the guns swap hands: player 1's in the right$"
+		Reject = 'XR: initialisation failed', 'XR: menu Two players -> P1 left / P2 right', "XR: player 2 joins: .*player 1's in the right" }
 	if ($why) { return $why }
 	# the labels, each hand's set once before play (the default set) and once in the menu's How to play with two players in (P1 on the left)
 	$log = Get-RunLog $name

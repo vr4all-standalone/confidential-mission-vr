@@ -36,7 +36,7 @@ const char *const HapticsWords[4] { "off", "light", "medium", "strong" };
 const char *const ReloadNames[2] { "Shoot off-screen", "Point off-screen" };
 // vr.TwoPlayerP1Hand by twoPlayerP1Hand() (0 left, the default; 1 right), the user's words: the game shows P1 on
 // the left, P2 on the right. It applies once player 2 is in; playing alone either hand's trigger takes the gun.
-const char *const HandsNames[2] { "P1 left hand - P2 right hand", "P1 right hand - P2 left hand" };
+const char *const HandsNames[2] { "P1 left / P2 right", "P1 right / P2 left" };
 constexpr int GunAngleMax = 30;	// vr.GunAngle's range, degrees either way
 
 glm::mat4 model { 1.f };	// the panel: its middle, facing the player (+z)

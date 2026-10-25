@@ -172,8 +172,8 @@ where it is.
   for player 1 only, the right for player 2, each hand's knocks in its own controller; Y reloads player 1 and B player
   2. The labels read X - P1 Start, Y - P1 Reload on the left and A - P2 Start, B - P2 Reload on the right. When player
   2 is out, it's one gun again, staying in the left hand until the right trigger takes it.
-- [ ] **Do:** ≡, the Two players row (under Reload): flip it to "P1 right hand - P2 left hand" with both players in,
-  and close the menu. Later, playing alone, flip it back to "P1 left hand - P2 right hand" and let player 2 join.
+- [ ] **Do:** ≡, the Two players row (under Reload): flip it to "P1 right / P2 left" with both players in,
+  and close the menu. Later, playing alone, flip it back to "P1 left / P2 right" and let player 2 join.
   **Expect:** flipped with both players in, the guns change hands as the menu closes, both players still in, and the
   right trigger is then player 1's. Flipped playing alone, nothing moves until player 2 joins; then the guns go where
   the row says. The row keeps its value after a restart.

@@ -13,7 +13,7 @@ fun gitVersionName(): String {
 
 // hotd2-vr: Confidential Mission VR's own version. The vr build's versionName is "<hubVersion>-g<commit>"
 // (set in androidComponents below); versionCode stays defaultConfig's.
-val hubVersion = "1.2.1"
+val hubVersion = "1.2.2"
 
 fun gitShortHash(): String {
     return providers.exec {
@@ -49,7 +49,7 @@ android {
         applicationId = "com.flycast.emulator"
         minSdk = 29     // hotd2-vr: Quest only (the OpenXR loader needs 24+)
         targetSdk = 36
-        versionCode = 10
+        versionCode = 11
         versionName = gitVersionName()
         vectorDrawables.useSupportLibrary = true
 
