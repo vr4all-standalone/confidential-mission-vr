@@ -28,10 +28,12 @@ namespace
 constexpr float Distance = 1.2f, BelowEyes = 0.1f;
 constexpr int Left = 0, Right = 1;
 
-const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Laser", "Haptics", "World size",
-		"Panel distance", "Wider view", "How to play", "Quit" };
+const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Hands", "Laser", "Haptics",
+		"World size", "Panel distance", "Wider view", "How to play", "Quit" };
 const char *const HapticsNames[4] { "Off", "Low", "Normal", "Strong" };
 const char *const ReloadNames[2] { "Shoot off-screen", "Point off-screen" };
+// vr.P1Hand by p1Hand() (0 left, 1 right), the user's words: the game shows P1 on the left, P2 on the right
+const char *const HandsNames[2] { "P1 left hand - P2 right hand", "P1 right hand - P2 left hand" };
 constexpr int GunAngleMax = 30;	// vr.GunAngle's range, degrees either way
 
 glm::mat4 model { 1.f };	// the panel: its middle, facing the player (+z)
@@ -90,8 +92,9 @@ bool repeats(int row) {
 int gunAngle() {
 	return std::clamp((int)config::VrGunAngle, -GunAngleMax, GunAngleMax);
 }
+// (Hands too: either way, its other value)
 bool onOff(int row) {
-	return row == Laser || row == WiderView || row == HowToPlay;
+	return row == Hands || row == Laser || row == WiderView || row == HowToPlay;
 }
 
 std::string value(int row)
@@ -113,6 +116,8 @@ std::string value(int row)
 		return s;
 	case Reload:
 		return ReloadNames[std::clamp((int)config::VrReload, 0, 1)];
+	case Hands:
+		return HandsNames[p1Hand()];
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
 	case Haptics:
@@ -207,6 +212,14 @@ void change(int row, int dir, int hand)
 			return;
 		config::VrReload.set(reload);
 		config::saveInt("config", "vr.Reload", reload);
+		break;
+	}
+	case Hands:
+	{
+		// with two players in, the guns swap hands once the menu closes (xr_host.cpp updateLightgun)
+		const char *const hand = p1Hand() == Right ? "left" : "right";
+		config::VrP1Hand.set(hand);
+		config::saveStr("config", "vr.P1Hand", hand);
 		break;
 	}
 	case Laser:

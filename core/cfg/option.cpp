@@ -142,6 +142,7 @@ Option<int> VrGun("vr.Gun", 1);	// the gun drawn: 1 the in-game pistol, 4 (and o
 Option<std::string> VrGunFile("vr.GunFile", "");	// with vr.Gun 4: the player's own gun, its file name in guns/ without .glb (the VR menu)
 Option<int> VrGunAngle("vr.GunAngle", 0);	// the gun tilted in the hand about its grip, degrees, + the muzzle up; read as -30 to 30 (the VR menu's Gun angle)
 Option<int> VrReload("vr.Reload", 0);	// 0 reload by shooting away from the screen; 1 also by pointing away from it, once each time (the VR menu's Reload)
+Option<std::string> VrP1Hand("vr.P1Hand", "right");	// player 1's controller: "right" (its Start, B and, with two players, gun; player 2's the left), or "left" the other way round; any case, anything else reads as right (the VR menu's Hands)
 Option<bool> CustomTextures("rend.CustomTextures");
 Option<bool> PreloadCustomTextures("rend.PreloadCustomTextures");
 Option<bool> DumpTextures("rend.DumpTextures");

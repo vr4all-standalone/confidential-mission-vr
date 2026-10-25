@@ -593,12 +593,12 @@ function Test-CmPause {
 }
 
 # The settings menu's place, as its open line says it (xr_menu.cpp): 1.2 m ahead of the head
-# (0, 1.6, 0) at 1.5 m (0.1 m below the eyes), 0.9 m wide, its 10 rows 0.063 m apart, the top
-# row's middle 0.337 m over the panel's (12 rows, CM VR 1.2). -Row and -U (0..1 across): where the simulator's right
+# (0, 1.6, 0) at 1.5 m (0.1 m below the eyes), 0.9 m wide, its 13 rows 0.063 m apart, the top
+# row's middle 0.369 m over the panel's (13 rows: CM VR 1.2 with its Hands row). -Row and -U (0..1 across): where the simulator's right
 # hand at (0.18, 1.3, -0.35) points ("yaw pitch", degrees) to put its pointer there. The pointer
 # leaves the arcade gun's muzzle (vr.GunScale 0.68), which in the simulator, where the grip pose
 # is the aim pose, is 4.4 cm over the hand and 13.7 cm ahead of it: a few rounds of aiming from it.
-$cmMenuPitch = 0.063; $cmMenuTop = 0.337; $cmMenuWidth = 0.9
+$cmMenuPitch = 0.063; $cmMenuTop = 0.369; $cmMenuWidth = 0.9
 function Get-CmMenuAim([int]$Row, [double]$U) {
 	$tx = ($U - 0.5) * $cmMenuWidth; $ty = 1.5 + $cmMenuTop - $Row * $cmMenuPitch; $tz = -1.2
 	$yaw = 0.0; $pitch = 0.0
@@ -612,20 +612,20 @@ function Get-CmMenuAim([int]$Row, [double]$U) {
 }
 
 # The settings menu through the simulator, widened, in stage 1's first room: the left menu button
-# opens it at 58 s (at Resume), the right stick down 6 times to Haptics, A (+ on a value row) makes
+# opens it at 58 s (at Resume), the right stick down 7 times to Haptics, A (+ on a value row) makes
 # it Strong with a sample knock at that strength (0.03 s x 1.6), down once more to World size,
 # right (+) makes it 0.121 (0.110 x 1.1), the right hand points at the Laser row's right half at
 # 63 s and its trigger turns the laser off, B closes it at 65 s. That knock is the only one. Each
 # change is in emu.cfg at once (the run's, emu.cfg.after); build-win\emu.cfg is as it was.
 function Test-CmMenu {
 	$name = 'accept-cm-menu'
-	$downs = @(foreach ($t in 58.4, 58.8, 59.2, 59.6, 60, 60.4) { "$(T $t)=stick right 0 -1 150" })
+	$downs = @(foreach ($t in 58.4, 58.75, 59.1, 59.45, 59.8, 60.15, 60.5) { "$(T $t)=stick right 0 -1 150" })
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 72; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150' + $downs + @('60.9=xr right/a 1 150', '61.4=stick right 0 -1 150',
-			'62=stick right 1 0 150', "63=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 5 -U 0.75)", '63.5=xr right/trigger 1 100',
+			'62=stick right 1 0 150', "63=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 6 -U 0.75)", '63.5=xr right/trigger 1 100',
 			'65=xr right/b 1 150')
 		Expect = 'XR: menu button', 'XR: menu open \(paused\)',
-			"XR: menu at 1\.20 m, 12 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
+			"XR: menu at 1\.20 m, 13 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
 			'XR: menu Haptics -> Strong', 'XRSIM: haptic right 0\.048 1\.000', 'XR: menu World size -> 0\.121', 'XR: menu Laser -> Off',
 			'XR: menu closed \(resumed\)'
 		Reject = 'XR: initialisation failed', 'XR: \d+ black frames' }
@@ -890,7 +890,7 @@ function Test-CmHands {
 		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '27=shot labels2') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
 			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150', '92.5=xr right/a 1 150',
 			'93.5=stick right 1 0 150', '95=xr left/menu 1 150', '96=xr right/trigger 1 100', '97=xr left/menu 1 150',
-			"97.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 10 -U 0.5)", '98.5=xr right/trigger 1 1000', '99=xr right/b 1 150',
+			"97.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 11 -U 0.5)", '98.5=xr right/trigger 1 1000', '99=xr right/b 1 150',
 			'100=pose right 0.1 1.45 -0.3 0 0', '101=xr right/trigger 1 100')
 		Expect = 'XR: labels off \(start\)', 'XR: right hand: controller -> gun \(start\)',
 			'XR: left hand: controller -> gun \(player 2 joins\)', 'XR: left hand: gun -> controller \(player 2 out\)',
@@ -2187,6 +2187,109 @@ function Test-CmCutscene {
 	return $null
 }
 
+# The menu's Hands set to "P1 left hand - P2 right hand" (vr.P1Hand=left, 1.2 round 2: the game shows P1 on the left)
+# through the simulator, widened: each controller's buttons are its own player's. Before the first Start the labels
+# say so (left: X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot, Stick - Recenter, Menu; right: A - P2 Start, B - P2
+# Reload, Trigger - P2 Shoot, Stick - Laser). X is player 1's Start (30-52 s), which puts the single gun in the left
+# hand; the left controller where the right one rests by default (53 s: aimed as cm-haptics' right, so player 1 clears
+# stage 1's first room and stays in: with fewer hits player 1 was out by ~58 s, tried); 6 left pulls (54-57 s), Y at
+# 59.2 s (player 1's reload); A lets player 2 join at 60 s (the right hand takes player 2's gun); 2 left pulls (60.8,
+# 61.4 s) fire player 1's rounds, 3 right pulls (62-63.2 s) player 2's: each player's shot counter (+0x60, P1
+# 0c155818, P2 0c15592c, watched) and kick with its own hand's pulls only. Y at 63.7 s reloads player 1 (its ammo,
+# 0c155804, back to 6: before ~64.3 s on the log's clock, where the first room ends and the game refills player 1's
+# gun itself, tried), B at 67 s player 2 (0c155918). The menu at 68 s, down 5 to Hands, right at 70.4 s: "P1 right
+# hand - P2 left hand", saved in emu.cfg at once; B closes it at 71 s and the guns swap hands, player 2 still in;
+# the right pull at 72 s is player 1's: its light gun's trigger, and its buzz in the right hand. (The game takes no
+# shots there: after the first room it took none of player 1's right pulls up to 82.5 s, tried; so no shot counter.) (The log's clock is ~0.25 s behind the -At times.)
+function Test-CmP1Left {
+	$name = 'accept-cm-p1-left'
+	$p1Shots = '^\d+:\d\d:\d{3} .*VR: ram 0c155818 '; $p2Shots = '^\d+:\d\d:\d{3} .*VR: ram 0c15592c '
+	$downs = @(foreach ($t in 68.4, 68.75, 69.1, 69.45, 69.8) { "$(T $t)=stick right 0 -1 150" })
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 76; XrSim = $true
+		Config = "$cmWidenArcade,config:vr.P1Hand=left,config:vr.WatchRam=0c155804,0c155918,0c155818:2,0c15592c:2"
+		At = @(for ($t = 30; $t -le 52; $t += 2) { "$t=xr left/x 1 200" }) +
+			'53=pose left 0.18 1.3 -0.35 0 0' + @(for ($i = 0; $i -lt 6; $i++) { "$(T (54 + 0.6 * $i))=xr left/trigger 1 100" }) +
+			'59.2=xr left/y 1 200' + '60=xr right/a 1 200' + @(foreach ($t in 60.8, 61.4) { "$(T $t)=xr left/trigger 1 100" }) + @(foreach ($t in 62, 62.6, 63.2) { "$(T $t)=xr right/trigger 1 100" }) +
+			'63.7=xr left/y 1 200', '67=xr right/b 1 200', '68=xr left/menu 1 150' + $downs + @('70.1=shot menu', '70.4=stick right 1 0 150',
+			'71=xr right/b 1 150', '72=xr right/trigger 1 100')
+		Expect = 'XR: the gun is in the left hand$', 'XR: right hand: controller -> gun \(start\)$|XR: left hand: controller -> gun \(start\)$',
+			'XR: player 2 joins: a gun in each hand', 'XR: menu open \(paused\)',
+			"XR: menu at 1\.20 m, 13 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
+			'XR: menu Hands -> P1 right hand - P2 left hand$', 'XR: menu closed \(resumed\)', "XR: the guns swap hands: player 1's in the right$"
+		Reject = 'XR: initialisation failed', 'XR: menu Hands -> P1 left hand' }
+	if ($why) { return $why }
+	# the labels, each hand's set once: the players the other way round
+	foreach ($set in 'left: X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot, Stick - Recenter, Menu',
+			'right: A - P2 Start, B - P2 Reload, Trigger - P2 Shoot, Stick - Laser') {
+		$lines = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern ('XR: labels set: ' + $set.Split(':')[0] + ': ') -SimpleMatch -CaseSensitive)
+		$exact = @($lines | Where-Object { $_.Line.EndsWith("XR: labels set: $set") })
+		Write-Host "  $($lines.Count) lines 'XR: labels set: $($set.Split(':')[0])', $($exact.Count) of them exactly '$set' (want 1 and 1)"
+		if ($lines.Count -ne 1 -or $exact.Count -ne 1) { return "want one 'XR: labels set: $set', got $($lines.Count) lines: $(($lines | ForEach-Object { $_.Line }) -join ' | ')" }
+	}
+	# X is player 1's Start, never player 2's; A (60 s) player 2's, never player 1's
+	$x1 = Get-LogCount $name 'Light gun P1 at .*start 1' -To 53
+	$x2 = Get-LogCount $name 'Light gun P2 at .*start 1' -To 53
+	$a1 = Get-LogCount $name 'Light gun P1 at .*start 1' -From 53
+	Write-Host "  X: $x1 player 1 Start lines before 53 s (want some), $x2 player 2's (want 0); $a1 player 1 Start lines from 53 s (want 0: A is player 2's)"
+	if ($x1 -lt 1 -or $x2 -ne 0 -or $a1 -ne 0) { return "X gave $x1 player 1 and $x2 player 2 Start lines before 53 s, A $a1 player 1 Start lines after" }
+	$joined = (Get-LogClocks $name 'XR: player 2 joins')[0]
+	if ($joined -lt 59 -or $joined -ge 61) { return "player 2 joined at $joined s, want 59-61 s (A at 60 s)" }
+	# each trigger its own player's rounds: the shot counters, the kicks and the knocks' hands
+	foreach ($w in @(@(53, 57.5, 'P1', 'left', 'the single gun, left pulls'), @(60.3, 61.7, 'P1', 'left', "player 1's left pulls, two guns"),
+			@(61.7, 63.4, 'P2', 'right', "player 2's right pulls"))) {
+		$mine = $(if ($w[2] -eq 'P1') { $p1Shots } else { $p2Shots }); $other = $(if ($w[2] -eq 'P1') { $p2Shots } else { $p1Shots })
+		$counted = Get-LogCount $name $mine -From $w[0] -To $w[1]
+		$wrong = Get-LogCount $name $other -From $w[0] -To $w[1]
+		$kicks = Get-LogCount $name "XR: $($w[2]) kick: " -From $w[0] -To $w[1]
+		$otherKicks = Get-LogCount $name "XR: P[12] kick: " -From $w[0] -To $w[1]
+		$knocks = Get-LogCount $name "XRSIM: haptic $($w[3]) 0\.030 1\.000" -From $w[0] -To $w[1]
+		$wrongKnocks = Get-LogCount $name 'XRSIM: haptic \w+ 0\.030 1\.000' -From $w[0] -To $w[1]
+		Write-Host "  $($w[4]) ($($w[0])-$($w[1]) s): $counted $($w[2]) shot counter changes, $wrong of the other's (want 1+ and 0); $kicks $($w[2]) kicks of $otherKicks; $knocks $($w[3]) knocks of $wrongKnocks"
+		if ($counted -lt 1 -or $wrong -ne 0) { return "$($w[4]): $counted changes of $($w[2])'s shot counter and $wrong of the other's, want 1 or more and 0" }
+		if ($kicks -lt 1 -or $kicks -ne $otherKicks -or $knocks -lt 1 -or $knocks -ne $wrongKnocks) {
+			return "$($w[4]): $kicks $($w[2]) kicks of $otherKicks, $knocks $($w[3]) Shot knocks of $wrongKnocks, want them all $($w[2])'s in the $($w[3]) hand"
+		}
+	}
+	# Y reloads player 1 only, B player 2 only (their ammo back to 6), and the buttons' lines say whose
+	$y1 = Get-LogCount $name 'VR: ram 0c155804 0[0-5] -> 06' -From 63.4 -To 64.2
+	$y2 = Get-LogCount $name 'VR: ram 0c155918 0[0-5] -> 06' -From 63.4 -To 64.2
+	$b2 = Get-LogCount $name 'VR: ram 0c155918 0[0-5] -> 06' -From 66.7 -To 67.7
+	$b1 = Get-LogCount $name 'VR: ram 0c155804 0[0-5] -> 06' -From 66.7 -To 67.7
+	$yB = Get-LogCount $name 'Light gun P1 at .* B 1' -From 63.4 -To 64.2
+	$bB = Get-LogCount $name 'Light gun P2 at .* B 1' -From 66.7 -To 67.7
+	$wrongB = (Get-LogCount $name 'Light gun P2 at .* B 1' -From 63.4 -To 64.2) + (Get-LogCount $name 'Light gun P1 at .* B 1' -From 66.7 -To 67.7)
+	Write-Host "  Y: P1 ammo to 6 $y1 times, P2 $y2 (want 1 and 0); B: P2 $b2, P1 $b1 (want 1 and 0); B lines P1 $yB at Y, P2 $bB at B, $wrongB the other's (want 1+, 1+, 0)"
+	if ($y1 -ne 1 -or $y2 -ne 0) { return "Y: player 1's ammo refilled $y1 times, player 2's $y2, want 1 and 0" }
+	if ($b2 -ne 1 -or $b1 -ne 0) { return "B: player 2's ammo refilled $b2 times, player 1's $b1, want 1 and 0" }
+	if ($yB -lt 1 -or $bB -lt 1 -or $wrongB -ne 0) { return "the B lines: player 1 $yB at Y, player 2 $bB at B, $wrongB of the other player's" }
+	# the swap: once, after the menu closed, player 2 still in, and the right pull then player 1's
+	$closed = (Get-LogClocks $name 'XR: menu closed \(resumed\)')[0]
+	$swap = @(Get-LogClocks $name "XR: the guns swap hands")
+	$out = @(Get-LogClocks $name 'XR: player 2 is out' | Where-Object { $_ -lt $swap[0] + 1 })
+	Write-Host "  the menu closed at $closed s, the guns swapped at $($swap -join ', ') s (want one, within 0.1 s); player 2 out before $($swap[0] + 1) s: $($out.Count) (want 0)"
+	if ($swap.Count -ne 1 -or $swap[0] -lt $closed -or $swap[0] - $closed -gt 0.1) { return "want one swap within 0.1 s of the menu's close at $closed s, got $($swap -join ', ')" }
+	if ($out.Count) { return "player 2 was out by the swap ($($out -join ', ') s)" }
+	$from = $swap[0] + 0.3; $to = $swap[0] + 1.6
+	$p1Pull = Get-LogCount $name 'Light gun P1 at .* trigger 1' -From $from -To $to
+	$p2Pull = Get-LogCount $name 'Light gun P2 at .* trigger 1' -From $from -To $to
+	$buzzR = Get-LogCount $name 'XRSIM: haptic right ' -From $from -To $to
+	$buzzL = Get-LogCount $name 'XRSIM: haptic left ' -From $from -To $to
+	Write-Host "  the right pull after the swap: P1 trigger lines $p1Pull, P2's $p2Pull (want 1+ and 0); buzzes right $buzzR, left $buzzL (want 1+ and 0)"
+	if ($p1Pull -lt 1 -or $p2Pull -ne 0 -or $buzzR -lt 1 -or $buzzL -ne 0) { return "the right pull after the swap: P1 trigger lines $p1Pull, P2's $p2Pull, buzzes right $buzzR, left $buzzL" }
+	# saved at once, in the run's emu.cfg; build-win\emu.cfg is as it was
+	$dir = Join-Path $repo "build-win\vrtest\$name"
+	$after = Join-Path $dir 'emu.cfg.after'
+	$hit = (Test-Path -LiteralPath $after) -and (Select-String -LiteralPath $after -Pattern '^vr\.P1Hand = right$' -CaseSensitive -Quiet)
+	Write-Host "  emu.cfg.after $(if ($hit) { 'has' } else { 'lacks' }) vr.P1Hand = right"
+	if (-not $hit) { return "the run's emu.cfg has no line 'vr.P1Hand = right'" }
+	$cfg = Join-Path $repo 'build-win\emu.cfg'
+	$before = Join-Path $dir 'emu.cfg.before'
+	$same = if (Test-Path -LiteralPath $before) { (Get-FileHash -LiteralPath $before).Hash -eq (Get-FileHash -LiteralPath $cfg).Hash } else { -not (Test-Path -LiteralPath $cfg) }
+	Write-Host "  build-win\emu.cfg $(if ($same) { 'as it was' } else { 'changed' })"
+	if (-not $same) { return 'build-win\emu.cfg changed by the run' }
+	return Test-RunShots $name 't070.1-menu.png'
+}
+
 # The bundled models (S37) and the player's, merged file by file: re\make-own-models.py's fixtures in the player's
 # folders (build-win\guns: the box gun alone; build-win\controllers: right.glb alone) and in a bundled folder of the
 # harness's own, build-win\data\models (the box gun, aa-early "Early gun", both controllers). The player's boxgun.glb goes
@@ -2237,6 +2340,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-gun' = 'Test-CmGun'
 	'cm-rifle-sim' = 'Test-CmRifleSim'; 'cm-rifle-p2' = 'Test-CmRifleP2'; 'cm-kick' = 'Test-CmKick'; 'cm-rifle-file' = 'Test-CmRifleFile'
 	'cm-gun-angle' = 'Test-CmGunAngle'; 'cm-reload-point' = 'Test-CmReloadPoint'; 'cm-cutscene' = 'Test-CmCutscene'
+	'cm-p1-left' = 'Test-CmP1Left'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'cm-own-gun' = 'Test-CmOwnGun'; 'cm-own-gun-file' = 'Test-CmOwnGunFile'; 'cm-own-controllers' = 'Test-CmOwnControllers'
 	'own-folders' = 'Test-OwnFolders'; 'cm-bundled' = 'Test-CmBundled'

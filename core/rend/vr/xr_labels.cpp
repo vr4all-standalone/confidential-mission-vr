@@ -5,6 +5,7 @@
 */
 #include "xr_labels.h"
 #include "xr_controllers.h"
+#include "xr_host.h"
 #include "xr_own.h"
 #include "xr_panel.h"
 #include "log/Log.h"
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -34,7 +36,8 @@ struct Label
 // controller's, so a PC controller's button points at the place doing the same job: Start at A (X
 // on the left), the reload at B (Y), the menu at the menu button. Before player 2 joins, the left
 // trigger shoots for player 1 (the one gun goes to the hand that pulls); the label still says P2,
-// the user's text. Roboto Bold, the panels' font, has no triple bar (U+2261): Touch's menu button
+// the user's text. With vr.P1Hand left (the menu's Hands) the same buttons name the other player
+// (KindsP1Left): player 1's on the left, player 2's on the right. Roboto Bold, the panels' font, has no triple bar (U+2261): Touch's menu button
 // says "Menu".
 struct Words
 {
@@ -62,6 +65,30 @@ const Words Kinds[] {
 		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 };
+// vr.P1Hand left: each hand's buttons its own player's, P1 on the left and P2 on the right (the same
+// buttons and order as Kinds)
+const Words KindsP1Left[] {
+	{ "/interaction_profiles/oculus/touch_controller", {
+		{ { controllers::Y, "Y - P1 Reload" }, { controllers::X, "X - P1 Start" }, { controllers::Menu, "Menu" },
+			{ controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" },
+			{ controllers::Stick, "Stick - Laser" } } } },
+	{ "/interaction_profiles/valve/index_controller", {
+		{ { controllers::Y, "B - P1 Reload" }, { controllers::X, "A - P1 Start" }, { controllers::Menu, "Pad squeeze - Menu" },
+			{ controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" },
+			{ controllers::Stick, "Stick - Laser" } } } },
+	{ "/interaction_profiles/htc/vive_controller", {
+		{ { controllers::Y, "Pad click - P1 Reload" }, { controllers::X, "Menu - P1 Start (hold: Menu)" },
+			{ controllers::Trigger, "Trigger - P1 Shoot" } },
+		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" } } } },
+	{ "/interaction_profiles/microsoft/motion_controller", {
+		{ { controllers::Y, "Pad click - P1 Reload" }, { controllers::X, "Menu - P1 Start (hold: Menu)" },
+			{ controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" },
+			{ controllers::Stick, "Stick - Laser" } } } },
+};
+static_assert(std::size(KindsP1Left) == std::size(Kinds), "a P1-left set for each controller kind");
 // The log's order, the README's: Start, the reload, the shot, the stick, the menu (by Button: A, B, X, Y, Menu, Stick,
 // Trigger, Grip)
 constexpr int ReadingOrder[controllers::Buttons] { 0, 1, 0, 1, 4, 3, 2, 5 };
@@ -117,12 +144,14 @@ std::vector<Logged> logged[2];
 const Words *setLogged[2] {};
 const char *const HandName[2] { "left", "right" };
 
+// The words for a profile, by vr.P1Hand (p1Hand(): 0 left)
 const Words& wordsFor(const char *profile)
 {
-	for (const Words& words : Kinds)
+	const Words (&kinds)[std::size(Kinds)] = p1Hand() == 0 ? KindsP1Left : Kinds;
+	for (const Words& words : kinds)
 		if (profile != nullptr && !strcmp(profile, words.profile))
 			return words;
-	return Kinds[0];
+	return kinds[0];
 }
 
 // The eye of a projection (room space): the point it sends to x = y = w = 0.

@@ -157,6 +157,13 @@ where it is.
 - [ ] **Do:** press X while the game takes player 2, then shoot with each hand.
   **Expect:** the left hand holds player 2's gun (blue aim), the left trigger shoots for player 2 only, each hand's
   knocks in its own controller. When player 2 is out, it's one gun again.
+- [ ] **Do:** ≡, the Hands row (under Reload): flip it to "P1 left hand - P2 right hand", look at How to play, close the
+  menu; Start with X, let player 2 join with A, shoot with each hand, then Y and B with some rounds gone. Flip it back
+  to "P1 right hand - P2 left hand" with both players in, and close the menu.
+  **Expect:** the labels read X - P1 Start, Y - P1 Reload on the left and A - P2 Start, B - P2 Reload on the right; the
+  left hand holds player 1's gun (red aim, P1's lives and score), the right player 2's (blue); Y reloads player 1 and
+  B player 2. Flipped back, the guns change hands as the menu closes, both players still in. The row keeps its value
+  after a restart.
 
 ## 12. 72 Hz
 

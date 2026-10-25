@@ -51,13 +51,15 @@ PC VR headsets are not tested yet (see [The game](#the-game)).
   round: a light click on an empty gun, nothing on a reload.
 * **Two players, one headset.** Press X and player 2 joins with a gun in your left hand (red aim
   on the right, blue on the left), both lives and scores on screen.
+* **Player 1 on either hand.** Match the on-screen P1 left / P2 right: the menu's Hands row puts
+  player 1's gun, Start and reload in your left hand.
 * **Reload your way.** Shoot away from the game's view as at the arcade, or just point away
   (the menu's Reload row). B and Y reload too.
 * **Gun angle.** Tilt the gun in your hand from -30° to +30° in 1° steps, so it points where
   your hand points, whatever controller you hold.
 * **Controllers in the cutscenes.** In the stage intros and story scenes your hands show their
   controllers, and the guns come back the moment play resumes.
-* **A menu in the headset.** The left ≡ pauses the game: gun, gun angle, reload, laser, haptics,
+* **A menu in the headset.** The left ≡ pauses the game: gun, gun angle, reload, hands, laser, haptics,
   world size, panel distance and a how-to-play view, each saved at once.
 * **A start screen that checks your files.** READY, or which file is missing and where it goes.
 
@@ -226,6 +228,7 @@ gun (red aim), the left player 2's (blue aim), both lives and scores on screen. 
 is out of the game (the game asks for player 2's Start again), it's one gun again. X only
 joins while the game takes player 2; at other times it does nothing. `vr.DualWield = no` turns
 joining off.
+The menu's Hands at "P1 left hand - P2 right hand" turns this round to match the screen (P1 on the left): the left hand holds player 1's gun, with X its Start and Y its reload, and the right hand player 2's, with A (join) and B.
 
 Holding the Meta button recenters too.
 Quit with the Meta button, then *Quit*.
@@ -260,7 +263,7 @@ nothing.
 Point at a row with either hand and pull the trigger, or move with a thumbstick (up and down,
 round from the bottom to the top) and press A. On a row with - and +, the left half of the row
 is - and the right half +; the thumbstick left and right are - and +, and A is +. On an On/Off
-row (Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it.
+row (Hands, Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it.
 Held left or right on Gun angle, World size or Panel distance, the thumbstick keeps stepping. The pointer's line and dot show while the menu is open,
 even with the laser off.
 
@@ -271,6 +274,7 @@ even with the laser off.
 | Gun | the gun in your hand: In-game pistol, Arcade gun, Zapper, then any of your own (`vr.Gun`, `vr.GunFile`; see The guns below, and Your own models). There is no Auto: the in-game pistol is the default. A gun not made yet is skipped; an in-game pistol made without all of it says "(incomplete)" and can still be chosen. If the chosen gun isn't there, the hand takes the in-game pistol; without that (the first start skipped, or not done yet), the Arcade gun; and if no gun file loads at all, a plain built-in gun. The new gun shows at once, while the game is paused |
 | Gun angle | the gun tilted in your hand, -30° to +30° in 1° steps, + the muzzle up (`vr.GunAngle`): for a controller that holds a gun at a different angle than your hand points. The laser and the shots follow the barrel, in both hands, the assault rifle too |
 | Reload | Shoot off-screen (a pull away from the game's view reloads, as in the arcade) or Point off-screen (pointing away is enough; `vr.Reload`). B and Y reload either way |
+| Hands | P1 right hand - P2 left hand (the default) or P1 left hand - P2 right hand (`vr.P1Hand`): which controller is player 1's, with its trigger, Start and reload. At P1 left hand, X is player 1's Start and Y its reload, A player 2's Start (join) and B its reload, and the how-to-play labels follow. With two players in, the guns change hands when the menu closes; with one gun, the gun still goes to the hand that fires |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
@@ -470,6 +474,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.GunFile` | (none) | with `vr.Gun` 4: your gun's file name in `guns/`, without `.glb` (set by the menu) |
 | `vr.GunAngle` | 0 | the gun tilted in the hand about the grip, degrees, -30 to 30 (+ the muzzle up); the menu's Gun angle |
 | `vr.Reload` | 0 | 0 reload by shooting away from the game's view; 1 by pointing away from it too, once each time (the menu's Reload) |
+| `vr.P1Hand` | right | player 1's controller: `right`, or `left` for player 1's gun, Start (X) and reload (Y) in the left hand and player 2's (A, B) in the right (the menu's Hands) |
 | `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
 | `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |
