@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release: v1.2.2](https://img.shields.io/badge/Release-v1.2.2_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release: v1.2.3](https://img.shields.io/badge/Release-v1.2.3_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
