@@ -1576,10 +1576,10 @@ bool player2Prompting() {
 // game draws while a player is in the game (gunRam.playing: the attract's scenes have the bars too,
 // with no player in). Each VBlank after a drawn frame (cutscenePasses: the passes parsed since the
 // last one) closes that frame: on after CutsceneOnFrames frames in a row with the bars (~0.3 s), off
-// at the CutsceneOffFrames-th frame without them (a Start that skips a scene brings the guns back at
-// once). Counted per drawn frame, not by the clock, so a slow frame doesn't end a scene. See
-// hotd2-vr/notes/confmiss-findings.md, Cutscenes.
-constexpr u32 CutsceneOnFrames = 18, CutsceneOffFrames = 3;
+// at the CutsceneOffFrames-th frame without them (6, ~0.1 s: the hall's entrance blinks for up to 2
+// frames; a Start that skips a scene brings the guns back at once). Counted per drawn frame, not by
+// the clock, so a slow frame doesn't end a scene. See hotd2-vr/notes/confmiss-findings.md, Cutscenes.
+constexpr u32 CutsceneOnFrames = 18, CutsceneOffFrames = 6;
 static std::atomic<u32> cutscenePasses { 0 }, cutsceneBars { 0 };
 static std::atomic<bool> cutsceneOn { false };
 

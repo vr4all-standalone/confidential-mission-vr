@@ -115,7 +115,7 @@ bool gunState(int player, GunState& out);
 bool player2Prompting();
 // The game shows one of its cutscenes during a game in progress: its letterbox bars (the profile's
 // letterboxTextures) in 18 of its frames in a row while a player is in the game (gunRam.playing),
-// until the third frame without them. Always false for a profile without both (HOTD2, MOK).
+// until the sixth frame without them. Always false for a profile without both (HOTD2, MOK).
 bool cutscene();
 // Metres per game unit: vr.WorldScale, times the game profile's unit size next to HOTD2's.
 float worldScale();

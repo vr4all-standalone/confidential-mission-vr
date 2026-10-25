@@ -248,8 +248,12 @@ struct NewGameRegistration
 // first Start or pull, and while the menu's How to play is on. (The labels drawn only with the light
 // gun on, vr.XrGun; without it the controllers always show.)
 // The game's cutscenes once play has started (vr::cutscene(), read once a frame in updateLightgun):
-// both hands hold their controllers, with no labels, until play resumes.
+// both hands hold their controllers, with no labels, until play resumes. A round the game fires
+// in cutscene mode (gunKnocks: cutsceneVeto) ends it until the bars have gone: play is live (a
+// letterboxed moment that takes shots, or a scene skipped with a shot), so the guns come back at
+// once and stay, even if the bars blink.
 bool inCutscene;
+bool cutsceneVeto;
 
 bool labelsOn()
 {
@@ -1475,6 +1479,11 @@ void gunKnocks(Gun& g, XrTime time, bool trigger)
 		{
 			const int fired = std::clamp((int)(s16)(u16)(now.fired - g.gunWas.fired), 0, rises);
 			const bool rifle = now.rifle || g.gunWas.rifle;
+			if (fired > 0 && inCutscene && !cutsceneVeto)
+			{
+				cutsceneVeto = true;
+				NOTICE_LOG(INPUT, "XR: cutscene ended by a shot (P%d)", g.player + 1);
+			}
 			for (int i = 0; i < fired; i++)
 			{
 				if (!rifle || g.freshPull)
@@ -1710,6 +1719,8 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 			NOTICE_LOG(INPUT, "XR: player %d pointed off screen (reload)", g.player + 1);
 		}
 	}
+	else
+		g.offArmed = false;	// (a cutscene or the controller held: the guns' return reloads nothing)
 
 	// Seen but outside the game's view: the trigger does nothing (no shot, no reload).
 	const bool outside = !onScreen && aimOutside;
@@ -1998,10 +2009,14 @@ void updateLightgun(XrTime time)
 	// game started elsewhere): the hands get back what they held.
 	if (menuHowToPlay && !menuOpen)
 		setHowToPlay(false, "menu closed");
-	if ((p1Armed && vr::cutscene()) != inCutscene)
+	// (a round fired in cutscene mode vetoes it until the bars go: cutsceneVeto)
+	const bool scene = p1Armed && vr::cutscene();
+	if (!scene)
+		cutsceneVeto = false;
+	if ((scene && !cutsceneVeto) != inCutscene)
 	{
 		inCutscene = !inCutscene;
-		noteHolds(inCutscene ? "cutscene" : "play");
+		noteHolds(inCutscene ? "cutscene" : cutsceneVeto ? "a shot" : "play");
 	}
 	// The game runs itself to its game over scene for the agent's hands, or its attract demo
 	// for the hero's staff (hands_rip.h): its buttons are its own then.

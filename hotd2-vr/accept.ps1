@@ -2086,7 +2086,7 @@ function Test-CmOwnControllers {
 }
 
 # Controllers in the game's cutscenes (CM VR 1.2, spec section 7): vr::cutscene() is CM's letterbox bars (tex 400680)
-# in 18 frames in a row while a player is in (0x0C15A494), off at the third frame without them; both hands then hold
+# in 18 frames in a row while a player is in (0x0C15A494), off at the sixth frame without them; both hands then hold
 # their controllers (no labels) and the guns come back when play resumes (findings, Cutscenes).
 # - intro (accept-cm-cutscene): Start to 44 s, so the briefing and the stage 1 intro play out (log ~59.5-81.4 s); then
 #   the first room with no shots, player 1 out (~90 s), game over and the attract, whose scenes have the bars too
@@ -2094,7 +2094,13 @@ function Test-CmOwnControllers {
 # - skip (accept-cm-cutscene-skip): the same, player 2 joining with X at 50 s (the briefing), and A 1 s after the
 #   intro's flip (a key on that line): both hands flip, and both guns come back within 2 s of the press, with the
 #   bars: the game takes ~1.4 s to leave its intro after a Start, the bars on to the end (findings, Cutscenes; the
-#   hall run's Start at 48 s the same), and the guns come back within 3 frames of them.
+#   hall run's Start at 48 s the same), and the guns come back within 6 frames (~0.1 s) of them.
+# - shot (accept-cm-cutscene-shot): the intro with the right trigger held 1 s after its flip (a key on that line). The
+#   game ignores a pull in its stage 1 intro (no round: tried, the controllers stayed to the scene's end), so the round
+#   is made by hand: player 1's shot counter (+0x60) set to 0 at 58 s, then during the pull to 1 with the ammo (+0x4C)
+#   6 -> 5, as a fired shot leaves them. A round in cutscene mode ends it until the bars go (cutsceneVeto): the veto's
+#   line, the right gun back within 0.1 s of it and kept (no flip back to the controller before the scene's end), and
+#   the round still knocks (P1 kick).
 # - fight (accept-cm-hall, PC): the hall route, shots from 52.5 s, player 2 in 60-85 s: "VR: cutscene on" only in its
 #   three scenes (the intro ~46 s, ~66.5 s and the hall's entrance at ~121-125 s, its time varying with the route's kills), once each with its "off", none in the rooms between.
 function Get-CmCutsceneClocks([string]$run, [string]$regex, [double]$From = 0, [double]$To = 1e9) {
@@ -2146,6 +2152,26 @@ function Test-CmCutscene {
 			return "skip: the $hand gun back at $($back -join ', ') s, the press at $press s, the scene's end at $($end -join ', ') s (want one within 2.0 s of the press, 0.1 s of the end)"
 		}
 	}
+
+	$shot = 'accept-cm-cutscene-shot'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $shot; Seconds = 90; XrSim = $true; Config = $cmWidenArcade
+		At = @(Get-CmStartsXr -Until 44) + '58=poke 0c155818 2 0' + '58=poke 0c155804 1 6'
+		On = @('XR: right hand: gun -> controller \(cutscene\)|1|xr right/trigger 1 400', 'XR: right hand: gun -> controller \(cutscene\)|1.1|poke 0c155804 1 5',
+			'XR: right hand: gun -> controller \(cutscene\)|1.1|poke 0c155818 2 1')
+		Reject = @('XR: initialisation failed')
+		Expect = 'XR: right hand: gun -> controller \(cutscene\)$', 'VR: poke 0c155818 = 0*1$', 'XR: cutscene ended by a shot \(P1\)$', 'VR: cutscene off$' }
+	if ($why) { return $why }
+	$at = (Get-CmCutsceneClocks $shot 'XR: right hand: gun -> controller \(cutscene\)$')[0]
+	$veto = @(Get-CmCutsceneClocks $shot 'XR: cutscene ended by a shot \(P1\)$' $at)
+	$back = @(Get-CmCutsceneClocks $shot 'XR: right hand: controller -> gun \(' $at)
+	$again = @(Get-CmCutsceneClocks $shot 'XR: right hand: gun -> controller \(' ($at + 0.01))
+	$end = @(Get-CmCutsceneClocks $shot 'VR: cutscene off$' $at)
+	$kicks = @(Get-CmCutsceneClocks $shot 'XR: P1 kick: ' $at)
+	Write-Host "  shot: the flip at $at s, the veto at $($veto -join ', ') s, the gun back at $($back -join ', ') s, the scene's end at $($end -join ', ') s, P1 kicks at $($kicks -join ', ') s"
+	if ($back.Count -ne 1 -or $again.Count -or $end.Count -lt 1) { return "shot: want one return to the gun and no flip back after $at s, got back $($back -join ', '), again $($again -join ', '), end $($end -join ', ')" }
+	if ($veto.Count -ne 1 -or $back[0] - $veto[0] -lt 0 -or $back[0] - $veto[0] -gt 0.1 -or $back[0] -ge $end[0]) { return "shot: the veto at $($veto -join ', ') s, want the gun back within 0.1 s of it and before the scene's end ($($end[0]) s), got $($back[0]) s" }
+	if (-not (Get-CmCutsceneClocks $shot 'XR: right hand: controller -> gun \(a shot\)$' $at).Count) { return "shot: no 'controller -> gun (a shot)' line" }
+	if (-not $kicks.Count -or $kicks[0] - $veto[0] -gt 0.5) { return "shot: the round fired in the scene gave no P1 kick near the veto ($($kicks -join ', ') s)" }
 
 	$why = Invoke-CmRun 'accept-cm-hall'
 	if ($why) { return $why }

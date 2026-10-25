@@ -286,7 +286,9 @@ public class CmStartActivity extends Activity
         badgeDot.setBackground(dot);
         badge.setBackground(shape(alpha(tone, 0x1F), alpha(tone, 0x73), round(20)));
 
-        // Before the access, Download hasn't been looked in: no marks or missing lines, just the hint.
+        // Before the access, Download hasn't been looked in: no marks or missing lines, just the hint;
+        // unless the files were all found in the app's own folder (READY without the access).
+        boolean looked = access || s.ready;
         marksRow.removeAllViews();
         boolean horizontal = marksRow.getOrientation() == LinearLayout.HORIZONTAL;
         for (int i = 0; i < s.fileMarks.size(); i++)
@@ -301,12 +303,12 @@ public class CmStartActivity extends Activity
             }
             marksRow.addView(mark(s.fileMarks.get(i)), p);
         }
-        marksRow.setVisibility(access && !s.fileMarks.isEmpty() ? View.VISIBLE : View.GONE);
+        marksRow.setVisibility(looked && !s.fileMarks.isEmpty() ? View.VISIBLE : View.GONE);
         missingList.removeAllViews();
         for (int i = 0; i < s.missing.size(); i++)
             missingList.addView(missingLine(s.missing.get(i)), spaced(i == 0 ? 0 : 10));
-        missingList.setVisibility(access && !s.missing.isEmpty() ? View.VISIBLE : View.GONE);
-        accessHint.setVisibility(access ? View.GONE : View.VISIBLE);
+        missingList.setVisibility(looked && !s.missing.isEmpty() ? View.VISIBLE : View.GONE);
+        accessHint.setVisibility(looked ? View.GONE : View.VISIBLE);
 
         play.setEnabled(s.ready);
         play.setAlpha(s.ready ? 1f : 0.35f);
