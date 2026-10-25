@@ -100,7 +100,9 @@ Quest Touch:
 | thumbstick | the game's D-pad (menus) |
 
 Reload by shooting away from the game's view (past the grey ring), as before; with two guns,
-pointing a gun at the floor reloads it too. B and Y are the cabinet's second button, the game's
+pointing a gun at the floor reloads it too. With the menu's Reload at Point off-screen, pointing
+the gun away from the game's view is enough: it reloads once, with a short buzz, each time it
+leaves (not into the grey ring, not with a full gun, not from the menu). B and Y are the cabinet's second button, the game's
 own reload: with one gun either reloads it, with two guns B reloads the right one and Y the
 left one. Grip + thumbstick left/right sizes the gun (kept). The gun goes to the hand you last
 fired with.
@@ -148,7 +150,8 @@ nothing.
 Point at a row with either hand and pull the trigger, or move with a thumbstick (up and down,
 round from the bottom to the top) and press A. On a row with - and +, the left half of the row
 is - and the right half +; the thumbstick left and right are - and +, and A is +. On an On/Off
-row (Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it. The pointer's line and dot show while the menu is open,
+row (Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it.
+Held left or right on Gun angle, World size or Panel distance, the thumbstick keeps stepping. The pointer's line and dot show while the menu is open,
 even with the laser off.
 
 | Row | Does |
@@ -156,6 +159,8 @@ even with the laser off.
 | Resume | closes the menu |
 | Recenter | the view goes where you face; the menu stays open, in front of you |
 | Gun | the gun in your hand: In-game pistol, Arcade gun, Zapper, then any of your own (`vr.Gun`, `vr.GunFile`; see The guns below, and Your own models). There is no Auto: the in-game pistol is the default. A gun not made yet is skipped; an in-game pistol made without all of it says "(incomplete)" and can still be chosen. If the chosen gun isn't there, the hand takes the in-game pistol; without that (the first start skipped, or not done yet), the Arcade gun; and if no gun file loads at all, a plain built-in gun. The new gun shows at once, while the game is paused |
+| Gun angle | the gun tilted in your hand, -30° to +30° in 1° steps, + the muzzle up (`vr.GunAngle`): for a controller that holds a gun at a different angle than your hand points. The laser and the shots follow the barrel, in both hands, the assault rifle too |
+| Reload | Shoot off-screen (a pull away from the game's view reloads, as in the arcade) or Point off-screen (pointing away is enough; `vr.Reload`). B and Y reload either way |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
@@ -343,6 +348,8 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.Haptics` | 2 | the knock in the hand: 0 off, 1 low, 2 normal, 3 strong |
 | `vr.Gun` | 1 | the gun in your hand: 1 the in-game pistol, 4 a folder gun, the one `vr.GunFile` names (the bundled `namco` Arcade gun and `zapper`, or one of your own; Your own models). 1.1's 0 (auto), 2 (the cabinet gun) and 3 (the arcade gun) read as 1 |
 | `vr.GunFile` | (none) | with `vr.Gun` 4: your gun's file name in `guns/`, without `.glb` (set by the menu) |
+| `vr.GunAngle` | 0 | the gun tilted in the hand about the grip, degrees, -30 to 30 (+ the muzzle up); the menu's Gun angle |
+| `vr.Reload` | 0 | 0 reload by shooting away from the game's view; 1 by pointing away from it too, once each time (the menu's Reload) |
 | `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
 | `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |

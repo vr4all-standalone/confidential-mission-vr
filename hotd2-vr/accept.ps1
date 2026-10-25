@@ -593,11 +593,11 @@ function Test-CmPause {
 
 # The settings menu's place, as its open line says it (xr_menu.cpp): 1.2 m ahead of the head
 # (0, 1.6, 0) at 1.5 m (0.1 m below the eyes), 0.9 m wide, its 10 rows 0.063 m apart, the top
-# row's middle 0.274 m over the panel's. -Row and -U (0..1 across): where the simulator's right
+# row's middle 0.337 m over the panel's (12 rows, CM VR 1.2). -Row and -U (0..1 across): where the simulator's right
 # hand at (0.18, 1.3, -0.35) points ("yaw pitch", degrees) to put its pointer there. The pointer
 # leaves the arcade gun's muzzle (vr.GunScale 0.68), which in the simulator, where the grip pose
 # is the aim pose, is 4.4 cm over the hand and 13.7 cm ahead of it: a few rounds of aiming from it.
-$cmMenuPitch = 0.063; $cmMenuTop = 0.274; $cmMenuWidth = 0.9
+$cmMenuPitch = 0.063; $cmMenuTop = 0.337; $cmMenuWidth = 0.9
 function Get-CmMenuAim([int]$Row, [double]$U) {
 	$tx = ($U - 0.5) * $cmMenuWidth; $ty = 1.5 + $cmMenuTop - $Row * $cmMenuPitch; $tz = -1.2
 	$yaw = 0.0; $pitch = 0.0
@@ -611,20 +611,20 @@ function Get-CmMenuAim([int]$Row, [double]$U) {
 }
 
 # The settings menu through the simulator, widened, in stage 1's first room: the left menu button
-# opens it at 58 s (at Resume), the right stick down 4 times to Haptics, A (+ on a value row) makes
+# opens it at 58 s (at Resume), the right stick down 6 times to Haptics, A (+ on a value row) makes
 # it Strong with a sample knock at that strength (0.03 s x 1.6), down once more to World size,
 # right (+) makes it 0.121 (0.110 x 1.1), the right hand points at the Laser row's right half at
 # 63 s and its trigger turns the laser off, B closes it at 65 s. That knock is the only one. Each
 # change is in emu.cfg at once (the run's, emu.cfg.after); build-win\emu.cfg is as it was.
 function Test-CmMenu {
 	$name = 'accept-cm-menu'
-	$downs = @(foreach ($t in 58.5, 59, 59.5, 60) { "$(T $t)=stick right 0 -1 150" })
+	$downs = @(foreach ($t in 58.4, 58.8, 59.2, 59.6, 60, 60.4) { "$(T $t)=stick right 0 -1 150" })
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 72; XrSim = $true; Config = $cmWidenArcade
-		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150' + $downs + @('60.5=xr right/a 1 150', '61=stick right 0 -1 150',
-			'62=stick right 1 0 150', "63=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 3 -U 0.75)", '63.5=xr right/trigger 1 100',
+		At = @(Get-CmStartsXr) + '58=xr left/menu 1 150' + $downs + @('60.9=xr right/a 1 150', '61.4=stick right 0 -1 150',
+			'62=stick right 1 0 150', "63=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 5 -U 0.75)", '63.5=xr right/trigger 1 100',
 			'65=xr right/b 1 150')
 		Expect = 'XR: menu button', 'XR: menu open \(paused\)',
-			"XR: menu at 1\.20 m, 10 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
+			"XR: menu at 1\.20 m, 12 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
 			'XR: menu Haptics -> Strong', 'XRSIM: haptic right 0\.048 1\.000', 'XR: menu World size -> 0\.121', 'XR: menu Laser -> Off',
 			'XR: menu closed \(resumed\)'
 		Reject = 'XR: initialisation failed', 'XR: \d+ black frames' }
@@ -747,11 +747,12 @@ function Test-CmHapticsMag {
 }
 
 # Reloads: the right controller points at the floor from 53.5 s and pulls 4 times from 54 s
-# (off the screen: the game's reload). No knock at all, neither a Shot nor a click.
+# (off the screen: the game's reload). No knock at all, neither a Shot nor a click; vr.Reload 0 (Shoot off-screen):
+# pointing away reloads nothing by itself.
 function Test-CmHapticsReload {
 	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-reload'; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr) + '53.5=pose right 0.18 1.3 -0.35 0 -80' + @(for ($i = 0; $i -lt 4; $i++) { "$(T (54 + 0.6 * $i))=xr right/trigger 1 100" })
-		Expect = 'XR: player 1 shot off screen \(reload\)'; Reject = 'XR: initialisation failed', 'XRSIM: haptic right' }
+		Expect = 'XR: player 1 shot off screen \(reload\)'; Reject = 'XR: initialisation failed', 'XRSIM: haptic right', 'pointed off screen' }
 }
 
 # Task 4's scene keys (vr-test.ps1 -On, the poke action, vr.WatchRam): player 1's ammo
@@ -1514,7 +1515,7 @@ function Test-CmRifleP2 {
 # round. Poked at 57 s with 3 rounds left (57.2 s) and the trigger held 1 s from 57.5 s: the 3 rounds' Shot and 2 Auto
 # knocks, one kick line, a 3-flash burst, then nothing (no click, no kick) while the trigger stays held. Then a pull
 # pointing at the floor at 61 s (the game's reload: "shot off screen (reload)", no kick). The windows are on the log's
-# clock, about 0.2 s behind the -At times.
+# clock, about 0.1 to 0.25 s behind the -At times (the rifle poke at 57 s splits the two rounds from the rifle).
 $cmKickAt = @('53.5=poke 0c155804 1 0', '54=xr right/trigger 1 150', '55=poke 0c155804 1 6', '55.5=xr right/trigger 1 150',
 	'56.5=xr right/trigger 1 150')
 function Test-CmKickRun([string]$name, [string]$config, [string]$gun, [switch]$Box) {
@@ -1532,17 +1533,17 @@ function Test-CmKickRun([string]$name, [string]$config, [string]$gun, [switch]$B
 	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 53.6 -To 55.2
 	Write-Host "  ${gun}, the empty pull: $kicks kicks (want 0), $clicks clicks (want 1), $shots Shot knocks (want 0)"
 	if ($kicks -ne 0 -or $clicks -ne 1 -or $shots -ne 0) { return "${gun}, the empty pull: $kicks kicks, $clicks clicks, $shots Shot knocks; want 0, 1, 0" }
-	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 55.2 -To 57.4
-	$all = Get-LogCount $name 'XR: P1 kick' -From 55.2 -To 57.4
-	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 55.2 -To 57.4
+	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 55.2 -To 57.0
+	$all = Get-LogCount $name 'XR: P1 kick' -From 55.2 -To 57.0
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 55.2 -To 57.0
 	Write-Host "  ${gun}, two rounds: $kicks kicks naming it ($all in all; want 2), $shots Shot knocks (want 2)"
 	if ($kicks -ne 2 -or $all -ne 2 -or $shots -ne 2) { return "${gun}, two rounds: $kicks kicks naming it ($all in all), $shots Shot knocks; want 2, 2" }
 	if (-not $Box) { return $null }
-	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 57.2 -To 60.6
-	$all = Get-LogCount $name 'XR: P1 kick' -From 57.2 -To 60.6
-	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 57.2 -To 60.6
-	$autos = Get-LogCount $name 'XRSIM: haptic right 0\.020 0\.600' -From 57.2 -To 60.6
-	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.012' -From 57.2 -To 60.6
+	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 57.0 -To 60.6
+	$all = Get-LogCount $name 'XR: P1 kick' -From 57.0 -To 60.6
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 57.0 -To 60.6
+	$autos = Get-LogCount $name 'XRSIM: haptic right 0\.020 0\.600' -From 57.0 -To 60.6
+	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.012' -From 57.0 -To 60.6
 	$burst = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XR: P1 rifle burst: (\d+) flashes' -CaseSensitive)
 	$flashes = if ($burst) { [int]$burst[-1].Matches[0].Groups[1].Value } else { 0 }
 	Write-Host "  ${gun}, the rifle's last 3 rounds, held on: $kicks kick lines naming it ($all in all; want 1), $shots Shot and $autos Auto knocks (want 1, 2), $clicks clicks (want 0), $flashes flashes (want 3)"
@@ -1612,6 +1613,136 @@ function Test-CmRifleFile {
 		if ($kicks -ne 1) { return "player 2's burst: $kicks kick lines, want 1" }
 		return $null
 	}
+}
+
+# CM VR 1.2 Task 4: the menu's Gun angle (vr.GunAngle), with the box gun (the player's, --guns --only-box), widened.
+# The muzzle line ("XR: P1 muzzle: Box gun at x y z", from the aim pose) turned about the hand's side-to-side axis
+# through the palm ("XR: right hand at x y z"): x and the distance from the palm the same, the angle in the y-z plane
+# the setting's, + up. A shot at 54 s from the same pose (pitched down 10) lands higher with +20. The "0" run then opens
+# the menu at 58 s, down 3 to Gun angle: the stick right 150 ms (one step, +1), right 1.5 s (the step, then repeats
+# after 0.4 s every 0.1 s: 9 to 14 lines, each one more), left 150 ms (one less); the muzzle logged again at the last
+# value, which is the one in the run's emu.cfg.after. vr.GunAngle 90 reads as +30 and holding right gives no step.
+function Get-CmGunAngleVecs([string]$name) {
+	$palm = Get-LogVec $name 'XR: right hand at '
+	$muzzles = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XR: P1 muzzle: Box gun at (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)' -CaseSensitive |
+		ForEach-Object { $g = $_.Matches[0].Groups; , @([double]::Parse($g[1].Value, $inv), [double]::Parse($g[2].Value, $inv), [double]::Parse($g[3].Value, $inv)) })
+	return $palm, $muzzles
+}
+# The angle (degrees, + up) from the palm to $from's muzzle to the palm to $to's in the y-z plane, and how far x and the
+# distance from the palm moved: $null with $why set when they're off.
+function Test-CmGunAngleTurn($palm, $from, $to, [double]$want, [string]$what) {
+	$a = @(0..2 | ForEach-Object { $from[$_] - $palm[$_] }); $b = @(0..2 | ForEach-Object { $to[$_] - $palm[$_] })
+	$angle = ([Math]::Atan2($b[1], -$b[2]) - [Math]::Atan2($a[1], -$a[2])) * 180 / [Math]::PI
+	$dx = [Math]::Abs($b[0] - $a[0])
+	$dl = [Math]::Abs([Math]::Sqrt($b[0] * $b[0] + $b[1] * $b[1] + $b[2] * $b[2]) - [Math]::Sqrt($a[0] * $a[0] + $a[1] * $a[1] + $a[2] * $a[2]))
+	Write-Host "  ${what}: turned $(T $angle) degrees (want $want +-0.5), x moved $($dx.ToString('0.0000', $inv)), the distance from the palm $($dl.ToString('0.0000', $inv)) (want under 0.001)"
+	if ([Math]::Abs($angle - $want) -gt 0.5 -or $dx -gt 0.001 -or $dl -gt 0.001) { return "${what}: turned $(T $angle) degrees, x moved $dx, the distance $dl; want $want, 0, 0" }
+	return $null
+}
+# Player 1's one shot's y (of 480) from 53.6 to 55 s; nothing without exactly one.
+function Get-CmShotY([string]$run) {
+	$hit = @(Select-String -LiteralPath (Get-RunLog $run) -Pattern 'XR: player 1 shot at (\d+),(\d+) ' -CaseSensitive | Where-Object {
+			$_.Line -match '^(\d+):(\d\d):(\d{3}) ' -and ($t = [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000) -ge 53.6 -and $t -lt 55 })
+	Write-Host "  $($hit.Count) shots in $run from 53.6 to 55 s (want 1)"
+	if ($hit.Count -eq 1) { [int]$hit[0].Matches[0].Groups[2].Value }
+}
+function Test-CmGunAngle {
+	$base = "$cmWiden,config:vr.Gun=4,config:vr.GunFile=boxgun"
+	$shot = '53.5=pose right 0.18 1.3 -0.35 0 -10', '54=xr right/trigger 1 150', '55=pose right 0.18 1.3 -0.35 0 0'
+	$menu = '58=xr left/menu 1 150', '58.5=stick right 0 -1 150', '59=stick right 0 -1 150', '59.5=stick right 0 -1 150'
+	return Invoke-OwnFolders -Fixture '--guns', '--only-box' {
+		$zero = 'accept-cm-gun-angle-0'
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $zero; Seconds = 66; XrSim = $true; Config = $base
+			At = @(Get-CmStartsXr) + $shot + $menu + '60=stick right 1 0 150', '61=stick right 1 0 1500', '63=stick right -1 0 150', '64=xr right/b 1 150'
+			Expect = 'XR: gun: Box gun \(chosen\)$', 'XR: right hand at ', 'XR: P1 muzzle: Box gun at ', 'XR: menu open \(paused\)', 'XR: menu closed \(resumed\)'
+			Reject = 'XR: initialisation failed' }
+		if ($why) { return $why }
+		$twenty = 'accept-cm-gun-angle-20'
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $twenty; Seconds = 57; XrSim = $true; Config = "$base,config:vr.GunAngle=20"
+			At = @(Get-CmStartsXr) + $shot; Expect = 'XR: gun: Box gun \(chosen\)$', 'XR: right hand at ', 'XR: P1 muzzle: Box gun at '
+			Reject = 'XR: initialisation failed' }
+		if ($why) { return $why }
+		$palm, $m0 = Get-CmGunAngleVecs $zero
+		$palm20, $m20 = Get-CmGunAngleVecs $twenty
+		$why = Test-CmGunAngleTurn $palm $m0[0] $m20[0] 20 'the muzzle at +20 against 0'
+		if ($why) { return $why }
+		$y = @(Get-CmShotY $zero; Get-CmShotY $twenty)
+		if ($y.Count -ne 2) { return "not one shot from 53.6 to 55 s in each run (y $($y -join ', '))" }
+		Write-Host "  the shot at 54 s: y $($y[0]) at 0, $($y[1]) at +20 (want higher: 30 or more less)"
+		if ($y[1] -gt $y[0] - 30) { return "the shot at +20 isn't higher: y $($y[1]) against $($y[0])" }
+		# the menu: one step, the held stick's steps, one back
+		$lines = @(Select-String -LiteralPath (Get-RunLog $zero) -Pattern 'XR: menu Gun angle -> ([-+]?\d+)$' -CaseSensitive | ForEach-Object {
+				$null = $_.Line -match '^(\d+):(\d\d):(\d{3}) '
+				[pscustomobject]@{ At = [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000; Value = [int]$_.Matches[0].Groups[1].Value } })
+		$one = @($lines | Where-Object { $_.At -lt 60.7 }); $held = @($lines | Where-Object { $_.At -ge 60.7 -and $_.At -lt 62.7 })
+		$back = @($lines | Where-Object { $_.At -ge 62.7 })
+		Write-Host "  Gun angle lines: $($one.Count) for the tap (want 1, +1), $($held.Count) for the 1.5 s hold (want 9 to 14), $($back.Count) for the tap left (want 1); values $(($lines | ForEach-Object { $_.Value }) -join ' ')"
+		if ($one.Count -ne 1 -or $one[0].Value -ne 1) { return "the tap right: $($one.Count) lines, want one +1" }
+		if ($held.Count -lt 9 -or $held.Count -gt 14) { return "the held stick: $($held.Count) steps, want 9 to 14" }
+		for ($i = 1; $i -lt $lines.Count - 1; $i++) { if ($lines[$i].Value -ne $lines[$i - 1].Value + 1) { return "the step to $($lines[$i].Value) after $($lines[$i - 1].Value): want one more each" } }
+		if ($back.Count -ne 1 -or $back[0].Value -ne $lines[-2].Value - 1) { return "the tap left: $($back.Count) lines, want one, one less" }
+		$final = $lines[-1].Value
+		$why = Test-CmGunAngleTurn $palm $m0[0] $m0[-1] $final "the last muzzle line after the menu ($final)"
+		if ($why) { return $why }
+		$saved = Get-SavedSetting $zero 'vr.GunAngle'
+		Write-Host "  emu.cfg.after: vr.GunAngle = $saved (want $final)"
+		if ($saved -ne "$final") { return "emu.cfg.after has vr.GunAngle = $saved, want $final" }
+		# 90 reads as +30; held right at the end: no step
+		$clamp = 'accept-cm-gun-angle-clamp'
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $clamp; Seconds = 62; XrSim = $true; Config = "$base,config:vr.GunAngle=90"
+			At = @(Get-CmStartsXr) + $menu + '60=stick right 1 0 1000'
+			Expect = 'XR: gun: Box gun \(chosen\)$', 'XR: P1 muzzle: Box gun at ', 'XR: menu open \(paused\)'
+			Reject = 'XR: initialisation failed', 'XR: menu Gun angle -> ' }
+		if ($why) { return $why }
+		$palmC, $mC = Get-CmGunAngleVecs $clamp
+		return Test-CmGunAngleTurn $palm $m0[0] $mC[0] 30 'the muzzle with vr.GunAngle 90 (read as +30)'
+	}
+}
+
+# CM VR 1.2 Task 4: the menu's Reload at Point off-screen (vr.Reload=1), widened, the arcade gun, the ammo watched.
+# Shots at 54, 54.5 and 55 s (6 -> 3); into the grey margin at 55.5 s (yaw 42, while stage 1's first room is at its
+# widened focal ~219: the margin is ~31 to ~55 degrees out; the pull at 56 there fires nothing, "outside the game's
+# view"): no reload. Pointed away at 56.5 s (yaw 90: off the screen and its margin): one "pointed off screen
+# (reload)", its buzz (0.020 s, 0.5), the ammo back to 6, and none more while it stays away. Back at 58, a shot, away at
+# 59: a second. Back at 60, a shot, the menu opened at 61, away at 61.5, closed (B) at 62.5 while away: none. B at 63:
+# the ammo back (B still reloads). Back at 63.5, away at 64 with the magazine full: none. Player 2 joins at 69 (X), a
+# left shot at 71, the left away at 71.5: one "player 2 pointed off screen", player 2's ammo back up. (Later in the
+# room the game zooms in, focal ~437, and its margin narrows to ~31 to ~36 degrees: yaw 45 is off the screen then.)
+# The windows are on the log's clock (~0.25 s behind).
+function Test-CmReloadPoint {
+	$name = 'accept-cm-reload-point'
+	$on = 'pose right 0.18 1.3 -0.35 0 0'; $away = 'pose right 0.18 1.3 -0.35 90 0'; $pull = 'xr right/trigger 1 100'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 74; XrSim = $true
+		Config = "$cmWidenArcade,config:vr.Reload=1,config:vr.WatchRam=0c155804,0c155808,0c155918"
+		At = @(Get-CmStartsXr) + "54=$pull", "54.5=$pull", "55=$pull", '55.5=pose right 0.18 1.3 -0.35 42 0', "56=$pull", "56.5=$away",
+			"58=$on", "58.5=$pull", "59=$away", "60=$on", "60.3=$pull", '61=xr left/menu 1 150', "61.5=$away", '62.5=xr right/b 1 150',
+			'63=xr right/b 1 150', "63.5=$on", "64=$away", '69=xr left/x 1 200', '71=xr left/trigger 1 100', '71.5=pose left -0.18 1.3 -0.35 90 0'
+		Expect = 'XR: player 1 pointed off screen \(reload\)', 'XR: menu open \(paused\)', 'XR: menu closed \(resumed\)',
+			'XR: player 2 joins: a gun in each hand', 'XR: player 2 pointed off screen \(reload\)'
+		Reject = 'XR: initialisation failed', 'XR: player \d pointed down' }
+	if ($why) { return $why }
+	$off = 'XR: player 1 pointed off screen \(reload\)'
+	# (the boundaries halfway between the actions, on the log's clock: the actions log ~0.25 s before their -At times)
+	foreach ($w in @(@(53, 55, 0, 'the shots'), @(55, 56, 0, 'into the grey margin'), @(56, 57.5, 1, 'pointed away at 56.5 s'),
+			@(57.5, 58.5, 0, 'staying away'), @(58.5, 60.5, 1, 'away again at 59 s'), @(60.5, 62.6, 0, 'away in the menu, closed while away'),
+			@(62.6, 66, 0, 'away with the magazine full'), @(66, 74, 0, 'the rest'))) {
+		$n = Get-LogCount $name $off -From $w[0] -To $w[1]
+		Write-Host "  $($w[3]): $n reloads by pointing away (want $($w[2]))"
+		if ($n -ne $w[2]) { return "$($w[3]): $n reloads by pointing away, want $($w[2])" }
+	}
+	$checks = @(@("XR: player 1's trigger outside the game's view", 55, 56, 1, 'the pull in the grey margin (fires nothing)'),
+		@('XRSIM: haptic right 0\.020 0\.500', 56, 57.5, 1, "the first reload's buzz"),
+		@('VR: ram 0c155804 03 -> 06', 56, 57.5, 1, 'the ammo 3 -> 6 at the first'),
+		@('VR: ram 0c155804 05 -> 06', 58.5, 60.5, 1, 'the ammo 5 -> 6 at the second'),
+		@('VR: ram 0c155804 .. -> 06', 60.5, 62.6, 0, 'no ammo back from the menu'),
+		@('VR: ram 0c155804 05 -> 06', 62.6, 63.5, 1, 'B reloads (5 -> 6)'),
+		@('VR: ram 0c155918 05 -> 06', 70.5, 74, 1, "player 2's ammo 5 -> 6"))
+	foreach ($c in $checks) {
+		$n = Get-LogCount $name $c[0] -From $c[1] -To $c[2]
+		Write-Host "  $($c[4]): $n (want $($c[3]))"
+		if ($n -ne $c[3]) { return "$($c[4]): $n lines '$($c[0])', want $($c[3])" }
+	}
+	return $null
 }
 
 # The merge of a gun's captures (hands_build.cpp's mergeCaptures) on synthetic captures, built and run
@@ -1979,6 +2110,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	# cm-gun after the rip scenarios: it needs the guns' files they leave
 	'cm-gun' = 'Test-CmGun'
 	'cm-rifle-sim' = 'Test-CmRifleSim'; 'cm-rifle-p2' = 'Test-CmRifleP2'; 'cm-kick' = 'Test-CmKick'; 'cm-rifle-file' = 'Test-CmRifleFile'
+	'cm-gun-angle' = 'Test-CmGunAngle'; 'cm-reload-point' = 'Test-CmReloadPoint'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'cm-own-gun' = 'Test-CmOwnGun'; 'cm-own-gun-file' = 'Test-CmOwnGunFile'; 'cm-own-controllers' = 'Test-CmOwnControllers'
 	'own-folders' = 'Test-OwnFolders'; 'cm-bundled' = 'Test-CmBundled'

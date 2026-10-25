@@ -154,6 +154,7 @@ struct Gun
 	// since the trigger was pulled (with the rifle logged once it's let go).
 	bool autoKick;
 	unsigned burstFlashes;
+	int angleLogged = 0;	// the vr.GunAngle of the last muzzle line
 	int muzzleLogged = -1;	// the gun whose muzzle was last logged (GunKind)
 	// When the last reload started (racked slide, gun pointed down; 0: done), and a
 	// trigger held through it.
@@ -178,6 +179,9 @@ struct Gun
 	int shotsDue, autosDue, clicksDue;
 	XrTime knockEnds;
 	bool freshPull;
+	// vr.Reload 1 (Point off-screen): the aim was on the screen since the last reload by pointing
+	// away (one reload each time it leaves; never from the menu, nor when it closes pointing away)
+	bool offArmed = false;
 };
 Gun guns[2] { { 0 }, { 1, Left } };
 bool dualWield;
@@ -1572,17 +1576,25 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		// the game's pistol is in a right hand: mirrored for the left
 		const bool mirror = game && g.hand == Left;
 		const glm::mat4 placement = gunPlacement(game, gunScale, palm, mirror);
-		if (g.muzzleLogged != (int)kind)
+		// vr.GunAngle (the menu's Gun angle): the gun tilted about the hand's side-to-side axis
+		// through the grip, + the muzzle up; the shots, the aim line and the flash with it (every
+		// gun, both hands, the rifle too)
+		const int angle = std::clamp((int)config::VrGunAngle, -30, 30);
+		const glm::mat4 tilt = glm::translate(glm::mat4(1.f), palm)
+				* glm::rotate(glm::mat4(1.f), glm::radians((float)angle), glm::vec3(1, 0, 0))
+				* glm::translate(glm::mat4(1.f), -palm);
+		if (g.muzzleLogged != (int)kind || g.angleLogged != angle)
 		{
 			// where shots leave, as the aim line and the flash start (Task 14b: a gun of the player's own)
 			g.muzzleLogged = (int)kind;
-			const glm::vec3 at = glm::vec3(placement * glm::vec4(muzzle, 1.f));
+			g.angleLogged = angle;
+			const glm::vec3 at = glm::vec3(tilt * placement * glm::vec4(muzzle, 1.f));
 			NOTICE_LOG(INPUT, "XR: P%d muzzle: %s at %.4f %.4f %.4f from the aim pose", g.player + 1, gunName(kind), at.x, at.y, at.z);
 		}
 		// Shots leave the muzzle along the barrel, so the aim line and the hit agree. Into
 		// rebuilt game eye space for the hit test.
-		const glm::vec3 o = glm::vec3(pose * placement * glm::vec4(muzzle, 1.f));
-		const glm::vec3 d = rot * glm::vec3(0, 0, -1);
+		const glm::vec3 o = glm::vec3(pose * tilt * placement * glm::vec4(muzzle, 1.f));
+		const glm::vec3 d = rot * (glm::mat3(tilt) * glm::vec3(0, 0, -1));
 		const float s = worldScale();
 		const glm::vec3 og = glm::vec3(o.x, -o.y, o.z) / s;
 		const glm::vec3 dg = glm::normalize(glm::vec3(d.x, -d.y, d.z));
@@ -1622,7 +1634,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		recoilMat = glm::translate(recoilMat, -hand);
 		GunView& view = g.view;
 		view.kind = kind;
-		view.pose = pose * recoilMat * placement;
+		view.pose = pose * tilt * recoilMat * placement;
 		// (the game's pistol has a smaller muzzle than the arcade gun's lens)
 		view.scale = game ? gunScale * 0.8f : gunScale;
 		view.restMuzzle = o;
@@ -1641,7 +1653,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		// (the slide and the open hand only for a gun that's held: not while the hand holds its controller)
 		// (a gun alone, Confidential Mission's: no hand of the game's for the other one)
 		if (game && slide && !model->gunOnly && holds(g.hand) == Holds::Gun)
-			updateOtherHand(time, 1 - g.hand, tracked[1 - g.hand], locations[1 - g.hand], pose * placement, gunScale, mirror);
+			updateOtherHand(time, 1 - g.hand, tracked[1 - g.hand], locations[1 - g.hand], pose * tilt * placement, gunScale, mirror);
 		else
 		{
 			view.otherHand = false;
@@ -1649,7 +1661,8 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		}
 		// A gun in each hand leaves no hand for the slide: pointing a gun at the floor
 		// reloads it instead (a gun that's held: not while the hand holds its controller).
-		if (!slide && live && holds(g.hand) == Holds::Gun)
+		// With vr.Reload 1 pointing away from the screen does (below), once each time.
+		if (!slide && live && holds(g.hand) == Holds::Gun && config::VrReload != 1)
 		{
 			if (!g.pointedDown && d.y < -0.75f)
 			{
@@ -1671,11 +1684,28 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		g.triggerWait = true;
 		g.pullAt = 0;
 		g.shotsDue = g.autosDue = g.clicksDue = 0;
+		g.offArmed = false;		// (the menu, or closing it pointing away, reloads nothing)
 		return;
 	}
 	gunKnocks(g, time, trigger);
 	if (!trigger && g.triggerWas && g.burstFlashes > 1)
 		NOTICE_LOG(INPUT, "XR: P%d rifle burst: %u flashes", g.player + 1, g.burstFlashes);
+	// vr.Reload 1 (the menu's Reload: Point off-screen): the aim leaving the screen reloads once,
+	// as a pull off it would, with a reload's buzz and no kick; it re-arms back on the screen. Not
+	// into the grey margin (aimOutside), not with the magazine full (the game's gun state, when
+	// it has one), nor while the hand isn't tracked or holds its controller.
+	if (config::VrReload == 1 && holds(g.hand) == Holds::Gun && originSet && tracked[g.hand])
+	{
+		if (onScreen)
+			g.offArmed = true;
+		else if (g.offArmed && !aimOutside && (!g.gunRam || (g.gunKnown && g.gunWas.ammo < g.gunWas.magazine)))
+		{
+			g.offArmed = false;
+			g.reloadAt = time;
+			haptic(g.hand, 0.02f, 0.5f);
+			NOTICE_LOG(INPUT, "XR: player %d pointed off screen (reload)", g.player + 1);
+		}
+	}
 
 	// Seen but outside the game's view: the trigger does nothing (no shot, no reload).
 	const bool outside = !onScreen && aimOutside;
@@ -1846,6 +1876,7 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 	}
 	static bool aWas, pullWas[2];
 	static int stickWas;	// 0 at rest, 1 up, 2 down, 3 left, 4 right: pushed past 60%, let go below 40%
+	static XrTime repeatAt;	// held left or right: when it steps again (menu::Input::repeat)
 	menu::Input input {};
 	const bool a = boolAction(startAction, Right);
 	input.select = a && !aWas;
@@ -1864,6 +1895,15 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 		input.down = push == 2;
 		input.left = push == 3;
 		input.right = push == 4;
+		repeatAt = time + 400000000LL;
+	}
+	else if ((push == 3 || push == 4) && time >= repeatAt)
+	{
+		// held on the same push: again after 0.4 s, then every 0.1 s
+		input.left = push == 3;
+		input.right = push == 4;
+		input.repeat = true;
+		repeatAt = time + 100000000LL;
 	}
 	stickWas = push;
 	input.toggle = menuEdge;
@@ -1892,7 +1932,7 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 	if (menuFresh)
 	{
 		menuFresh = false;
-		input.toggle = input.back = input.select = input.up = input.down = input.left = input.right = false;
+		input.toggle = input.back = input.select = input.up = input.down = input.left = input.right = input.repeat = false;
 		input.ray[Left].click = input.ray[Right].click = false;
 	}
 	// B or A pressed in the menu goes no further than the menu: not to the game once it goes on

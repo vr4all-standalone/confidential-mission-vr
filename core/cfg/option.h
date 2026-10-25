@@ -505,6 +505,8 @@ extern Option<bool> VrDropShotFlash;
 extern Option<int> VrHaptics;
 extern Option<int> VrGun;
 extern Option<std::string> VrGunFile;
+extern Option<int> VrGunAngle;
+extern Option<int> VrReload;
 extern Option<bool> CustomTextures;
 extern Option<bool> PreloadCustomTextures;
 extern Option<bool> DumpTextures;

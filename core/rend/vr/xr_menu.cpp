@@ -28,9 +28,11 @@ namespace
 constexpr float Distance = 1.2f, BelowEyes = 0.1f;
 constexpr int Left = 0, Right = 1;
 
-const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Laser", "Haptics", "World size", "Panel distance",
-		"Wider view", "How to play", "Quit" };
+const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Laser", "Haptics", "World size",
+		"Panel distance", "Wider view", "How to play", "Quit" };
 const char *const HapticsNames[4] { "Off", "Low", "Normal", "Strong" };
+const char *const ReloadNames[2] { "Shoot off-screen", "Point off-screen" };
+constexpr int GunAngleMax = 30;	// vr.GunAngle's range, degrees either way
 
 glm::mat4 model { 1.f };	// the panel: its middle, facing the player (+z)
 int selected;
@@ -39,6 +41,9 @@ int selected;
 // the controller then), learns them without choosing (the selection follows a ray onto another row).
 int hovered[2];
 bool fresh;
+// A Gun angle step turns the guns, and the pointers that leave their muzzles, in the next frame:
+// that frame's pointers select nothing (else a stick held on Gun angle goes on stepping another row)
+bool gunsTurned;
 bool pointing[2];
 glm::vec3 pointAt[2];
 // Quit is chosen twice (S16): the first choose arms it for 3 s ("Quit? Choose again"); another
@@ -76,7 +81,14 @@ int gunAt(const std::vector<GunChoice>& choices)
 }
 
 bool stepper(int row) {
-	return row == Gun || row == Haptics || row == WorldSize || row == PanelDistance;
+	return row == Gun || row == GunAngle || row == Reload || row == Haptics || row == WorldSize || row == PanelDistance;
+}
+// The rows a stick held left or right steps again and again (Input::repeat)
+bool repeats(int row) {
+	return row == GunAngle || row == WorldSize || row == PanelDistance;
+}
+int gunAngle() {
+	return std::clamp((int)config::VrGunAngle, -GunAngleMax, GunAngleMax);
 }
 bool onOff(int row) {
 	return row == Laser || row == WiderView || row == HowToPlay;
@@ -95,6 +107,12 @@ std::string value(int row)
 		return std::string(gun.label) + (!gun.made ? (gun.setting >= 4 ? " (not there)" : config::VrGameHands ? " (not made yet)" : " (game's models off)")
 				: !gun.complete ? " (incomplete)" : "");
 	}
+	case GunAngle:
+		// (with a sign, no degree sign: the panel adds it, the log stays ASCII)
+		std::snprintf(s, sizeof(s), gunAngle() == 0 ? "%d" : "%+d", gunAngle());
+		return s;
+	case Reload:
+		return ReloadNames[std::clamp((int)config::VrReload, 0, 1)];
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
 	case Haptics:
@@ -123,6 +141,8 @@ RowsPanel panel()
 		PanelRow r;
 		r.label = row == Quit && quitArmed ? "Quit? Choose again" : Labels[row];
 		r.value = value(row);
+		if (row == GunAngle)
+			r.value += "\xB0";	// (the degree sign: panel text is drawn byte by byte as Latin-1)
 		r.selected = row == selected;
 		r.stepper = stepper(row);
 		if (row == Gun)
@@ -165,6 +185,28 @@ void change(int row, int dir, int hand)
 			config::VrGunFile.set(choices[at].file);
 			config::saveStr("config", "vr.GunFile", choices[at].file);
 		}
+		break;
+	}
+	case GunAngle:
+	{
+		// 1 degree a step; at an end nothing (no save, no line)
+		const int was = gunAngle();
+		const int angle = std::clamp(was + dir, -GunAngleMax, GunAngleMax);
+		if (angle == was)
+			return;
+		config::VrGunAngle.set(angle);
+		config::saveInt("config", "vr.GunAngle", angle);
+		gunsTurned = true;
+		break;
+	}
+	case Reload:
+	{
+		const int was = std::clamp((int)config::VrReload, 0, 1);
+		const int reload = std::clamp(was + dir, 0, 1);
+		if (reload == was)
+			return;
+		config::VrReload.set(reload);
+		config::saveInt("config", "vr.Reload", reload);
 		break;
 	}
 	case Laser:
@@ -324,7 +366,7 @@ void update(const Input& input)
 		float u = 0.5f;
 		const int row = ray.valid ? rowAt(model, rows, ray.origin, ray.dir, &u) : -1;
 		pointing[hand] = ray.valid && rowsPanelHit(model, rows, ray.origin, ray.dir, &pointAt[hand]);
-		if (!fresh && row >= 0 && row != hovered[hand])
+		if (!fresh && !gunsTurned && row >= 0 && row != hovered[hand])
 			selected = row;
 		hovered[hand] = row;
 		if (!fresh && ray.click && row >= 0)
@@ -334,6 +376,7 @@ void update(const Input& input)
 		}
 	}
 	fresh = false;
+	gunsTurned = false;
 	if (input.up)
 		selected = (selected + Rows - 1) % Rows;
 	if (input.down)
@@ -359,7 +402,7 @@ void update(const Input& input)
 	}
 	if (quitting)
 		return;
-	if ((input.left || input.right) && (stepper(selected) || onOff(selected)))
+	if ((input.left || input.right) && (stepper(selected) || onOff(selected)) && (!input.repeat || repeats(selected)))
 		change(selected, input.left ? -1 : +1, Right);
 	if (input.select)
 		choose(selected, Right);

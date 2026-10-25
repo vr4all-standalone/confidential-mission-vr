@@ -140,6 +140,8 @@ Option<bool> VrDropShotFlash("vr.DropShotFlash", true);	// hide a bright full-sc
 Option<int> VrHaptics("vr.Haptics", 2);	// the knock in the hand: 0 off, 1 low, 2 normal, 3 strong
 Option<int> VrGun("vr.Gun", 1);	// the gun drawn: 1 the in-game pistol, 4 (and over) a folder gun, the one vr.GunFile names (guns/: the bundled Arcade gun and Zapper, the player's own; xr_own.h); any other (1.1's 0 auto, 2 the cabinet gun, 3 the arcade gun) reads as 1 (the VR menu)
 Option<std::string> VrGunFile("vr.GunFile", "");	// with vr.Gun 4: the player's own gun, its file name in guns/ without .glb (the VR menu)
+Option<int> VrGunAngle("vr.GunAngle", 0);	// the gun tilted in the hand about its grip, degrees, + the muzzle up; read as -30 to 30 (the VR menu's Gun angle)
+Option<int> VrReload("vr.Reload", 0);	// 0 reload by shooting away from the screen; 1 also by pointing away from it, once each time (the VR menu's Reload)
 Option<bool> CustomTextures("rend.CustomTextures");
 Option<bool> PreloadCustomTextures("rend.PreloadCustomTextures");
 Option<bool> DumpTextures("rend.DumpTextures");

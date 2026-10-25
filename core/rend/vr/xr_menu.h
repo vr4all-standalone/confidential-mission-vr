@@ -17,13 +17,15 @@
 namespace vr::xr::menu
 {
 
-enum Row { Resume, Recenter, Gun, Laser, Haptics, WorldSize, PanelDistance, WiderView, HowToPlay, Quit, Rows };
+enum Row { Resume, Recenter, Gun, GunAngle, Reload, Laser, Haptics, WorldSize, PanelDistance, WiderView, HowToPlay, Quit, Rows };
 
 // What the controllers did in a headset frame. The buttons are edges (just pressed); the rays,
 // one per hand (0 left, 1 right), are in the game camera's room space, with their trigger's click.
 struct Input
 {
-	bool toggle, back, select, up, down, left, right;
+	// repeat: left or right again from a stick held on the same push (0.4 s, then every 0.1 s); only
+	// Gun angle, World size and Panel distance step on it (the Gun row loads a model each step)
+	bool toggle, back, select, up, down, left, right, repeat;
 	struct Ray
 	{
 		bool valid, click;
