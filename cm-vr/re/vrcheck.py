@@ -1,5 +1,5 @@
 """
-Checks for adding a game to hotd2-vr on the PC: finds the game's camera matrices and values
+Checks for adding a game to the VR engine on the PC: finds the game's camera matrices and values
 in a RAM dump (rip\\ram0000.bin), sums up a rip pass, and reads the VR lines of a run's
 flycast.log (vr-test.ps1 writes both under build-win\\vrtest\\<name>), and measures what its
 window shots leave undrawn.

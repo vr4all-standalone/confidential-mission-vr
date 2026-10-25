@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="hotd2-vr/assets/readme-banner.jpg" alt="Confidential Mission VR: a guard with a rifle in the lock-on ring, stage 1" width="100%" />
+<img src="cm-vr/assets/readme-banner.jpg" alt="Confidential Mission VR: a guard with a rifle in the lock-on ring, stage 1" width="100%" />
 
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
@@ -22,10 +22,10 @@ Mission** (Sega NAOMI), on a **Meta Quest** with no PC, or on a **PC VR** headse
 game runs in an emulator, its 3D scenes are rebuilt around you in stereo, and your controller is
 the light gun. Up to two players, a gun in each hand.
 
-It is built on mikermak's **[hotd2-vr](https://github.com/mikermak/hotd2-vr)**: the VR mode, the
-panel the start screen grew from and the tools are his work, and much of this readme is too.
-hotd2-vr is itself a fork of the [Flycast](https://github.com/flyinghead/flycast) Dreamcast and
-NAOMI emulator. There is no remake here: the original game runs, and the emulator turns what it
+It is built on **[mikermak's VR fork of Flycast](https://github.com/mikermak/hotd2-vr)**: the VR
+mode, the panel the start screen grew from and the tools are his work, and much of this readme
+is too. His fork is itself built on the [Flycast](https://github.com/flyinghead/flycast)
+Dreamcast and NAOMI emulator. There is no remake here: the original game runs, and the emulator turns what it
 draws into a VR view.
 
 > **⚖️ No game included.** An unofficial fan project, not affiliated with or endorsed by Sega,
@@ -40,29 +40,35 @@ PC VR headsets are not tested yet (see [The game](#the-game)).
 
 ## ✨ Key VR Features
 
-* **Inside the game, in stereo.** The game's 3D scenes stand around you at real scale, and the
-  game itself draws a wider view (stage 1 goes from about 61 by 48 degrees to 111 by 95), while
-  its HUD, subtitles and briefings sit on a panel in front of you.
-* **Three guns in your hand.** The agents' own pistol, made on the first start from your copy of
-  the game (nothing of the game comes with the app), the Arcade gun or the Nintendo Zapper. Or
-  bring your own GLB models.
-* **The assault rifle with any gun.** Pick it up and the gun in your hand fires its bursts, each
-  round with its own kick, muzzle flash and knock.
-* **Kick that matches the game.** The gun kicks, flashes and knocks only when the game fires a
-  round: a light click on an empty gun, nothing on a reload.
-* **Two players, one headset.** Press X and player 2 joins with a gun in your left hand (red aim
-  on the right, blue on the left), both lives and scores on screen.
-* **Player 1 on either hand.** Match the on-screen P1 left / P2 right: the menu's Hands row puts
-  player 1's gun, Start and reload in your left hand.
-* **Reload your way.** Shoot away from the game's view as at the arcade, or just point away
-  (the menu's Reload row). B and Y reload too.
-* **Gun angle.** Tilt the gun in your hand from -30° to +30° in 1° steps, so it points where
-  your hand points, whatever controller you hold.
-* **Empty hands in the cutscenes.** In the stage intros and story scenes your hands are empty (no
-  gun, no controller, no laser), and the guns come back the moment play resumes.
-* **A menu in the headset.** The left ≡ pauses the game: gun, gun angle, reload, hands, laser, haptics,
-  world size, panel distance and a how-to-play view, each saved at once.
-* **A start screen that checks your files.** READY, or which file is missing and where it goes.
+* **Stereoscopic 3D, Wider Than the Arcade:** The game's 3D scenes stand around you at real
+  scale, and the game itself draws a wider view: stage 1 opens up from about **61° × 48°** to
+  **111° × 95°**. The HUD, subtitles and mission briefings sit on a panel in front of you.
+* **Your Controller Is the Light Gun:**
+  * **Three guns:** the agents' own pistol, made on the first start from your copy of the game
+    (nothing of the game comes with the app), the **Arcade gun** or the **Nintendo Zapper**. Or
+    bring your own **GLB** models.
+  * **The assault rifle with any gun:** pick it up and the gun in your hand fires its bursts.
+  * **Gun angle:** tilt the gun from **-30° to +30°**, so it points where your hand points,
+    whatever controller you hold.
+* **Recoil & Haptics That Match the Game:**
+  * **Kick, muzzle flash and knock** only when the game really fires a round: one for every
+    round of a rifle burst, a light click on an empty gun, nothing on a reload.
+  * **Haptics Off, Light, Medium or Strong**, from the menu.
+* **Two Players, One Headset:** Player 2 presses Start on the other controller (**Left `X`**)
+  and joins with a gun in that hand, both lives and scores on screen. The menu's **Hands** row
+  puts player 1 on your **left or right hand**, to match P1 left / P2 right on the screen.
+* **Arcade Reloads, or Not:** Shoot away from the game's view as at the arcade, or just point
+  away (the menu's **Reload** row). **`B`** and **`Y`** reload too.
+* **Empty Hands in the Cutscenes:** In the stage intros and story scenes your hands are empty
+  (no gun, no controller, no laser). The guns come back the moment play resumes, and **Start**
+  skips the scene.
+* **A Pause Menu in the Headset:** The **Left `≡`** button pauses the game: gun, gun angle,
+  reload, hands, laser, haptics, world size, panel distance and a how-to-play view, each saved
+  at once.
+* **A Start Screen That Checks Your Files:** **READY**, or exactly which file is missing and
+  where it goes.
+* **Standalone Quest & PC VR:** It runs on the **Quest** itself, no PC needed, or on a **PC VR**
+  headset through SteamVR, Quest Link / Air Link or Virtual Desktop.
 
 ---
 
@@ -90,6 +96,9 @@ rows: [Controls](#controls) and [The menu](#the-menu).
 
 For Quest 3, 3S, 2 and Pro (Quest 3S, 2 and Pro: not tested yet, tell me how it runs).
 
+> **⭐ The easiest way: [VR4ALL](https://github.com/vr4all-standalone/vr4all-standalone)** installs
+> the app and copies your game files in one go ([step 2](#2-install-with-vr4all-the-best-way)).
+
 <a id="what-you-need"></a>
 ### What you need
 
@@ -116,11 +125,20 @@ Make a (free) developer account at [developers.meta.com](https://developers.meta
 with your Meta account, then in the Meta Horizon app on your phone: Devices > your headset >
 Headset settings > Developer mode. Restart the headset.
 
-### 2. Install the APK
+### 2. Install with VR4ALL (the best way)
 
-Download **`confidential-mission-vr-quest.apk`** from [**Releases**](../../releases) and install
-it with **[VR4ALL](https://github.com/vr4all-standalone/vr4all-standalone)** (it also copies your
-three files), **[SideQuest](https://sidequestvr.com/setup-howto)** (*Install APK file from
+**[VR4ALL](https://github.com/vr4all-standalone/vr4all-standalone) is the best way to install
+Confidential Mission VR.** It's a free PC app that installs standalone Quest VR mods: connect the
+headset by USB, pick **Confidential Mission VR** in its library and drop in your three files.
+VR4ALL downloads the latest APK from this project's Releases, installs it, gives the app its
+file access and copies your files to the right folders on the headset, so step 3 is done too.
+
+<p align="center">
+  <img src="cm-vr/assets/vr4all-install.png" alt="VR4ALL on a PC with Confidential Mission VR selected: its card, the port APK and the game files to add" width="100%" />
+</p>
+
+**Or by hand:** download **`confidential-mission-vr-quest.apk`** from [**Releases**](../../releases)
+and install it with **[SideQuest](https://sidequestvr.com/setup-howto)** (*Install APK file from
 folder*) or ADB:
 
 ```bash
@@ -133,8 +151,8 @@ without it, the start screen asks for it the first time.
 
 ### 3. Copy your game files
 
-Copy your three files to the headset's **Download** folder, as in [What you need](#what-you-need):
-with VR4ALL or SideQuest (*Manage files*), or connect the headset to a PC with USB, allow access
+VR4ALL did this for you in step 2. By hand: copy your three files to the headset's **Download**
+folder, as in [What you need](#what-you-need), with SideQuest (*Manage files*), or connect the headset to a PC with USB, allow access
 in the headset, and open *Quest > Internal shared storage > Download*.
 
 ### 4. Play
@@ -334,7 +352,7 @@ they scale by (65536.0, three copies, and 32.0, two) are patched, so the game dr
 the wider view, while the stock focal its light-gun hit test and on-screen checks use
 (`0x0C154ED0`) stays as it was. The gun calibration (6 bytes per player at `0x0C15A9C0`) is
 held where the game's aim is where the gun points. All of it, with the evidence:
-`hotd2-vr/notes/confmiss-findings.md`.
+`cm-vr/notes/confmiss-findings.md`.
 
 ---
 
@@ -430,11 +448,11 @@ controllers' buttons point at the places doing the same job).
 
 ### Making a gun file: make-gun.py
 
-`hotd2-vr/tools/make-gun.py` turns an FBX or a GLB into a gun file and a sidecar with a first
+`cm-vr/tools/make-gun.py` turns an FBX or a GLB into a gun file and a sidecar with a first
 guess, with Blender (5.2) run headless:
 
 ```bat
-"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" -b -P hotd2-vr\tools\make-gun.py -- mygun.fbx out --name "My gun" --length 0.22 [--texture-dir textures]
+"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" -b -P cm-vr\tools\make-gun.py -- mygun.fbx out --name "My gun" --length 0.22 [--texture-dir textures]
 ```
 
 It binds the textures the model names but can't find (by file name, in `--texture-dir` and the
@@ -494,8 +512,8 @@ next to `flycast.exe`), under `[config]`. The useful ones:
   game's live focal length (read from its projection and viewport matrices in RAM), and
   the per-game profile: matrix addresses and the field-of-view literals to patch. Each
   game's numbers are in its profile (`makeProfiles()`): Confidential Mission's is the one this
-  app starts (hotd2-vr's others stay in the engine, unused).
-  `hotd2-vr/notes/adding-a-game.md` is how a profile is made.
+  app starts (the engine's other profiles stay in it, unused).
+  `cm-vr/notes/adding-a-game.md` is how a profile is made.
 - `core/rend/gles/gles.cpp`: the vertex shader does the lifting and reprojection; only
   frames the game actually presents reach the headset.
 - `core/hw/pvr/ta_vtx.cpp`: hands each parsed render pass to `vr::dropShotMarker` before
@@ -531,7 +549,7 @@ check out as small text files and the build fails: replace them with copies of
 `core/deps/gamesdk/include/common` and `core/deps/gamesdk/include/swappy`.
 
 ```bat
-hotd2-vr\build-quest.cmd
+cm-vr\build-quest.cmd
 ```
 
 This builds the `vr` build type (arm64, optimised, OpenXR) to
@@ -541,7 +559,7 @@ version is `hubVersion` in `shell/android-studio/flycast/build.gradle.kts` and t
 (`1.2.0-g<commit>`; versionCode 9). Without the release key (below) it is signed with the public debug key,
 and Gradle says so: fine for trying things out, not for a release.
 
-`hotd2-vr\build-win.cmd` builds the Windows version (Visual Studio 2022 Build Tools) with
+`cm-vr\build-win.cmd` builds the Windows version (Visual Studio 2022 Build Tools) with
 PC VR (`-DUSE_OPENXR=ON`: CMake fetches the Khronos OpenXR loader and builds it in), also used
 for the webcam finger-gun mode and for testing.
 
@@ -562,7 +580,7 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
 
 ## 🚀 Releasing
 
-1. **The release key, once.** `powershell -File hotd2-vr\make-release-key.ps1` makes
+1. **The release key, once.** `powershell -File cm-vr\make-release-key.ps1` makes
    `release.jks` (RSA 4096, alias `vrlightgunhub`, valid 10000 days) and
    `release-signing.properties` (with its random password) in `%USERPROFILE%\.vrlightgunhub`,
    where the build looks for them. **Back that folder up**, somewhere safe and private: every
@@ -570,7 +588,7 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
    have to uninstall, losing their settings and what the app made from their game). Never
    commit it; `.gitignore` keeps out `*.jks` and `release-signing.properties`. Elsewhere:
    `-Dir <folder>`, and `$env:VRLGH_SIGNING` set to that folder's `release-signing.properties`.
-2. **The bundled models.** `hotd2-vr\models\` holds the models the release comes with:
+2. **The bundled models.** `cm-vr\models\` holds the models the release comes with:
    `guns\` and `controllers\` (each GLB with its sidecar, as in Your own models) and
    `CREDITS.txt`, which names each GLB on a `File:` line (`File: guns/zapper.glb`) with its
    author, licence, link and what was changed. Fill it by hand from the models' own downloads;
@@ -580,7 +598,7 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
    `CREDITS.txt`); without it both come without models.
 3. **The packages.** The version is `hubVersion` and `versionCode` in
    `shell/android-studio/flycast/build.gradle.kts` and `$appVersion` in `package-release.ps1`
-   (1.2.0, versionCode 9, for this release). `powershell -File hotd2-vr\package-release.ps1` builds both versions and
+   (1.2.0, versionCode 9, for this release). `powershell -File cm-vr\package-release.ps1` builds both versions and
    puts `confidential-mission-vr-quest.apk` and `confidential-mission-vr-pcvr.zip` (`flycast.exe`,
    `emu.cfg`, `README.txt`, `LICENSE.txt`, `Play Confidential Mission.cmd`, and with the bundled
    models `CREDITS.txt` and `data\models\`) in `dist\`. Both carry the licence, `LICENSE.txt`
@@ -591,7 +609,7 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
    a zip with other files or a `README.txt` naming another game, either file if its file list
    has anything of a game in it (disc images, keys, rips, frame grabs, models made from a game)
    or a model its `CREDITS.txt` doesn't name, either file without that licence text, an APK whose bundled models aren't those of
-   `hotd2-vr\models\`, and anything under `hotd2-vr/models` tracked by git. `-SkipBuild`
+   `cm-vr\models\`, and anything under `cm-vr/models` tracked by git. `-SkipBuild`
    packages what was built last; `-CheckOnly <archives>` only checks the contents (and git).
 4. **The source.** Publish the source of the release's commit with it (the GPL asks for that):
    tag the commit and push it, so the release page carries its source archives.
@@ -600,14 +618,14 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
 
 ## 🧰 Tools
 
-- `hotd2-vr/fingergun`: play on the PC with **finger guns** in front of a webcam
+- `cm-vr/fingergun`: play on the PC with **finger guns** in front of a webcam
   (MediaPipe hand tracking). Set up once:
   ```bat
-  py -m venv hotd2-vr\fingergun\.venv
-  hotd2-vr\fingergun\.venv\Scripts\pip install -r hotd2-vr\fingergun\requirements.txt
+  py -m venv cm-vr\fingergun\.venv
+  cm-vr\fingergun\.venv\Scripts\pip install -r cm-vr\fingergun\requirements.txt
   ```
   and put MediaPipe's [hand landmarker model](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker)
-  (`hand_landmarker.task`) in `hotd2-vr\fingergun\`. Then `hotd2-vr\play-fingergun.ps1`
+  (`hand_landmarker.task`) in `cm-vr\fingergun\`. Then `cm-vr\play-fingergun.ps1`
   (after `build-win.cmd`). It starts with a guided calibration; its on-screen text is in Dutch.
   Aim with your index finger, fire by dropping your thumb, reload by opening your hand for
   a moment (`--reload down` brings back the old point-the-gun-down reload). The
@@ -620,22 +638,20 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
   player 2, light blue). `K` calibrates both in turn, each with their own settings. A
   thumbs-up (a fist, thumb up) held for half a second presses the game's Start: that is how
   player 2 joins in (and it pauses for a player already in the game).
-- `hotd2-vr/gun_model`: bakes a `.glb` gun model into `gun_model.h`.
-- `hotd2-vr/assets`: the PC build rips a frame on request (`rip.request` in its working folder:
+- `cm-vr/gun_model`: bakes a `.glb` gun model into `gun_model.h`.
+- `cm-vr/assets`: the PC build rips a frame on request (`rip.request` in its working folder:
   every polygon as the GPU got it, with the VRAM), and `riplib.py` reads that and decodes the
-  textures. `rip_hands.py` and `hotd2-vr/rip-hands.ps1` are hotd2-vr's hands rip on the PC;
+  textures. `rip_hands.py` and `cm-vr/rip-hands.ps1` are the older hands rip on the PC;
   `make-icon.py` draws the app's icon.
-- `hotd2-vr/re/sh4dis.py`: disassembles game code from a Flycast RAM dump (Capstone),
+- `cm-vr/re/sh4dis.py`: disassembles game code from a Flycast RAM dump (Capstone),
   which is how the field-of-view literals were found.
-- `hotd2-vr/run-test.ps1`: PC test runs with screenshots.
-- `hotd2-vr/vr-test.ps1`, `hotd2-vr/accept.ps1`: scripted PC runs (gun input over UDP, window
-  shots, rips, log checks), and the check that the engine's other profiles from hotd2-vr still
-  play as before (`accept.ps1 -Only hotd2,mok`). They find the games through
-  `$env:VRLGH_GAMES` (the folder with the MAME sets and `naomi.zip`) and `$env:VRLGH_HOTD2`
-  (hotd2-vr's Dreamcast disc).
+- `cm-vr/run-test.ps1`: PC test runs with screenshots.
+- `cm-vr/vr-test.ps1`, `cm-vr/accept.ps1`: scripted PC runs (gun input over UDP, window
+  shots, rips, log checks), and the check that the engine's other game profiles still play as
+  before. They find the games through `$env:VRLGH_GAMES` (the folder with the MAME sets and
+  `naomi.zip`); the top of `accept.ps1` lists the rest.
 
-The older scripts look for your game in a `game` folder next to the repository, or in
-`%HOTD2VR_DATA%\game`.
+The older scripts look for your game in a `game` folder next to the repository.
 
 ---
 
@@ -652,8 +668,8 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
 
 ## 📜 Credits and licences
 
-- **[hotd2-vr](https://github.com/mikermak/hotd2-vr) (The House of the Dead 2 VR) by
-  mikermak**: Confidential Mission VR is built on it, a fork of it. The VR mode, the panel the
+- **[mikermak's VR fork of Flycast](https://github.com/mikermak/hotd2-vr)**: Confidential
+  Mission VR is built on it, a fork of it. The VR mode, the panel the
   start screen grew from and the tools are his. GPL-2.0-or-later.
 - [Flycast](https://github.com/flyinghead/flycast) by flyinghead and contributors, GPL-2.0
   or later. This fork's code is too (see `LICENSE`); changed Flycast files carry a note,
@@ -685,8 +701,8 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
 - [MediaPipe](https://github.com/google-ai-edge/mediapipe) by Google, Apache-2.0
   (finger-gun tracker); [Capstone](https://www.capstone-engine.org/), BSD.
 - PC VR rendering in an OpenGL Core Profile: [nn10n10](https://github.com/nn10n10) (pull request
-  #1 to hotd2-vr).
-- The app's icon is drawn for it from plain shapes (`hotd2-vr/assets/make-icon.py`).
+  [#1](https://github.com/mikermak/hotd2-vr/pull/1) to mikermak's fork).
+- The app's icon is drawn for it from plain shapes (`cm-vr/assets/make-icon.py`).
 - Inspired by [DR-89/time-crisis-vr](https://github.com/DR-89/time-crisis-vr).
 - Confidential Mission is Sega's game; the banner is a screenshot of it (© SEGA). Namco is a trademark of Bandai Namco, Zapper of Nintendo, Meta Quest of Meta.
 

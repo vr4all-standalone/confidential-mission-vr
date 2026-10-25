@@ -1,4 +1,4 @@
-# Adding a game to hotd2-vr (recipe, from The Maze of the Kings)
+# Adding a game to the VR engine (recipe, from The Maze of the Kings)
 
 Researched 2026-10-21 on branch `naomi-gun-vr` = `hotd2-vr` @ `eeb629dce` (30 commits over
 `origin/master`). Template commit: `eb2e300cd` "The Maze of the Kings (NAOMI), with the hero's staff".
