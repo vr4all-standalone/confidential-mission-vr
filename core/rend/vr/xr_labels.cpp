@@ -95,7 +95,8 @@ constexpr int ReadingOrder[controllers::Buttons] { 0, 1, 0, 1, 4, 3, 2, 5 };
 
 // A label's letters (its picture's pixels) and its height in the room: letters ~7.5 mm high, about
 // as sharp as a Quest 3 shows them at 40 cm. The column: from the hand's outermost button, and from
-// one label to the next at least. The stick's label: over the column's top and the stick.
+// one label to the next at least. The stick's label: over the column's top and the stick; the trigger's
+// one Pitch over that.
 constexpr float Px = 40.f;
 constexpr float Height = 0.016f;
 constexpr float Gap = 0.025f;
@@ -184,7 +185,9 @@ void facing(const glm::vec3& at, const glm::vec3& eye, const glm::vec3& fallback
 
 // Where one hand's labels go, seen from `eye`: a column beside the hand's outermost button (the
 // right hand's to its right as seen, the left's to its left), in the list's order, Pitch apart at
-// least and centred on their buttons' height; the stick's above the column's top, over the stick.
+// least and centred on their buttons' height; the stick's above the column's top, over the stick, and
+// the trigger's right on top of the stick's (1.2 round 2, the user's ask: not under A or X), its line to
+// its outer end, past the stick's. A list without a stick (the Vive wand's) keeps the trigger's in the column.
 void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words, const glm::vec3& eye)
 {
 	layout.placed.clear();
@@ -207,11 +210,12 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 		outer = std::max(outer, side * planeX(p));
 	const float columnX = side * (outer + Gap);
 
+	const bool stacked = std::any_of(list.begin(), list.end(), [](const Label& l) { return l.button == controllers::Stick; });
 	std::vector<size_t> column;
 	std::vector<float> ys;
 	float buttonsY = 0.f;
 	for (size_t i = 0; i < list.size(); i++)
-		if (list[i].button != controllers::Stick)
+		if (list[i].button != controllers::Stick && !(stacked && list[i].button == controllers::Trigger))
 		{
 			float y = planeY(at[i]);
 			buttonsY += y;
@@ -229,23 +233,32 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 		for (float& y : ys)
 			y += shift;
 	}
-	auto place = [&](size_t i, float x, float y, float alignX, const glm::vec3& to) {
+	// toOuter: the line to the label's outer end (side), not to `to`
+	auto place = [&](size_t i, float x, float y, float alignX, const glm::vec3& to, bool toOuter = false) {
 		int w, h;
 		const unsigned texture = textTexture(list[i].text, Px, TextColour, w, h);
 		if (texture == 0 || h == 0)
 			return;
 		const float hy = Height * 0.5f, hx = hy * w / h;
-		layout.placed.push_back({ list[i].text, room(x + alignX * hx, y), hx, hy, at[i], to });
+		layout.placed.push_back({ list[i].text, room(x + alignX * hx, y), hx, hy, at[i],
+				toOuter ? room(x + alignX * hx + side * hx, y) : to });
 	};
 	for (size_t k = 0; k < column.size(); k++)
 		place(column[k], columnX, ys[k], side, room(columnX, ys[k]));
+	float stickX = 0.f, stickY = 0.f;
 	for (size_t i = 0; i < list.size(); i++)
 		if (list[i].button == controllers::Stick)
 		{
 			const float x = planeX(at[i]);
 			const float y = std::max(planeY(at[i]), ys.empty() ? -1.f : ys.front()) + StickRise;
 			place(i, x, y, 0.f, room(x, y - Height * 0.5f));
+			stickX = x;
+			stickY = y;
 		}
+	if (stacked)
+		for (size_t i = 0; i < list.size(); i++)
+			if (list[i].button == controllers::Trigger)
+				place(i, stickX, stickY + Pitch, 0.f, glm::vec3(0.f), true);
 }
 
 // A quad facing `eye` at `centre`, its top towards the room's up.

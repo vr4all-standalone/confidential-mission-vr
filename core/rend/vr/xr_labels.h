@@ -3,7 +3,8 @@
 	settings menu's Show controls, a hand that holds its controller (xr_host.h holds()) shows short
 	labels for the buttons that matter, each with a line to its button (controllers::labelPoint: on the
 	player's own controller model, its sidecar's point for that button, else controllers::anchor): the
-	right hand's to its right, the left hand's to its left, the stick's above. The words are the
+	right hand's to its right, the left hand's to its left, the stick's above and the trigger's on top of
+	the stick's (with no stick, the trigger's in the column). The words are the
 	controllers' own, by their interaction profile (Quest Touch, or the PC controllers' buttons from
 	the bindings in xr_host.cpp); the pictures are xr_panel.h's textTexture, uploaded once each.
 

@@ -74,6 +74,9 @@ where it is.
 - [ ] **Do:** read the labels on both controllers.
   **Expect:** right "A - P1 Start", "B - P1 Reload", "Trigger - P1 Shoot", "Stick - Laser"; left "X - P2 Start",
   "Y - P2 Reload", "Trigger - P2 Shoot", "Stick - Recenter", "Menu". Readable at arm's length.
+- [ ] **Do:** look where each controller's "Trigger - ... Shoot" box sits.
+  **Expect:** directly on top of its "Stick - ..." box (not under A or X), its line from the box's outer end to the
+  trigger; the same in the menu's How to play and with the Hands row flipped.
 - [ ] **Do:** tip the left controller up to see its trigger.
   **Expect:** the new "Trigger - P2 Shoot" line ends on the left trigger's front, as the right one's does. Note any
   line that points beside its button (which, how far).

@@ -2230,7 +2230,8 @@ function Test-CmCutscene {
 # The menu's Hands set to "P1 left hand - P2 right hand" (vr.P1Hand=left, 1.2 round 2: the game shows P1 on the left)
 # through the simulator, widened: each controller's buttons are its own player's. Before the first Start the labels
 # say so (left: X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot, Stick - Recenter, Menu; right: A - P2 Start, B - P2
-# Reload, Trigger - P2 Shoot, Stick - Laser). X is player 1's Start (30-52 s), which puts the single gun in the left
+# Reload, Trigger - P2 Shoot, Stick - Laser), the controllers in front of the left eye at 20-29 s (a window shot at 25 s:
+# the callouts). X is player 1's Start (30-52 s), which puts the single gun in the left
 # hand; the left controller where the right one rests by default (53 s: aimed as cm-haptics' right, so player 1 clears
 # stage 1's first room and stays in: with fewer hits player 1 was out by ~58 s, tried); 6 left pulls (54-57 s), Y at
 # 59.2 s (player 1's reload); A lets player 2 join at 60 s (the right hand takes player 2's gun); 2 left pulls (60.8,
@@ -2247,7 +2248,8 @@ function Test-CmP1Left {
 	$downs = @(foreach ($t in 68.4, 68.75, 69.1, 69.45, 69.8) { "$(T $t)=stick right 0 -1 150" })
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 76; XrSim = $true
 		Config = "$cmWidenArcade,config:vr.P1Hand=left,config:vr.WatchRam=0c155804,0c155918,0c155818:2,0c15592c:2"
-		At = @(for ($t = 30; $t -le 52; $t += 2) { "$t=xr left/x 1 200" }) +
+		At = @('20=pose left -0.1 1.45 -0.3 0 0', '20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '29=pose left -0.18 1.3 -0.35 0 0',
+			'29=pose right 0.18 1.3 -0.35 0 0') + @(for ($t = 30; $t -le 52; $t += 2) { "$t=xr left/x 1 200" }) +
 			'53=pose left 0.18 1.3 -0.35 0 0' + @(for ($i = 0; $i -lt 6; $i++) { "$(T (54 + 0.6 * $i))=xr left/trigger 1 100" }) +
 			'59.2=xr left/y 1 200' + '60=xr right/a 1 200' + @(foreach ($t in 60.8, 61.4) { "$(T $t)=xr left/trigger 1 100" }) + @(foreach ($t in 62, 62.6, 63.2) { "$(T $t)=xr right/trigger 1 100" }) +
 			'63.7=xr left/y 1 200', '67=xr right/b 1 200', '68=xr left/menu 1 150' + $downs + @('70.1=shot menu', '70.4=stick right 1 0 150',
@@ -2327,7 +2329,7 @@ function Test-CmP1Left {
 	$same = if (Test-Path -LiteralPath $before) { (Get-FileHash -LiteralPath $before).Hash -eq (Get-FileHash -LiteralPath $cfg).Hash } else { -not (Test-Path -LiteralPath $cfg) }
 	Write-Host "  build-win\emu.cfg $(if ($same) { 'as it was' } else { 'changed' })"
 	if (-not $same) { return 'build-win\emu.cfg changed by the run' }
-	return Test-RunShots $name 't070.1-menu.png'
+	return Test-RunShots $name 't025-labels.png', 't070.1-menu.png'
 }
 
 # The bundled models (S37) and the player's, merged file by file: re\make-own-models.py's fixtures in the player's
