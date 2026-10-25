@@ -108,8 +108,10 @@ constexpr int GameSlot = 0, Slots = 4;
 Slot slots[Slots];
 std::string gunLogged;	// chosenGun()'s line, as last logged
 bool rifleHeld[2];		// each player's hand holds the assault rifle (handGun()), as last logged
-// The player's own guns (xr_own.h), GunKind(OwnGuns + i): every guns/*.glb in file-name order, a
-// skipped one too. Only the chosen one is read (chosenGun()): the others are just their names.
+// The player's own guns (xr_own.h), GunKind(OwnGuns + i): every guns/*.glb in own::guns()' order (the
+// bundled ones first, then the player's, each in file-name order; a player's file with a bundled one's
+// name takes that one's place), a skipped one too. Only the chosen one is read (chosenGun()): the
+// others are just their names.
 struct OwnGun
 {
 	Model model;

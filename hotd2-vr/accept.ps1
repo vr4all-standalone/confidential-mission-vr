@@ -1191,6 +1191,33 @@ function Get-SavedSetting([string]$name, [string]$key, [string]$file = 'emu.cfg.
 	return $(if ($hit) { $hit.Matches[0].Groups[1].Value } else { $null })
 }
 
+# $body played with build-win\emu.cfg holding these settings in its [config] section, as a player's saved settings
+# (vr-test.ps1 keeps that as the run's emu.cfg.before); build-win\emu.cfg is put back as it was after.
+function Invoke-SavedSettings([hashtable]$settings, [scriptblock]$body) {
+	$cfg = Join-Path $repo 'build-win\emu.cfg'
+	$hold = "$cfg.accept-hold"
+	if (Test-Path -LiteralPath $hold) { return "$hold is there from a run that died: put it back first" }
+	$had = Test-Path -LiteralPath $cfg
+	if ($had) { Copy-Item -LiteralPath $cfg $hold }
+	try {
+		$keys = @($settings.Keys)
+		$set = @($keys | ForEach-Object { "$_ = $($settings[$_])" })
+		$lines = New-Object System.Collections.Generic.List[string]
+		$placed = $false
+		foreach ($line in @(if ($had) { Get-Content -LiteralPath $hold })) {
+			if (@($keys | Where-Object { $line -match "^$([regex]::Escape($_))\s*=" }).Count) { continue }
+			$lines.Add($line)
+			if (-not $placed -and $line -eq '[config]') { $lines.AddRange([string[]]$set); $placed = $true }
+		}
+		if (-not $placed) { $lines.InsertRange(0, [string[]](@('[config]') + $set + '')) }
+		Set-Content -LiteralPath $cfg -Value $lines -Encoding ascii
+		return & $body
+	}
+	finally {
+		if ($had) { Move-Item -LiteralPath $hold $cfg -Force } else { Remove-Item -LiteralPath $cfg -Force -ErrorAction SilentlyContinue }
+	}
+}
+
 # CM VR 1.2 (Task 1): the three guns. The Gun row, round and round: the in-game pistol (vr.Gun 1, the default), then
 # the folder guns, the bundled ones first in file-name order (re\make-own-models.py --namco-zapper in a bundled folder
 # of the harness's own: namco.glb "Arcade gun", zapper.glb "Zapper"; the user's bundled models held aside), then the
@@ -1198,9 +1225,10 @@ function Get-SavedSetting([string]$name, [string]$key, [string]$file = 'emu.cfg.
 # 20 s, pointing down past the panel (its ray off the rows: a gun change moves the muzzle, which would move the
 # selection); the menu at 58 s, the stick down twice to Gun, then + three times (59.5, 60, 60.5 s): the Arcade gun, the
 # Zapper, the box gun, in that order, saved as vr.Gun 4, vr.GunFile boxgun. 1.1's saved choices 0 (Auto), 2 (the
-# cabinet gun) and 3 (the built-in arcade gun) read as the pistol, the setting not rewritten ("migrate-<n>"); vr.Gun 4
-# with vr.GunFile NAMCO (1.1's Namco gun, the case folded) is the Arcade gun ("upgrade", Review Focus 1). vr.BuiltInGun
-# (PC): the built-in gun, no gun file read ("builtin"). Without the pistol's file (renamed .hold, back in finally): the
+# cabinet gun) and 3 (the built-in arcade gun), saved in emu.cfg as a 1.1 player has them (Invoke-SavedSettings), read
+# as the pistol, the saved value not rewritten ("migrate-<n>"); vr.Gun 4 with vr.GunFile NAMCO (1.1's Namco gun, the
+# case folded) is the Arcade gun ("upgrade", Review Focus 1). vr.BuiltInGun (PC): the built-in gun though the bundled
+# Arcade gun is there, no gun file read ("builtin"). Without the pistol's file (renamed .hold, back in finally): the
 # Arcade gun ("nopistol"), and with no gun file either, the built-in gun ("nofiles").
 function Test-CmGun {
 	if (-not (Test-Path -LiteralPath $cmPistolFile)) { return "no ${cmPistolFile}: run cm-rip-pistol first (the rip scenarios make the guns; the full list does)" }
@@ -1225,15 +1253,18 @@ function Test-CmGun {
 		}
 		foreach ($n in 0, 2, 3) {
 			$run = "accept-cm-gun-migrate-$n"
-			$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $run; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=$n"
-				Expect = @('XR: gun: in-game pistol \(chosen\)$')
-				Reject = @('XR: initialisation failed', 'XR: gun: (?!in-game pistol \(chosen\)$)') }
-			if ($why) { return "vr.Gun ${n}: $why" }
-			# read as 1, nothing rewritten: the run's emu.cfg keeps vr.Gun as it was
+			$why = Invoke-SavedSettings @{ 'vr.Gun' = "$n" } {
+				Invoke-VrTest @{ Game = 'confmiss'; Name = $run; Seconds = 15; XrSim = $true; Config = $cmWiden
+					Expect = @('XR: gun: in-game pistol \(chosen\)$')
+					Reject = @('XR: initialisation failed', 'XR: gun: (?!in-game pistol \(chosen\)$)') }
+			}
+			if ($why) { return "saved vr.Gun ${n}: $why" }
+			# read as 1, nothing rewritten: the run's emu.cfg had vr.Gun = n, and still has it after
 			$before = Get-SavedSetting $run 'vr.Gun' 'emu.cfg.before'
 			$after = Get-SavedSetting $run 'vr.Gun'
-			if ($before -cne $after) { return "vr.Gun ${n}: the run's emu.cfg had vr.Gun = $before, after it $after (rewritten)" }
-			Write-Host "  vr.Gun ${n}: emu.cfg's vr.Gun not rewritten ($(if ($null -eq $after) { 'none' } else { $after }))"
+			Write-Host "  saved vr.Gun ${n}: the run's emu.cfg had vr.Gun = $before, after it $after (want $n, $n)"
+			if ($before -cne "$n") { return "saved vr.Gun ${n}: the run's emu.cfg had vr.Gun = $before (not the saved $n)" }
+			if ($after -cne "$n") { return "saved vr.Gun ${n}: the run rewrote vr.Gun to $after" }
 		}
 		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-upgrade'; Seconds = 15; XrSim = $true; Config = "$cmWiden,config:vr.Gun=4,config:vr.GunFile=NAMCO"
 			Expect = @('XR: gun: Arcade gun \(chosen\)$')
@@ -1242,9 +1273,12 @@ function Test-CmGun {
 		return $null
 	}
 	if ($why) { return $why }
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-builtin'; Seconds = 15; XrSim = $true; Config = $cmWidenArcade
-		Expect = @('XR: gun: built-in gun \(chosen: vr\.BuiltInGun\)$')
-		Reject = @('XR: initialisation failed', 'XR: gun: (?!built-in gun)', 'XR: own gun "') }
+	# the bundled Arcade gun offered (the harness's namco.glb), and still the built-in gun, nothing read
+	$why = Invoke-OwnFolders -Bundled '--namco-zapper' {
+		Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-gun-builtin'; Seconds = 15; XrSim = $true; Config = $cmWidenArcade
+			Expect = 'XR: own gun bundled models/guns/namco\.glb offered: "Arcade gun"', 'XR: gun: built-in gun \(chosen: vr\.BuiltInGun\)$'
+			Reject = @('XR: initialisation failed', 'XR: gun: (?!built-in gun)', 'XR: own gun "') }
+	}
 	if ($why) { return "vr.BuiltInGun: $why" }
 	$held = "$cmPistolFile.hold"
 	try {
