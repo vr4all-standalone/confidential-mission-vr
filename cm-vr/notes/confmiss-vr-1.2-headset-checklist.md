@@ -4,8 +4,8 @@ One session on the Quest 3, in this order (about 75 minutes), for what the PC ha
 OpenXR simulator, `vr.XrSim`) cannot prove. Each item says what to do and what should happen.
 
 **The build** (made by `package-release.ps1` and signed with the release key; not installed yet):
-- Quest: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-quest.apk`, versionName `1.2.0-g0728039be` (versionCode 9, built 2026-10-24 from commit 0728039be, signed with the release key)
-- PC VR: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-pcvr.zip` (its `flycast.exe` a Release build of the same commit, 0728039be)
+- Quest: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-quest.apk`, versionName `1.2.1-g<commit>` (versionCode 10, built 2026-10-25 from the `cm-vr: 1.2.1` commit, signed with the release key)
+- PC VR: `E:\___flattovrdev\hotd2-vr\dist\confidential-mission-vr-pcvr.zip` (its `flycast.exe` a Release build of the same commit)
 
 **How to report:** play the build, then mark each item `[x]` (works) or `[!]` (fails) and add a
 short note after a failing one (what you saw, where in the game, which hand). Leave items you

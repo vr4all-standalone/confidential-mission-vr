@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release: v1.2.0](https://img.shields.io/badge/Release-v1.2.0_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release: v1.2.1](https://img.shields.io/badge/Release-v1.2.1_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
@@ -573,7 +573,7 @@ This builds the `vr` build type (arm64, optimised, OpenXR) to
 `shell\android-studio\flycast\build\outputs\apk\vr\flycast-vr.apk`. It installs as its own
 app, *Confidential Mission VR* (`com.vrlightgunhub.confmiss`), next to a normal Flycast. Its
 version is `hubVersion` in `shell/android-studio/flycast/build.gradle.kts` and the commit
-(`1.2.0-g<commit>`; versionCode 9). Without the release key (below) it is signed with the public debug key,
+(`1.2.1-g<commit>`; versionCode 10). Without the release key (below) it is signed with the public debug key,
 and Gradle says so: fine for trying things out, not for a release.
 
 `cm-vr\build-win.cmd` builds the Windows version (Visual Studio 2022 Build Tools) with
@@ -615,7 +615,7 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
    `CREDITS.txt`); without it both come without models.
 3. **The packages.** The version is `hubVersion` and `versionCode` in
    `shell/android-studio/flycast/build.gradle.kts` and `$appVersion` in `package-release.ps1`
-   (1.2.0, versionCode 9, for this release). `powershell -File cm-vr\package-release.ps1` builds both versions and
+   (1.2.1, versionCode 10, for this release). `powershell -File cm-vr\package-release.ps1` builds both versions and
    puts `confidential-mission-vr-quest.apk` and `confidential-mission-vr-pcvr.zip` (`flycast.exe`,
    `emu.cfg`, `README.txt`, `LICENSE.txt`, `Play Confidential Mission.cmd`, and with the bundled
    models `CREDITS.txt` and `data\models\`) in `dist\`. Both carry the licence, `LICENSE.txt`
