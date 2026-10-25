@@ -103,6 +103,17 @@ Quest Touch:
 | grip + thumbstick up/down | world size (kept) |
 | thumbstick | the game's D-pad (menus) |
 
+The how-to-play labels by the controllers' buttons (before play starts, and the menu's How to play):
+- right controller: A - P1 Start · B - P1 Reload · Trigger - P1 Shoot · Stick - Laser
+- left controller: X - P2 Start · Y - P2 Reload · Trigger - P2 Shoot · Stick - Recenter · Menu
+
+"Stick" is the stick click. Before player 2 joins, the left trigger shoots for player 1 too: the
+one gun goes to the hand that fires.
+
+In the game's cutscenes (the stage intros and the story scenes) both hands show their
+controllers, without labels, and the guns come back the moment play resumes. Start still skips
+a scene.
+
 Reload by shooting away from the game's view (past the grey ring), as before; with two guns,
 pointing a gun at the floor reloads it too. With the menu's Reload at Point off-screen, pointing
 the gun away from the game's view is enough: it reloads once, with a short buzz, each time it
@@ -141,7 +152,8 @@ Quit with the Meta button, then *Quit*.
 | World size | grip + thumbstick up/down | grip + trackpad up/down | grip + thumbstick up/down |
 
 Where the settings menu is a hold, a shorter press of the left menu button is player 2's Start
-when you let go.
+when you let go. Their how-to-play labels name each controller's own buttons the same way
+("Pad click - P1 Reload", "Menu - P2 Start (hold: Menu)").
 
 ## The menu
 

@@ -1571,6 +1571,61 @@ bool player2Prompting() {
 	return steadyMs() - p2PromptAt < 500;
 }
 
+// The game's cutscenes (cutscene()): its letterbox bars, the profile's letterboxTextures as
+// hideLetterbox counts them (CM's 400680 at W 0.2, drawn in its cutscenes only), in the frames the
+// game draws while a player is in the game (gunRam.playing: the attract's scenes have the bars too,
+// with no player in). Each VBlank after a drawn frame (cutscenePasses: the passes parsed since the
+// last one) closes that frame: on after CutsceneOnFrames frames in a row with the bars (~0.3 s), off
+// at the CutsceneOffFrames-th frame without them (a Start that skips a scene brings the guns back at
+// once). Counted per drawn frame, not by the clock, so a slow frame doesn't end a scene. See
+// hotd2-vr/notes/confmiss-findings.md, Cutscenes.
+constexpr u32 CutsceneOnFrames = 18, CutsceneOffFrames = 3;
+static std::atomic<u32> cutscenePasses { 0 }, cutsceneBars { 0 };
+static std::atomic<bool> cutsceneOn { false };
+
+static void closeCutsceneFrame(Event, void *)
+{
+	static const GameProfile *profWas;
+	static u32 withBars, without;
+	const GameProfile *prof = activeProfile;
+	if (prof != profWas)
+	{
+		profWas = prof;
+		withBars = without = 0;
+		cutsceneOn = false;
+	}
+	if (prof == nullptr || prof->letterboxTextures[0] == 0 || prof->gunRam.playing == 0 || cutscenePasses.exchange(0) == 0)
+		return;
+	const bool bars = cutsceneBars.exchange(0) > 0;
+	if (bars)
+	{
+		withBars++;
+		without = 0;
+	}
+	else if (++without >= CutsceneOffFrames)
+		withBars = 0;
+	// (the players' byte holds their two bits only: anything else is the RAM before the game clears it)
+	const u8 playing = ReadMem8_nommu(0x8C000000u | (prof->gunRam.playing & 0x01FFFFFFu));
+	const bool inGame = (playing & ~3) == 0 && (playing & 3) != 0;
+	const bool on = inGame && withBars >= CutsceneOnFrames;
+	if (on != cutsceneOn)
+	{
+		cutsceneOn = on;
+		NOTICE_LOG(RENDERER, "VR: cutscene %s", on ? "on" : "off");
+	}
+}
+
+static struct CutsceneRegistration
+{
+	CutsceneRegistration() {
+		EventManager::listen(Event::VBlank, closeCutsceneFrame);
+	}
+} cutsceneRegistration;
+
+bool cutscene() {
+	return cutsceneOn;
+}
+
 // The prompt's comings and goings logged, so PC runs show what the headset's join and leave
 // go by (see xr_host.cpp's dual wielding). Held for a second after its last frame, not half
 // a second: the prompts blink (HOTD2's about 1.05 s on and 0.53-0.56 s off, CM's 0.5 s on
@@ -2024,6 +2079,8 @@ static void clipFarOut(rend_context& ctx, std::vector<PolyParam>& list, u32 from
 void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass& previousPass)
 {
 	// (Naomi 2 polygons are still in model space here, and aren't reprojected anyway)
+	if (!ctx.isRTT)
+		cutscenePasses++;
 	if (!config::VrReproject || ctx.isRTT || settings.platform.isNaomi2())
 		return;
 	const bool onPC = !xr::enabled();
@@ -2052,6 +2109,8 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 		if (bars > 0 && !barsShown)
 			NOTICE_LOG(RENDERER, "VR: letterbox bars hidden (%u drawn with the profile's textures at W %.3f)", bars, activeProfile->letterboxW);
 		barsShown = bars > 0;
+		if (bars > 0)
+			cutsceneBars++;
 	}
 	if (!snapFlatScreen(ctx, pass, previousPass, hudW))
 	{

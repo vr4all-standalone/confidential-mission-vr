@@ -247,6 +247,10 @@ struct NewGameRegistration
 // How to play: the hands that hold their controllers show them, with the labels: before the game's
 // first Start or pull, and while the menu's How to play is on. (The labels drawn only with the light
 // gun on, vr.XrGun; without it the controllers always show.)
+// The game's cutscenes once play has started (vr::cutscene(), read once a frame in updateLightgun):
+// both hands hold their controllers, with no labels, until play resumes.
+bool inCutscene;
+
 bool labelsOn()
 {
 	return menuHowToPlay || !p1Armed;
@@ -1819,14 +1823,15 @@ void retryControllerModels()
 }
 
 // The controllers drawn this frame (xr_controllers.h): only while how to play shows (labelsOn():
-// before play starts, the menu's How to play; always with the light gun off, vr.XrGun), in each
+// before play starts, the menu's How to play; always with the light gun off, vr.XrGun) and in the
+// game's cutscenes (inCutscene), in each
 // tracked hand that shows no gun, at its grip pose, while focused and vr.ShowControllers is on. Once
 // play starts a hand without a gun draws nothing (the menu's pointer lines still start from it).
 // Logs "XR: controllers shown: left and right" (none, left, right) where that changes, tracking aside.
 void updateControllers(XrTime time)
 {
 	const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
-	const bool howToPlay = labelsOn() || !config::VrXrGun;
+	const bool howToPlay = labelsOn() || inCutscene || !config::VrXrGun;
 	int shown = 0;		// the hands that show one: 1 left, 2 right
 	for (int hand : { Left, Right })
 	{
@@ -1993,6 +1998,11 @@ void updateLightgun(XrTime time)
 	// game started elsewhere): the hands get back what they held.
 	if (menuHowToPlay && !menuOpen)
 		setHowToPlay(false, "menu closed");
+	if ((p1Armed && vr::cutscene()) != inCutscene)
+	{
+		inCutscene = !inCutscene;
+		noteHolds(inCutscene ? "cutscene" : "play");
+	}
 	// The game runs itself to its game over scene for the agent's hands, or its attract demo
 	// for the hero's staff (hands_rip.h): its buttons are its own then.
 	const bool preparing = hands::preparing();
@@ -2690,6 +2700,8 @@ bool howToPlayOn()
 Holds holds(int hand)
 {
 	if (menuHowToPlay || (hand != Left && hand != Right))
+		return Holds::Controller;
+	if (p1Armed && inCutscene)
 		return Holds::Controller;
 	if (dualWield && hand == guns[1].hand)
 		return Holds::Gun;

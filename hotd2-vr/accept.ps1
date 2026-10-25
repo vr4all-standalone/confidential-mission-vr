@@ -167,8 +167,9 @@ $cmWidenArcade = "$cmWiden,config:vr.GameHands=no,config:vr.BuiltInGun=yes"
 $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000, 9000), @(5000, 1000), @(5000, 9000), @(1000, 5000), @(9000, 5000))
 
 function Get-CmStarts { for ($t = 30; $t -le 52; $t += 2) { "$t=start 0" } }
-# the same through the simulator's right controller (vr-test.ps1 -XrSim): A, held 200 ms
-function Get-CmStartsXr { for ($t = 30; $t -le 52; $t += 2) { "$t=xr right/a 1 200" } }
+# the same through the simulator's right controller (vr-test.ps1 -XrSim): A, held 200 ms; -Until: the last press
+# (44: the stage 1 intro plays out)
+function Get-CmStartsXr([double]$Until = 52) { for ($t = 30; $t -le $Until; $t += 2) { "$t=xr right/a 1 200" } }
 
 # The window as wide as a Quest 3 eye (104 x 96 degrees: the tan of its half angles), for the
 # floor's runs; their shot every 0.4 s from 52 to 72 s.
@@ -812,11 +813,16 @@ function Test-CmControllersRun {
 	if ($why) { return "no controller in the left hand: $why" }
 	$why = Invoke-VrCheck 'same', (Join-Path $dir 't057-playin.png'), (Join-Path $dir 't058-playout.png'), '--box', $cmControllerBox
 	if ($why) { return "a controller drawn in the left hand in play: $why" }
-	# the controllers go with the first Start (how to play ends) and stay gone
+	# the controllers go with the first Start (how to play ends) and stay gone, but for the game's cutscenes (1.2): the
+	# stage 1 intro, cut short by the Starts at ~46-49 s, shows both and takes them away again
 	$n = Get-LogCount $name 'XR: controllers shown: ' -From 29 -To 62
 	$none = Get-LogCount $name 'XR: controllers shown: none$' -From 29 -To 62
-	Write-Host "  $n lines 'XR: controllers shown' at 29-62 s, $none of them none (want 1 and 1: the first Start)"
-	if ($n -ne 1 -or $none -ne 1) { return "$n lines 'XR: controllers shown' after the first Start ($none none), want one none" }
+	$both = Get-LogCount $name 'XR: controllers shown: left and right$' -From 29 -To 62
+	$scenes = Get-LogCount $name 'XR: right hand: gun -> controller \(cutscene\)$' -From 29 -To 62
+	Write-Host "  $n lines 'XR: controllers shown' at 29-62 s, $none of them none, $both both, in $scenes cutscenes (want 1 + 2 a scene: the first Start, then both and none a scene)"
+	if ($scenes -gt 1 -or $n -ne 1 + 2 * $scenes -or $none -ne 1 + $scenes -or $both -ne $scenes) {
+		return "$n lines 'XR: controllers shown' after the first Start ($none none, $both both) with $scenes cutscenes, want one none and both/none a scene"
+	}
 	return $null
 }
 
@@ -884,7 +890,7 @@ function Test-CmHands {
 		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '27=shot labels2') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
 			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150', '92.5=xr right/a 1 150',
 			'93.5=stick right 1 0 150', '95=xr left/menu 1 150', '96=xr right/trigger 1 100', '97=xr left/menu 1 150',
-			"97.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 8 -U 0.5)", '98.5=xr right/trigger 1 1000', '99=xr right/b 1 150',
+			"97.5=pose right 0.18 1.3 -0.35 $(Get-CmMenuAim -Row 10 -U 0.5)", '98.5=xr right/trigger 1 1000', '99=xr right/b 1 150',
 			'100=pose right 0.1 1.45 -0.3 0 0', '101=xr right/trigger 1 100')
 		Expect = 'XR: labels off \(start\)', 'XR: right hand: controller -> gun \(start\)',
 			'XR: left hand: controller -> gun \(player 2 joins\)', 'XR: left hand: gun -> controller \(player 2 out\)',
@@ -2079,6 +2085,82 @@ function Test-CmOwnControllers {
 	}
 }
 
+# Controllers in the game's cutscenes (CM VR 1.2, spec section 7): vr::cutscene() is CM's letterbox bars (tex 400680)
+# in 18 frames in a row while a player is in (0x0C15A494), off at the third frame without them; both hands then hold
+# their controllers (no labels) and the guns come back when play resumes (findings, Cutscenes).
+# - intro (accept-cm-cutscene): Start to 44 s, so the briefing and the stage 1 intro play out (log ~59.5-81.4 s); then
+#   the first room with no shots, player 1 out (~90 s), game over and the attract, whose scenes have the bars too
+#   (~104-107 s) with no player in. One flip to the controller in the intro, one back before the first room, none after.
+# - skip (accept-cm-cutscene-skip): the same, player 2 joining with X at 50 s (the briefing), and A 1 s after the
+#   intro's flip (a key on that line): both hands flip, and both guns come back within 2 s of the press, with the
+#   bars: the game takes ~1.4 s to leave its intro after a Start, the bars on to the end (findings, Cutscenes; the
+#   hall run's Start at 48 s the same), and the guns come back within 3 frames of them.
+# - fight (accept-cm-hall, PC): the hall route, shots from 52.5 s, player 2 in 60-85 s: "VR: cutscene on" only in its
+#   three scenes (the intro ~46 s, ~66.5 s and the hall's entrance at ~121-125 s, its time varying with the route's kills), once each with its "off", none in the rooms between.
+function Get-CmCutsceneClocks([string]$run, [string]$regex, [double]$From = 0, [double]$To = 1e9) {
+	@(Get-LogClocks $run $regex | Where-Object { $_ -ge $From -and $_ -lt $To })
+}
+function Test-CmCutscene {
+	$intro = 'accept-cm-cutscene'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $intro; Seconds = 135; XrSim = $true; Config = $cmWidenArcade
+		At = @(Get-CmStartsXr -Until 44); Reject = @('XR: initialisation failed', 'XR: left hand: ')
+		Expect = 'VR: cutscene on$', 'VR: cutscene off$', 'XR: right hand: gun -> controller \(cutscene\)$', 'XR: right hand: controller -> gun \(play\)$' }
+	if ($why) { return $why }
+	$on = @(Get-CmCutsceneClocks $intro 'XR: right hand: gun -> controller \(cutscene\)$')
+	$off = @(Get-CmCutsceneClocks $intro 'XR: right hand: controller -> gun \(play\)$')
+	$changes = @(Get-CmCutsceneClocks $intro 'XR: (right|left) hand: ' 31)
+	$labels = @(Get-CmCutsceneClocks $intro 'XR: labels on' 31)
+	Write-Host "  intro: to the controller at $($on -join ', ') s, back at $($off -join ', ') s (want one each, 55-65 s and 75-85 s); $($changes.Count) hold changes after 31 s (want 2); $($labels.Count) 'labels on' after 31 s (want 0)"
+	if ($on.Count -ne 1 -or $on[0] -lt 55 -or $on[0] -ge 65) { return "intro: want one 'gun -> controller (cutscene)' at 55-65 s, got $($on -join ', ')" }
+	if ($off.Count -ne 1 -or $off[0] -lt 75 -or $off[0] -ge 85) { return "intro: want one 'controller -> gun (play)' at 75-85 s, got $($off -join ', ')" }
+	if ($changes.Count -ne 2) { return "intro: $($changes.Count) hold changes after 31 s, want 2 (none in the room, the game over or the attract)" }
+	if ($labels.Count) { return "intro: the labels came back in the game ($($labels.Count) 'XR: labels on' after 31 s)" }
+	# the controllers drawn in the scene: both, with the flip, and gone with the gun's return
+	$both = @(Get-CmCutsceneClocks $intro 'XR: controllers shown: left and right$' 31)
+	$none = @(Get-CmCutsceneClocks $intro 'XR: controllers shown: none$' 31)
+	Write-Host "  intro: controllers shown both at $($both -join ', ') s, none at $($none -join ', ') s (want one each, with the flips)"
+	if ($both.Count -ne 1 -or [Math]::Abs($both[0] - $on[0]) -gt 0.1 -or $none.Count -ne 1 -or [Math]::Abs($none[0] - $off[0]) -gt 0.1) {
+		return "intro: want both controllers shown with the flip at $($on[0]) s and none with the gun back at $($off[0]) s, got $($both -join ', ') / $($none -join ', ')"
+	}
+	$why = Test-LogCount $intro 'VR: cutscene on$' 1
+	if ($why) { return "intro: $why (the attract's scenes count with no player in)" }
+
+	$skip = 'accept-cm-cutscene-skip'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $skip; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
+		At = @(Get-CmStartsXr -Until 44) + '50=xr left/x 1 200'; On = 'XR: right hand: gun -> controller \(cutscene\)|1|xr right/a 1 200'
+		Reject = @('XR: initialisation failed')
+		Expect = 'XR: player 2 joins', 'XR: right hand: gun -> controller \(cutscene\)$', 'XR: left hand: gun -> controller \(cutscene\)$',
+			'XR: right hand: controller -> gun \(play\)$', 'XR: left hand: controller -> gun \(play\)$' }
+	if ($why) { return $why }
+	$at = (Get-CmCutsceneClocks $skip 'XR: right hand: gun -> controller \(cutscene\)$')[0]
+	# the keyed press as vr-test logged it (its clock ~0.2 s ahead of the log's: taken as the log's, so the wait reads longer)
+	$press = @(Get-Content -LiteralPath (Join-Path $repo "build-win\vrtest\$skip\actions.log") | ForEach-Object {
+		if ($_ -match '^\s*(\d+(\.\d+)?) xr right/a 1') { [double]::Parse($Matches[1], $inv) } } | Where-Object { $_ -gt $at + 0.5 })[0]
+	if ($null -eq $press) { return "skip: no keyed 'xr right/a' after $at s in actions.log" }
+	foreach ($hand in 'right', 'left') {
+		$back = @(Get-CmCutsceneClocks $skip "XR: $hand hand: controller -> gun \(play\)$" $at)
+		$d = $(if ($back) { [Math]::Round($back[0] - $press, 3) } else { 'none' })
+		$end = @(Get-CmCutsceneClocks $skip 'VR: cutscene off$' $at)
+		Write-Host "  skip: the $hand gun back at $($back -join ', ') s, $d s after the press at $press s, the scene's end at $($end -join ', ') s (want one, within 2.0 s of the press and 0.1 s of the end)"
+		if ($back.Count -ne 1 -or $back[0] - $press -gt 2.0 -or $end.Count -ne 1 -or [Math]::Abs($back[0] - $end[0]) -gt 0.1) {
+			return "skip: the $hand gun back at $($back -join ', ') s, the press at $press s, the scene's end at $($end -join ', ') s (want one within 2.0 s of the press, 0.1 s of the end)"
+		}
+	}
+
+	$why = Invoke-CmRun 'accept-cm-hall'
+	if ($why) { return $why }
+	$ons = @(Get-LogClocks 'accept-cm-hall' 'VR: cutscene on$')
+	$offs = @(Get-LogClocks 'accept-cm-hall' 'VR: cutscene off$')
+	Write-Host "  fight: cutscene on at $($ons -join ', ') s, off at $($offs -join ', ') s (want 3 each: 45-50, 65-71, 110-135 s)"
+	$windows = @(@(45, 50), @(65, 71), @(110, 135))
+	if ($ons.Count -ne 3 -or $offs.Count -ne 3) { return "fight: $($ons.Count) 'cutscene on' and $($offs.Count) 'off' lines, want 3 each (no flicker)" }
+	for ($k = 0; $k -lt 3; $k++) {
+		$w = $windows[$k]
+		if ($ons[$k] -lt $w[0] -or $offs[$k] -ge $w[1] -or $offs[$k] -le $ons[$k]) { return "fight: scene $($k + 1) on $($ons[$k]) s, off $($offs[$k]) s, want both in $($w[0])-$($w[1]) s" }
+	}
+	return $null
+}
+
 # The bundled models (S37) and the player's, merged file by file: re\make-own-models.py's fixtures in the player's
 # folders (build-win\guns: the box gun alone; build-win\controllers: right.glb alone) and in a bundled folder of the
 # harness's own, build-win\data\models (the box gun, aa-early "Early gun", both controllers). The player's boxgun.glb goes
@@ -2128,7 +2210,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	# cm-gun after the rip scenarios: it needs the guns' files they leave
 	'cm-gun' = 'Test-CmGun'
 	'cm-rifle-sim' = 'Test-CmRifleSim'; 'cm-rifle-p2' = 'Test-CmRifleP2'; 'cm-kick' = 'Test-CmKick'; 'cm-rifle-file' = 'Test-CmRifleFile'
-	'cm-gun-angle' = 'Test-CmGunAngle'; 'cm-reload-point' = 'Test-CmReloadPoint'
+	'cm-gun-angle' = 'Test-CmGunAngle'; 'cm-reload-point' = 'Test-CmReloadPoint'; 'cm-cutscene' = 'Test-CmCutscene'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'cm-own-gun' = 'Test-CmOwnGun'; 'cm-own-gun-file' = 'Test-CmOwnGunFile'; 'cm-own-controllers' = 'Test-CmOwnControllers'
 	'own-folders' = 'Test-OwnFolders'; 'cm-bundled' = 'Test-CmBundled'
