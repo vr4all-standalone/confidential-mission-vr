@@ -9,7 +9,9 @@
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
-**[⬇️ Download the Quest APK](../../releases/latest/download/confidential-mission-vr-quest.apk)** • **[🖥️ PC VR zip](../../releases/latest/download/confidential-mission-vr-pcvr.zip)** • **[🎮 Controls](#controls)** • **[🌐 VR4ALL](https://github.com/vr4all-standalone/vr4all-standalone)**
+**[⬇️ Download the Quest APK](../../releases/latest/download/confidential-mission-vr-quest.apk)** • **[🖥️ PC VR zip](../../releases/latest/download/confidential-mission-vr-pcvr.zip)** • **[🎮 Controls](#controls)**
+
+**[🌐 VR4ALL - Standalone VR Mod Installer](https://github.com/vr4all-standalone/vr4all-standalone)**
 
 </div>
 
