@@ -276,7 +276,7 @@ even with the laser off.
 | Reload | Shoot off-screen (a pull away from the game's view reloads, as in the arcade) or Point off-screen (pointing away is enough; `vr.Reload`). B and Y reload either way |
 | Hands | P1 right hand - P2 left hand (the default) or P1 left hand - P2 right hand (`vr.P1Hand`): which controller is player 1's, with its trigger, Start and reload. At P1 left hand, X is player 1's Start and Y its reload, A player 2's Start (join) and B its reload, and the how-to-play labels follow. With two players in, the guns change hands when the menu closes; with one gun, the gun still goes to the hand that fires |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
-| Haptics | Off, Low, Normal or Strong (`vr.Haptics`); each change gives a sample knock in the hand that made it |
+| Haptics | Off, Light, Medium (the default) or Strong (`vr.Haptics`): Light is 1.2's Normal, Medium 1.2's Strong, Strong half as long again; each change gives a sample knock at the new level in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
 | Panel distance | the 2D plane's distance, 15 to 120 game units, 5 a step (`vr.HudDepth`) |
 | Wider view | the game's wider view, On or Off (`vr.Widen`); it changes at the next start, and says "(next start)" until then |
@@ -469,7 +469,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.ShowGun` | yes | the gun model |
 | `vr.GunScale` | 0.68 | size of the gun, times the 25 cm arcade gun it is modelled on (also set with grip + thumbstick) |
 | `vr.DropShotMarker` | yes | hide the game's own 2D shot flash after shots into the 3D scene (with `no` it shows at the stock-framed spot, not where the shot landed) |
-| `vr.Haptics` | 2 | the knock in the hand: 0 off, 1 low, 2 normal, 3 strong |
+| `vr.Haptics` | medium | the knock in the hand: `off`, `light`, `medium` or `strong` (the menu's Haptics); 1.2's 0, 1 (low), 2 (normal) and 3 read as off, light, medium and strong |
 | `vr.Gun` | 1 | the gun in your hand: 1 the in-game pistol, 4 a folder gun, the one `vr.GunFile` names (the bundled `namco` Arcade gun and `zapper`, or one of your own; Your own models). 1.1's 0 (auto), 2 (the cabinet gun) and 3 (the arcade gun) read as 1 |
 | `vr.GunFile` | (none) | with `vr.Gun` 4: your gun's file name in `guns/`, without `.glb` (set by the menu) |
 | `vr.GunAngle` | 0 | the gun tilted in the hand about the grip, degrees, -30 to 30 (+ the muzzle up); the menu's Gun angle |

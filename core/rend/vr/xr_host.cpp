@@ -1229,17 +1229,17 @@ float floatAction(XrAction action, int hand)
 	return XR_SUCCEEDED(XR(xrGetActionStateFloat)(session, &info, &state)) && state.isActive ? state.currentState : 0.f;
 }
 
-// A buzz in a hand, at vr.Haptics' strength (read on each call: the menu changes it live): 0
-// off, 1 low (0.45 of the amplitude), 2 normal, 3 strong (1.6 times as long).
+// A buzz in a hand, at vr.Haptics' strength (hapticsLevel(), read on each call: the menu changes it
+// live): 0 off, 1 light (as given: 1.2's normal), 2 medium (1.6 times as long: 1.2's strong, the
+// default), 3 strong (2.4 times, half as long again as medium: the amplitudes are already at the full
+// 1.0 where it counts, so a stronger knock is a longer one). Every kind of pulse alike.
 float haptic(int hand, float seconds, float amplitude)
 {
-	static constexpr float amplitudes[4] { 0.f, 0.45f, 1.f, 1.f };
-	static constexpr float durations[4] { 0.f, 1.f, 1.f, 1.6f };
-	const int strength = std::clamp((int)config::VrHaptics, 0, 3);
+	static constexpr float durations[4] { 0.f, 1.f, 1.6f, 2.4f };
+	const int strength = hapticsLevel();
 	if (strength == 0)
 		return 0.f;
 	seconds *= durations[strength];
-	amplitude *= amplitudes[strength];
 	XrHapticActionInfo info { XR_TYPE_HAPTIC_ACTION_INFO };
 	info.action = hapticAction;
 	info.subactionPath = handPaths[hand];
@@ -2775,6 +2775,19 @@ int p1Hand()
 	std::string hand = config::VrP1Hand.get();
 	std::transform(hand.begin(), hand.end(), hand.begin(), [](unsigned char c) { return (char)std::tolower(c); });
 	return hand == "left" ? Left : Right;
+}
+
+int hapticsLevel()
+{
+	std::string level = config::VrHaptics.get();
+	std::transform(level.begin(), level.end(), level.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	if (level == "off" || level == "0")
+		return 0;
+	if (level == "light" || level == "low" || level == "1")
+		return 1;
+	if (level == "strong" || level == "3")
+		return 3;
+	return 2;	// medium, normal, 2, missing or anything else
 }
 
 void sampleKnock(int hand)

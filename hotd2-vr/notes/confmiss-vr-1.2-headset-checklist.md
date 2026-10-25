@@ -124,6 +124,10 @@ where it is.
   shot kicks again.
 - [ ] **Do:** Haptics Off, a few shots.
   **Expect:** no knock, but the gun still kicks and flashes on each round.
+- [ ] **Do:** ≡, the Haptics row: step it from Off through Light, Medium and Strong, a few shots at each.
+  **Expect:** a fresh install (or 1.2's Normal) starts at Medium; a sample knock at the new level with each step; Light
+  feels like 1.2's Normal, Medium like 1.2's Strong, Strong clearly longer than Medium (shots, empty clicks, the rifle's
+  bursts, still a row of separate knocks).
 
 ## 9. The rifle with each gun
 

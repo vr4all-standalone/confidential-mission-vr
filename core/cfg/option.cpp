@@ -137,7 +137,7 @@ Option<bool> VrAimWidened("vr.AimWidened", false);	// aim on the widened view (t
 Option<bool> VrWidenFov("vr.WidenFov", true);	// widen through the game's field of view when its profile knows where
 Option<bool> VrDropShotMarker("vr.DropShotMarker", true);	// hide the game's own 2D shot marker after shots into 3D
 Option<bool> VrDropShotFlash("vr.DropShotFlash", true);	// hide a bright full-screen flash right after any shot
-Option<int> VrHaptics("vr.Haptics", 2);	// the knock in the hand: 0 off, 1 low, 2 normal, 3 strong
+Option<std::string> VrHaptics("vr.Haptics", "medium");	// the knock in the hand: "off", "light" (1.2's normal), "medium" (1.2's strong) or "strong" (half as long again); 1.2's 0-3 and low/normal read as off, light, medium, strong; anything else as medium (the VR menu's Haptics; xr_host.h hapticsLevel())
 Option<int> VrGun("vr.Gun", 1);	// the gun drawn: 1 the in-game pistol, 4 (and over) a folder gun, the one vr.GunFile names (guns/: the bundled Arcade gun and Zapper, the player's own; xr_own.h); any other (1.1's 0 auto, 2 the cabinet gun, 3 the arcade gun) reads as 1 (the VR menu)
 Option<std::string> VrGunFile("vr.GunFile", "");	// with vr.Gun 4: the player's own gun, its file name in guns/ without .glb (the VR menu)
 Option<int> VrGunAngle("vr.GunAngle", 0);	// the gun tilted in the hand about its grip, degrees, + the muzzle up; read as -30 to 30 (the VR menu's Gun angle)

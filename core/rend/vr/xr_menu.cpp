@@ -30,7 +30,9 @@ constexpr int Left = 0, Right = 1;
 
 const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Hands", "Laser", "Haptics",
 		"World size", "Panel distance", "Wider view", "How to play", "Quit" };
-const char *const HapticsNames[4] { "Off", "Low", "Normal", "Strong" };
+const char *const HapticsNames[4] { "Off", "Light", "Medium", "Strong" };
+// vr.Haptics' words, saved by the Haptics row (hapticsLevel() reads them, and 1.2's numbers)
+const char *const HapticsWords[4] { "off", "light", "medium", "strong" };
 const char *const ReloadNames[2] { "Shoot off-screen", "Point off-screen" };
 // vr.P1Hand by p1Hand() (0 left, 1 right), the user's words: the game shows P1 on the left, P2 on the right
 const char *const HandsNames[2] { "P1 left hand - P2 right hand", "P1 right hand - P2 left hand" };
@@ -121,7 +123,7 @@ std::string value(int row)
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
 	case Haptics:
-		return HapticsNames[std::clamp((int)config::VrHaptics, 0, 3)];
+		return HapticsNames[hapticsLevel()];
 	case WorldSize:
 		std::snprintf(s, sizeof(s), "%.3f", (float)config::VrWorldScale);
 		return s;
@@ -228,12 +230,12 @@ void change(int row, int dir, int hand)
 		break;
 	case Haptics:
 	{
-		const int was = std::clamp((int)config::VrHaptics, 0, 3);
+		const int was = hapticsLevel();
 		const int strength = std::clamp(was + dir, 0, 3);
 		if (strength == was)
 			return;
-		config::VrHaptics.set(strength);
-		config::saveInt("config", "vr.Haptics", strength);
+		config::VrHaptics.set(HapticsWords[strength]);
+		config::saveStr("config", "vr.Haptics", HapticsWords[strength]);
 		NOTICE_LOG(INPUT, "XR: menu %s -> %s", Labels[row], value(row).c_str());
 		sampleKnock(hand);
 		return;

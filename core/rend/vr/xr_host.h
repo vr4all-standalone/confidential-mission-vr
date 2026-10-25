@@ -74,6 +74,9 @@ void setHowToPlay(bool on, const char *why);
 bool howToPlayOn();
 // A shot's knock in a hand, at vr.Haptics' strength as it is now: the menu's sample of it.
 void sampleKnock(int hand);
+// vr.Haptics (the menu's Haptics) as a level: 0 off, 1 light, 2 medium (the default), 3 strong. 1.2's saved
+// 0-3 (off, low, normal, strong) and its words read as off, light, medium, strong; anything else as medium.
+int hapticsLevel();
 #else
 inline bool enabled() { return false; }
 inline bool frame() { return false; }
@@ -90,6 +93,7 @@ inline int p1Hand() { return 1; }
 inline void setHowToPlay(bool, const char *) {}
 inline bool howToPlayOn() { return false; }
 inline void sampleKnock(int) {}
+inline int hapticsLevel() { return 2; }
 #endif
 
 }

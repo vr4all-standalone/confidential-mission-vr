@@ -613,7 +613,7 @@ function Get-CmMenuAim([int]$Row, [double]$U) {
 
 # The settings menu through the simulator, widened, in stage 1's first room: the left menu button
 # opens it at 58 s (at Resume), the right stick down 7 times to Haptics, A (+ on a value row) makes
-# it Strong with a sample knock at that strength (0.03 s x 1.6), down once more to World size,
+# it Strong (from Medium, the default) with a sample knock at that strength (0.03 s x 2.4), down once more to World size,
 # right (+) makes it 0.121 (0.110 x 1.1), the right hand points at the Laser row's right half at
 # 63 s and its trigger turns the laser off, B closes it at 65 s. That knock is the only one. Each
 # change is in emu.cfg at once (the run's, emu.cfg.after); build-win\emu.cfg is as it was.
@@ -626,7 +626,7 @@ function Test-CmMenu {
 			'65=xr right/b 1 150')
 		Expect = 'XR: menu button', 'XR: menu open \(paused\)',
 			"XR: menu at 1\.20 m, 13 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
-			'XR: menu Haptics -> Strong', 'XRSIM: haptic right 0\.048 1\.000', 'XR: menu World size -> 0\.121', 'XR: menu Laser -> Off',
+			'XR: menu Haptics -> Strong', 'XRSIM: haptic right 0\.072 1\.000', 'XR: menu World size -> 0\.121', 'XR: menu Laser -> Off',
 			'XR: menu closed \(resumed\)'
 		Reject = 'XR: initialisation failed', 'XR: \d+ black frames' }
 	if ($why) { return $why }
@@ -636,7 +636,7 @@ function Test-CmMenu {
 	$dir = Join-Path $repo "build-win\vrtest\$name"
 	$after = Join-Path $dir 'emu.cfg.after'
 	if (-not (Test-Path -LiteralPath $after)) { return "no emu.cfg.after in $dir" }
-	foreach ($re in '^vr\.Haptics = 3$', '^vr\.Laser = no$', '^vr\.WorldScale = 0\.121') {
+	foreach ($re in '^vr\.Haptics = strong$', '^vr\.Laser = no$', '^vr\.WorldScale = 0\.121') {
 		$hit = Select-String -LiteralPath $after -Pattern $re -CaseSensitive -Quiet
 		Write-Host "  emu.cfg.after $(if ($hit) { 'has' } else { 'lacks' }) $re"
 		if (-not $hit) { return "the run's emu.cfg has no line $re" }
@@ -680,7 +680,8 @@ function Test-CmMenuQuit {
 # The haptics (the knock from the game's own shot counter, vr.Haptics) through the simulator,
 # widened, in stage 1's first room: 8 right pulls 0.6 s apart from 54 s (6 shots, then 2 on an
 # empty gun), B (the game's reload) at 59.5 s, 3 more shots from 61 s, X (player 2 joins) at 64 s
-# and 2 left pulls from 66 s. The simulator logs each knock: "XRSIM: haptic right 0.030 1.000".
+# and 2 left pulls from 66 s. The simulator logs each knock: "XRSIM: haptic right 0.048 1.000" (Medium, the default:
+# 1.6 times 1.2's Normal, 0.030 s).
 function Get-CmHapticsActions {
 	@(Get-CmStartsXr)
 	for ($i = 0; $i -lt 8; $i++) { "$(T (54 + 0.6 * $i))=xr right/trigger 1 100" }
@@ -690,8 +691,8 @@ function Get-CmHapticsActions {
 	for ($i = 0; $i -lt 2; $i++) { "$(T (66 + 0.6 * $i))=xr left/trigger 1 100" }
 }
 
-# Normal strength: a Shot knock (0.030 s, 1.0) for each of the 9 shots, a light click (0.012 s,
-# 0.35) for each of the 2 empty pulls, player 2's shots in the left hand; the magazine stays 6
+# Medium strength (the default, 1.2 round 2: 1.2's Strong): a Shot knock (0.048 s, 1.0) for each of the 9 shots, a
+# light click (0.019 s, 0.35) for each of the 2 empty pulls, player 2's shots in the left hand; the magazine stays 6
 # (its earlier changes: the game clearing its RAM at ~11 s, 16 -> 255 -> 0, and the reload
 # lesson's 0 -> 6 at ~30 s). CM VR 1.2 Task 3: a kick ("XR: P<n> kick: <gun>") with each Shot
 # knock, none on the empty pulls.
@@ -701,9 +702,9 @@ function Test-CmHaptics {
 		At = @(Get-CmHapticsActions); Expect = 'XR: player 2 joins: a gun in each hand'
 		Reject = 'XR: initialisation failed', 'VR: P1 magazine 6 -> ' }
 	if ($why) { return $why }
-	$shot = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000'
-	$empty = Get-LogCount $name 'XRSIM: haptic right 0\.012 0\.350'
-	$left = Get-LogCount $name 'XRSIM: haptic left 0\.030 1\.000'
+	$shot = Get-LogCount $name 'XRSIM: haptic right 0\.048 1\.000'
+	$empty = Get-LogCount $name 'XRSIM: haptic right 0\.019 0\.350'
+	$left = Get-LogCount $name 'XRSIM: haptic left 0\.048 1\.000'
 	Write-Host "  right: $shot shot knocks (want 9), $empty empty clicks (want 2); left: $left shot knocks (want 1 or more)"
 	if ($shot -ne 9) { return "$shot right shot knocks, want 9" }
 	if ($empty -ne 2) { return "$empty right empty clicks, want 2" }
@@ -716,20 +717,49 @@ function Test-CmHaptics {
 	return $null
 }
 
-# vr.Haptics=1 (low): the same pulls, every knock at 0.45 of its amplitude, none at 1.0.
+# vr.Haptics=1 (1.2's Low, saved before round 2): read as Light, 1.2's Normal: the same pulls, the Shot knocks
+# 0.030 s at 1.0, the clicks 0.012 s at 0.35; none at 1.2's Low amplitude (0.45 of each), none at Medium's length.
 function Test-CmHapticsLow {
 	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-low'; Seconds = 75; XrSim = $true
 		Config = "$cmWidenArcade,config:vr.Haptics=1"; At = @(Get-CmHapticsActions)
-		Expect = 'XR: player 1 shot at', 'XRSIM: haptic right 0\.030 0\.450'
-		Reject = 'XR: initialisation failed', 'XRSIM: haptic .* 1\.000$' }
+		Expect = 'XR: player 1 shot at', 'XRSIM: haptic right 0\.030 1\.000', 'XRSIM: haptic right 0\.012 0\.350'
+		Reject = 'XR: initialisation failed', 'XRSIM: haptic .* 0\.450$', 'XRSIM: haptic .* 0\.15[78]$', 'XRSIM: haptic \w+ 0\.048 ' }
 }
 
-# vr.Haptics=0 (off): the same pulls, no haptics at all, but the kicks as cm-haptics' (Review Focus 3): 9 for player
+# vr.Haptics=strong (1.2 round 2, new): the same pulls, every pulse half as long again as Medium's (2.4 times 1.2's
+# Normal) at the same amplitude: the 11 right pulls each a Shot knock 0.072 s at 1.0 (with its kick) or a click 0.029 s
+# at 0.35 (cm-haptics' 9 and 2 as a rule; once the game had used a round before the room: 8 and 3), none at Medium's
+# or Light's lengths.
+# Strong's knock is longer than Medium's: cm-haptics' log when it ran, else Medium's 0.048 s.
+function Test-CmHapticsStrong {
+	$name = 'accept-cm-haptics-strong'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true
+		Config = "$cmWidenArcade,config:vr.Haptics=strong"; At = @(Get-CmHapticsActions); Expect = 'XR: player 2 joins: a gun in each hand'
+		Reject = 'XR: initialisation failed', 'XRSIM: haptic \w+ 0\.0(30|48) 1\.000', 'XRSIM: haptic \w+ 0\.01[29] 0\.350' }
+	if ($why) { return $why }
+	$shot = Get-LogCount $name 'XRSIM: haptic right 0\.072 1\.000'
+	$empty = Get-LogCount $name 'XRSIM: haptic right 0\.029 0\.350'
+	$kicks = Get-LogCount $name 'XR: P1 kick: built-in gun$'
+	Write-Host "  right: $shot Shot knocks 0.072 s, $empty clicks 0.029 s (want 11 in all, 6 or more knocks, a click or more), $kicks player 1 kicks (want one a knock)"
+	if ($shot -lt 6 -or $empty -lt 1 -or $shot + $empty -ne 11 -or $kicks -ne $shot) { return "$shot Strong Shot knocks, $empty clicks, $kicks kicks: want 11 pulls' worth, a kick a knock" }
+	$medium = 0.048
+	if (Test-Path -LiteralPath (Get-RunLog 'accept-cm-haptics')) {
+		$m = Select-String -LiteralPath (Get-RunLog 'accept-cm-haptics') -Pattern 'XRSIM: haptic right (\d\.\d{3}) 1\.000' -CaseSensitive | Select-Object -First 1
+		if ($m) { $medium = [double]::Parse($m.Matches[0].Groups[1].Value, $inv) }
+	}
+	$strong = [double]::Parse((Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XRSIM: haptic right (\d\.\d{3}) 1\.000' -CaseSensitive |
+		Select-Object -First 1).Matches[0].Groups[1].Value, $inv)
+	Write-Host "  the Shot knock: Strong $strong s, Medium $medium s, both at 1.0 (want Strong at least 1.4 times as long)"
+	if ($strong -lt 1.4 * $medium) { return "Strong's Shot knock $strong s is not clearly longer than Medium's $medium s" }
+	return $null
+}
+
+# vr.Haptics=off: the same pulls, no haptics at all, but the kicks as cm-haptics' (Review Focus 3): 9 for player
 # 1's shots (none for the 2 empty pulls), and player 2's.
 function Test-CmHapticsOff {
 	$name = 'accept-cm-haptics-off'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true
-		Config = "$cmWidenArcade,config:vr.Haptics=0"; At = @(Get-CmHapticsActions)
+		Config = "$cmWidenArcade,config:vr.Haptics=off"; At = @(Get-CmHapticsActions)
 		Expect = 'XR: player 1 shot at'; Reject = 'XR: initialisation failed', 'XRSIM: haptic' }
 	if ($why) { return $why }
 	$kicks = Get-LogCount $name 'XR: P1 kick: built-in gun$'
@@ -1409,8 +1439,8 @@ function Test-RifleBurst([string]$run, [string]$hand, [int]$player, [double]$Fro
 	$counter = '{0:x8}' -f (0x0C1557B8 + 276 * $player + 0x60)
 	$roundTimes = @(Get-LogTimes $run "VR: ram $counter " $From $To)
 	$rounds = $roundTimes.Count
-	$shots = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.030 1\.000" $From $To).Count
-	$auto = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.020 0\.600" $From $To).Count
+	$shots = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.048 1\.000" $From $To).Count
+	$auto = @(Get-LogTimes $run "XRSIM: haptic $hand 0\.032 0\.600" $From $To).Count
 	$all = @(Get-LogTimes $run "XRSIM: haptic $hand " $From $To)
 	$gaps = @(for ($i = 1; $i -lt $all.Count; $i++) { $all[$i] - $all[$i - 1] })
 	$min = if ($gaps.Count) { ($gaps | Measure-Object -Minimum).Minimum } else { 0 }
@@ -1444,7 +1474,7 @@ function Get-CmRifleSimParams([string]$name, [double]$seconds) {
 	@{ Game = 'confmiss'; Name = $name; Seconds = $seconds; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c155818:2"
 		At = @('20=pose right 0.1 1.45 -0.3 0 0') + @(Get-CmStartsXr) + @(Get-CmRiflePoke 52.6) +
 			'53.5=xr right/trigger 1 2000', '56=shot rifle', '57.5=xr right/trigger 1 2500', '61=xr right/trigger 1 100', '52.4=shot pistol'
-		Reject = @('XR: initialisation failed', 'XRSIM: haptic right 0\.012') }
+		Reject = @('XR: initialisation failed', 'XRSIM: haptic right 0\.019') }
 }
 # With the rifle's file: its model in the hand ("XR: P1 hand: assault rifle (gun-cm-rifle.bin)"), the knocks, the
 # pistol's feel back after; the two window shots differ in the hand's box. Without it (moved to .hold, back after):
@@ -1470,8 +1500,8 @@ function Test-CmRifleSim {
 		$why = Test-RifleBurst $name 'right' 0 $burst[0] $burst[1] 18
 		if ($why) { return "the burst from $(T $burst[0]) s: $why" }
 	}
-	$shot = @(Get-LogTimes $name 'XRSIM: haptic right 0\.030 1\.000' 60.8).Count
-	$auto = @(Get-LogTimes $name 'XRSIM: haptic right 0\.020 0\.600' 60.8).Count
+	$shot = @(Get-LogTimes $name 'XRSIM: haptic right 0\.048 1\.000' 60.8).Count
+	$auto = @(Get-LogTimes $name 'XRSIM: haptic right 0\.032 0\.600' 60.8).Count
 	Write-Host "  after the rifle: $shot Shot knocks (want 1), $auto Auto (want 0)"
 	if ($shot -ne 1 -or $auto -ne 0) { return "after the rifle: $shot Shot and $auto Auto knocks, want 1 and 0" }
 	$dir = Join-Path $repo "build-win\vrtest\$name"
@@ -1508,7 +1538,7 @@ function Test-CmRifleSim {
 function Get-CmRifleP2Params([string]$name, [string]$config = '') {
 	@{ Game = 'confmiss'; Name = $name; Seconds = 67; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c15592c:2$config"
 		At = @(Get-CmStartsXr) + '60=xr left/x 1 200' + @(Get-CmRiflePoke 61 1) + '62=xr left/trigger 1 2000' + @(Get-CmRiflePoke 65 1 -Pistol)
-		Reject = @('XR: initialisation failed', 'XRSIM: haptic (left|right) 0\.012', 'XRSIM: haptic right 0\.020', 'XR: P1 hand: (assault rifle|rifle rounds)') }
+		Reject = @('XR: initialisation failed', 'XRSIM: haptic (left|right) 0\.019', 'XRSIM: haptic right 0\.032', 'XR: P1 hand: (assault rifle|rifle rounds)') }
 }
 # With the in-game pistol: the rifle's model (or, without its file, the pistol firing the rifle's rounds).
 function Test-CmRifleP2 {
@@ -1549,21 +1579,21 @@ function Test-CmKickRun([string]$name, [string]$config, [string]$gun, [switch]$B
 		At = $at; Expect = "XR: gun: $gunRe \(chosen"; Reject = 'XR: initialisation failed' }
 	if ($why) { return $why }
 	$kicks = Get-LogCount $name 'XR: P1 kick' -From 53.6 -To 55.2
-	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.012 0\.350' -From 53.6 -To 55.2
-	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 53.6 -To 55.2
+	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.019 0\.350' -From 53.6 -To 55.2
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.048 1\.000' -From 53.6 -To 55.2
 	Write-Host "  ${gun}, the empty pull: $kicks kicks (want 0), $clicks clicks (want 1), $shots Shot knocks (want 0)"
 	if ($kicks -ne 0 -or $clicks -ne 1 -or $shots -ne 0) { return "${gun}, the empty pull: $kicks kicks, $clicks clicks, $shots Shot knocks; want 0, 1, 0" }
 	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 55.2 -To 57.0
 	$all = Get-LogCount $name 'XR: P1 kick' -From 55.2 -To 57.0
-	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 55.2 -To 57.0
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.048 1\.000' -From 55.2 -To 57.0
 	Write-Host "  ${gun}, two rounds: $kicks kicks naming it ($all in all; want 2), $shots Shot knocks (want 2)"
 	if ($kicks -ne 2 -or $all -ne 2 -or $shots -ne 2) { return "${gun}, two rounds: $kicks kicks naming it ($all in all), $shots Shot knocks; want 2, 2" }
 	if (-not $Box) { return $null }
 	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 57.0 -To 60.6
 	$all = Get-LogCount $name 'XR: P1 kick' -From 57.0 -To 60.6
-	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 57.0 -To 60.6
-	$autos = Get-LogCount $name 'XRSIM: haptic right 0\.020 0\.600' -From 57.0 -To 60.6
-	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.012' -From 57.0 -To 60.6
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.048 1\.000' -From 57.0 -To 60.6
+	$autos = Get-LogCount $name 'XRSIM: haptic right 0\.032 0\.600' -From 57.0 -To 60.6
+	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.019' -From 57.0 -To 60.6
 	$burst = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XR: P1 rifle burst: (\d+) flashes' -CaseSensitive)
 	$flashes = if ($burst) { [int]$burst[-1].Matches[0].Groups[1].Value } else { 0 }
 	Write-Host "  ${gun}, the rifle's last 3 rounds, held on: $kicks kick lines naming it ($all in all; want 1), $shots Shot and $autos Auto knocks (want 1, 2), $clicks clicks (want 0), $flashes flashes (want 3)"
@@ -1751,7 +1781,7 @@ function Test-CmReloadPoint {
 		if ($n -ne $w[2]) { return "$($w[3]): $n reloads by pointing away, want $($w[2])" }
 	}
 	$checks = @(@("XR: player 1's trigger outside the game's view", 55, 56, 1, 'the pull in the grey margin (fires nothing)'),
-		@('XRSIM: haptic right 0\.020 0\.500', 56, 57.5, 1, "the first reload's buzz"),
+		@('XRSIM: haptic right 0\.032 0\.500', 56, 57.5, 1, "the first reload's buzz"),
 		@('VR: ram 0c155804 03 -> 06', 56, 57.5, 1, 'the ammo 3 -> 6 at the first'),
 		@('VR: ram 0c155804 05 -> 06', 58.5, 60.5, 1, 'the ammo 5 -> 6 at the second'),
 		@('VR: ram 0c155804 .. -> 06', 60.5, 62.6, 0, 'no ammo back from the menu'),
@@ -2252,8 +2282,8 @@ function Test-CmP1Left {
 		$wrong = Get-LogCount $name $other -From $w[0] -To $w[1]
 		$kicks = Get-LogCount $name "XR: $($w[2]) kick: " -From $w[0] -To $w[1]
 		$otherKicks = Get-LogCount $name "XR: P[12] kick: " -From $w[0] -To $w[1]
-		$knocks = Get-LogCount $name "XRSIM: haptic $($w[3]) 0\.030 1\.000" -From $w[0] -To $w[1]
-		$wrongKnocks = Get-LogCount $name 'XRSIM: haptic \w+ 0\.030 1\.000' -From $w[0] -To $w[1]
+		$knocks = Get-LogCount $name "XRSIM: haptic $($w[3]) 0\.048 1\.000" -From $w[0] -To $w[1]
+		$wrongKnocks = Get-LogCount $name 'XRSIM: haptic \w+ 0\.048 1\.000' -From $w[0] -To $w[1]
 		Write-Host "  $($w[4]) ($($w[0])-$($w[1]) s): $counted $($w[2]) shot counter changes, $wrong of the other's (want 1+ and 0); $kicks $($w[2]) kicks of $otherKicks; $knocks $($w[3]) knocks of $wrongKnocks"
 		if ($counted -lt 1 -or $wrong -ne 0) { return "$($w[4]): $counted changes of $($w[2])'s shot counter and $wrong of the other's, want 1 or more and 0" }
 		if ($kicks -lt 1 -or $kicks -ne $otherKicks -or $knocks -lt 1 -or $knocks -ne $wrongKnocks) {
@@ -2338,6 +2368,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-aim' = 'Test-CmAim'; 'cm-hud' = 'Test-CmHud'; 'cm-p2' = 'Test-CmP2'; 'cm-floor' = 'Test-CmFloor'; 'cm-sim' = 'Test-CmSim'
 	'cm-buttons' = 'Test-CmButtons'; 'cm-buttons-pc' = 'Test-CmButtonsPc'; 'cm-pause' = 'Test-CmPause'
 	'cm-haptics' = 'Test-CmHaptics'; 'cm-haptics-low' = 'Test-CmHapticsLow'; 'cm-haptics-off' = 'Test-CmHapticsOff'
+	'cm-haptics-strong' = 'Test-CmHapticsStrong'
 	'cm-haptics-mag' = 'Test-CmHapticsMag'; 'cm-haptics-reload' = 'Test-CmHapticsReload'
 	'cm-menu' = 'Test-CmMenu'; 'cm-menu-quit' = 'Test-CmMenuQuit'
 	'cm-controllers' = 'Test-CmControllers'; 'cm-controllers-rt' = 'Test-CmControllersRt'
