@@ -112,7 +112,8 @@ one gun goes to the hand that fires.
 
 In the game's cutscenes (the stage intros and the story scenes) both hands show their
 controllers, without labels, and the guns come back the moment play resumes. Start still skips
-a scene.
+a scene. A round the game fires during one (a scene that takes shots) brings the guns back at
+once, until the scene ends.
 
 Reload by shooting away from the game's view (past the grey ring), as before; with two guns,
 pointing a gun at the floor reloads it too. With the menu's Reload at Point off-screen, pointing
@@ -221,6 +222,9 @@ shots at the centre, corners and edges of the view landing on the dot, the panel
 shot marker, player 2 joining and leaving. **Not tried on a headset yet:** the frame rate in
 the busiest scene of the stage 1 story, the scale of the world, player 2 joining in the
 headset, and PC VR over Quest Link.
+
+**Known issues:**
+- Stage 2 boss: when the tank's rocket hits you at the end, the view can go black for a few seconds (not looked into yet).
 
 How it was worked out (PC: `vr.DebugShots`, rips and RAM dumps): its camera keeps the field of
 view as a float (`0x0C154EC8`) that its camera code turns into an angle for the projection
@@ -424,7 +428,7 @@ This builds the `vr` build type (arm64, optimised, OpenXR) to
 `shell\android-studio\flycast\build\outputs\apk\vr\flycast-vr.apk`. It installs as its own
 app, *Confidential Mission VR* (`com.vrlightgunhub.confmiss`), next to a normal Flycast. Its
 version is `hubVersion` in `shell/android-studio/flycast/build.gradle.kts` and the commit
-(`1.1.0-g<commit>`). Without the release key (below) it is signed with the public debug key,
+(`1.2.0-g<commit>`; versionCode 9). Without the release key (below) it is signed with the public debug key,
 and Gradle says so: fine for trying things out, not for a release.
 
 `hotd2-vr\build-win.cmd` builds the Windows version (Visual Studio 2022 Build Tools) with
@@ -441,8 +445,8 @@ adb exec-in run-as com.vrlightgunhub.confmiss sh -c "cat > files/games/confmiss/
 adb shell am start -n com.vrlightgunhub.confmiss/com.flycast.emulator.MainActivity
 ```
 
-The start screen's file check has a JVM test: `gradlew.bat :flycast:testDebugUnitTest` in
-`shell\android-studio` (`CmFilesTest`).
+The start screen's file check and its status have JVM tests: `gradlew.bat :flycast:testDebugUnitTest`
+in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
 
 ## Releasing
 
@@ -462,7 +466,9 @@ The start screen's file check has a JVM test: `gradlew.bat :flycast:testDebugUni
    licences. When it is there the Quest build puts it in the APK (`assets/models/`, copied to
    the app's data folder at start) and `package-release.ps1` in the zip (`data\models\` and
    `CREDITS.txt`); without it both come without models.
-3. **The packages.** `powershell -File hotd2-vr\package-release.ps1` builds both versions and
+3. **The packages.** The version is `hubVersion` and `versionCode` in
+   `shell/android-studio/flycast/build.gradle.kts` and `$appVersion` in `package-release.ps1`
+   (1.2.0, versionCode 9, for this release). `powershell -File hotd2-vr\package-release.ps1` builds both versions and
    puts `confidential-mission-vr-quest.apk` and `confidential-mission-vr-pcvr.zip` (`flycast.exe`,
    `emu.cfg`, `README.txt`, `LICENSE.txt`, `Play Confidential Mission.cmd`, and with the bundled
    models `CREDITS.txt` and `data\models\`) in `dist\`. Both carry the licence, `LICENSE.txt`
