@@ -7,9 +7,13 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
+import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,6 +21,11 @@ import android.os.Environment;
 import android.os.Process;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
+import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -33,20 +42,34 @@ import java.util.List;
  * hotd2-vr: Confidential Mission VR's start screen, the app's entry in the headset's library: a 2D
  * panel, in a process of its own (":setup") so it can end a game still running in the app's main
  * process. It asks for "All files access", checks the game's three files (CmFiles) and names what's
- * missing and where it goes, and Play starts the game in VR (the immersive activity, the alias
- * com.flycast.emulator.MainActivity). The game's quit to the start screen opens it again
- * (BaseGLActivity.quitToStart).
+ * missing and where it goes (CmStartStatus), and Play starts the game in VR (the immersive activity,
+ * the alias com.flycast.emulator.MainActivity). The game's quit to the start screen opens it again
+ * (BaseGLActivity.quitToStart). It has the look of VR4All, the author's launcher app: its colours, a
+ * dark page with a soft glow, rounded panels with thin borders. Built in code, no game art or text.
  */
 public class CmStartActivity extends Activity
 {
     /** The game to start, for the VR activity (a path): the extra VrSetupActivity passed too. */
     public static final String EXTRA_GAME = "hotd2vr.game";
 
-    private static final int RED = Color.rgb(217, 32, 26), TEXT = Color.rgb(230, 230, 230),
-            SOFT = Color.rgb(160, 160, 164), GOOD = Color.rgb(96, 200, 110), BACK = Color.rgb(18, 18, 20);
+    /** VR4All's colour tokens: the page (deck), panels, their borders (line), muted and cream text,
+     *  the signal lime and the violet. */
+    static final int DECK = 0xFF0B0D12, PANEL = 0xFF151923, LINE = 0xFF343947, MUTED = 0xFF9BA5B4,
+            CREAM = 0xFFF8F5EF, LIME = 0xFFD9F36C, VIOLET = 0xFFA99BFF;
+    /** A raised surface inside a panel (file marks, the secondary button), and the lime pressed. */
+    private static final int RAISED = 0xFF1B202B, LIME_LIT = 0xFFEDFFA6;
 
-    private TextView accessStatus, zipRow, discRow, biosRow;
+    /** The content's widest (dp): a readable column on a wide panel, centred. */
+    private static final int COLUMN_DP = 880;
+    private static final int MATCH = LinearLayout.LayoutParams.MATCH_PARENT, WRAP = LinearLayout.LayoutParams.WRAP_CONTENT;
+
+    private TextView badgeText, accessHint, accessStatus, foundAt, chevron;
+    private View badgeDot;
+    private LinearLayout badge, marksRow, missingList, more;
     private Button allow, play;
+    private CmStartStatus status;
+    /** The player opened or closed "Where to put your files": it then stays as they left it. */
+    private boolean moreTouched;
 
     /** Where the game's files are looked for: the app's own folders (adb), and Download once it may. */
     static List<File> roots(Context context)
@@ -71,46 +94,46 @@ public class CmStartActivity extends Activity
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
+        getWindow().setBackgroundDrawable(new ColorDrawable(DECK));
+
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(36), dp(28), dp(36), dp(28));
-        page.setBackgroundColor(BACK);
+        page.setGravity(Gravity.CENTER_HORIZONTAL);
+        page.setPadding(dp(40), dp(28), dp(40), dp(32));
+        LinearLayout column = new Column(this, dp(COLUMN_DP));
+        page.addView(column, new LinearLayout.LayoutParams(MATCH, WRAP));
 
-        TextView title = text("CONFIDENTIAL MISSION VR", 28, RED);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        page.addView(title);
-        page.addView(text("Sega's light-gun game in VR. Two steps before the first game.", 17, SOFT), spaced(4));
+        column.addView(topBar(), new LinearLayout.LayoutParams(MATCH, WRAP));
+        View accent = new View(this);
+        GradientDrawable bar = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[] { LIME, VIOLET, alpha(VIOLET, 0) });
+        bar.setCornerRadius(dp(2));
+        accent.setBackground(bar);
+        column.addView(accent, sized(MATCH, dp(3), 16));
 
-        page.addView(heading("1.  Let the app read your files"), spaced(24));
-        page.addView(accessStatus = text("", 16, SOFT), spaced(6));
-        allow = button("Allow");
-        allow.setOnClickListener(v -> askForAccess());
-        page.addView(allow, spaced(10));
+        column.addView(headline("Your mission.", CREAM), spaced(32));
+        column.addView(headline("Inside the headset.", VIOLET), spaced(2));
 
-        page.addView(heading("2.  Put the game on the headset"), spaced(24));
-        page.addView(text("Your own copy of the game, the MAME set, in the headset's Download folder: with "
-                + "SideQuest (Manage files), or connect the headset to a PC with USB, allow access in the "
-                + "headset, and open Quest > Internal shared storage > Download. Nothing of the game comes "
-                + "with this app.", 16, SOFT), spaced(6));
-        page.addView(zipRow = text("", 16, SOFT), spaced(10));
-        page.addView(discRow = text("", 16, SOFT), spaced(4));
-        page.addView(biosRow = text("", 16, SOFT), spaced(4));
-        Button again = button("Look again");
-        again.setOnClickListener(v -> refresh());
-        page.addView(again, spaced(10));
+        column.addView(panel(), sized(MATCH, WRAP, 26));
 
-        play = button("Play Confidential Mission");
-        play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-        play.setPadding(dp(36), dp(14), dp(36), dp(14));
-        play.setOnClickListener(v -> play());
-        page.addView(play, spaced(28));
+        String first = "First start:";
+        SpannableString firstStart = new SpannableString(first + " makes your guns from your own game files (once).");
+        firstStart.setSpan(new ForegroundColorSpan(CREAM), 0, first.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        column.addView(inset(text(firstStart, 17, MUTED, 500)), spaced(18));
 
-        page.addView(text("Unofficial fan project, not affiliated with Sega.", 13, SOFT), spaced(28));
+        column.addView(moreToggle(), spaced(6));
+        column.addView(more = moreBody(), sized(MATCH, WRAP, 6));
+
+        column.addView(inset(text("Unofficial fan project, not affiliated with Sega.", 14, MUTED, 500)), spaced(32));
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(BACK);
+        scroll.setFillViewport(true);
+        scroll.setBackground(glow());
         scroll.addView(page);
         setContentView(scroll);
+
+        boolean access = canReadSharedStorage();
+        show(CmStartStatus.from(null, access), null, access);
     }
 
     @Override
@@ -120,45 +143,222 @@ public class CmStartActivity extends Activity
         refresh();
     }
 
+    /** The top bar: the CM tile, the app's name and its version. */
+    private View topBar()
+    {
+        LinearLayout bar = row();
+        TextView tile = text("CM", 17, DECK, 800);
+        tile.setGravity(Gravity.CENTER);
+        tile.setIncludeFontPadding(false);
+        tile.setBackground(shape(VIOLET, 0, corners(13, 5)));
+        bar.addView(tile, new LinearLayout.LayoutParams(dp(46), dp(46)));
+
+        TextView name = text("Confidential Mission VR", 21, CREAM, 700);
+        name.setLetterSpacing(-0.01f);
+        LinearLayout.LayoutParams grow = new LinearLayout.LayoutParams(0, WRAP, 1);
+        grow.leftMargin = dp(16);
+        bar.addView(name, grow);
+
+        String v = version();
+        if (!v.isEmpty())
+        {
+            TextView pill = text(v, 15, MUTED, 600);
+            pill.setPadding(dp(12), dp(5), dp(12), dp(5));
+            pill.setBackground(shape(0, LINE, round(20)));
+            bar.addView(pill);
+        }
+        return bar;
+    }
+
+    /** The game's panel: its kind and the status badge, the file marks, what's missing, Play. */
+    private View panel()
+    {
+        LinearLayout panel = box();
+        LinearLayout head = row();
+        TextView kind = text("ARCADE · RAIL SHOOTER", 14, MUTED, 700);
+        kind.setLetterSpacing(0.14f);
+        head.addView(kind, new LinearLayout.LayoutParams(0, WRAP, 1));
+        badge = row();
+        badge.setPadding(dp(14), dp(7), dp(16), dp(7));
+        badgeDot = new View(this);
+        badge.addView(badgeDot, new LinearLayout.LayoutParams(dp(9), dp(9)));
+        badgeText = text("", 15, VIOLET, 700);
+        badgeText.setLetterSpacing(0.1f);
+        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(WRAP, WRAP);
+        gap.leftMargin = dp(9);
+        badge.addView(badgeText, gap);
+        head.addView(badge);
+        panel.addView(head, new LinearLayout.LayoutParams(MATCH, WRAP));
+
+        marksRow = new LinearLayout(this);
+        marksRow.setOrientation(narrow() ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        panel.addView(marksRow, spaced(18));
+
+        accessHint = text("Allow it below: the app needs “All files access” to look for the game in "
+                + "your Download folder.", 17, CREAM, 500);
+        panel.addView(accessHint, spaced(18));
+
+        missingList = new LinearLayout(this);
+        missingList.setOrientation(LinearLayout.VERTICAL);
+        panel.addView(missingList, sized(MATCH, WRAP, 16));
+
+        play = new Button(this);
+        play.setText("▶︎  Play");
+        style(play, 22, DECK, shape(LIME, 0xFFEAFF9D, corners(12, 5)), shape(LIME_LIT, 0xFFEAFF9D, corners(12, 5)));
+        play.setPadding(dp(44), dp(14), dp(48), dp(14));
+        play.setMinWidth(dp(240));
+        play.setOnClickListener(v -> play());
+        panel.addView(play, spaced(24));
+        return panel;
+    }
+
+    /** "Where to put your files ›": opens and closes the steps below it. */
+    private View moreToggle()
+    {
+        LinearLayout toggle = row();
+        toggle.setPadding(dp(4), dp(10), dp(12), dp(10));
+        toggle.setBackground(pressable(shape(0, 0, round(10)), shape(alpha(CREAM, 0x12), 0, round(10))));
+        toggle.addView(text("Where to put your files", 18, CREAM, 600));
+        chevron = text("›", 26, VIOLET, 700);
+        chevron.setGravity(Gravity.CENTER);
+        chevron.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(28), dp(28));
+        p.leftMargin = dp(8);
+        toggle.addView(chevron, p);
+        toggle.setOnClickListener(v -> {
+            moreTouched = true;
+            setMore(more.getVisibility() != View.VISIBLE);
+        });
+        return toggle;
+    }
+
+    /** The two steps: the access (Allow), and where the game's files go (Look again). */
+    private LinearLayout moreBody()
+    {
+        LinearLayout body = box();
+        body.addView(step("01", "Let the app read your files"));
+        body.addView(accessStatus = text("", 17, MUTED, 500), spaced(8));
+        allow = button("Allow", VIOLET, DECK, 0xFFC4B9FF, 0);
+        allow.setOnClickListener(v -> askForAccess());
+        body.addView(allow, spaced(14));
+
+        View rule = new View(this);
+        rule.setBackgroundColor(LINE);
+        body.addView(rule, sized(MATCH, dp(1), 24));
+
+        body.addView(step("02", "Put the game on the headset"), spaced(22));
+        body.addView(text("Your own copy of the game, the MAME set, in the headset's Download folder: with "
+                + "SideQuest (Manage files), or connect the headset to a PC with USB, allow access in the "
+                + "headset, and open Quest > Internal shared storage > Download. Nothing of the game comes "
+                + "with this app.", 17, MUTED, 500), spaced(8));
+        body.addView(foundAt = text("", 17, CREAM, 500), spaced(10));
+        Button again = button("Look again", RAISED, CREAM, 0xFF252B37, 0xFF464D55);
+        again.setOnClickListener(v -> refresh());
+        body.addView(again, spaced(16));
+        body.setVisibility(View.GONE);
+        return body;
+    }
+
+    private void setMore(boolean open)
+    {
+        more.setVisibility(open ? View.VISIBLE : View.GONE);
+        chevron.setRotation(open ? 90 : 0);
+    }
+
     private CmFiles.Result refresh()
     {
         boolean access = canReadSharedStorage();
         CmFiles.Result cm = CmFiles.find(roots(this));
+        show(CmStartStatus.from(cm, access), cm, access);
+        return cm;
+    }
+
+    /** The screen for a status: the badge, a mark per file, a line per missing file, Play, the steps. */
+    private void show(CmStartStatus s, CmFiles.Result cm, boolean access)
+    {
+        status = s;
+        int tone = s.ready ? LIME : VIOLET;
+        badgeText.setText(s.badge);
+        badgeText.setTextColor(tone);
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
+        dot.setColor(tone);
+        badgeDot.setBackground(dot);
+        badge.setBackground(shape(alpha(tone, 0x1F), alpha(tone, 0x73), round(20)));
+
+        // Before the access, Download hasn't been looked in: no marks or missing lines, just the hint.
+        marksRow.removeAllViews();
+        boolean horizontal = marksRow.getOrientation() == LinearLayout.HORIZONTAL;
+        for (int i = 0; i < s.fileMarks.size(); i++)
+        {
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
+            if (i > 0)
+            {
+                if (horizontal)
+                    p.leftMargin = dp(10);
+                else
+                    p.topMargin = dp(8);
+            }
+            marksRow.addView(mark(s.fileMarks.get(i)), p);
+        }
+        marksRow.setVisibility(access && !s.fileMarks.isEmpty() ? View.VISIBLE : View.GONE);
+        missingList.removeAllViews();
+        for (int i = 0; i < s.missing.size(); i++)
+            missingList.addView(missingLine(s.missing.get(i)), spaced(i == 0 ? 0 : 10));
+        missingList.setVisibility(access && !s.missing.isEmpty() ? View.VISIBLE : View.GONE);
+        accessHint.setVisibility(access ? View.GONE : View.VISIBLE);
+
+        play.setEnabled(s.ready);
+        play.setAlpha(s.ready ? 1f : 0.35f);
+
         if (access)
         {
-            accessStatus.setText("Done.");
-            accessStatus.setTextColor(GOOD);
+            accessStatus.setText("Done: the app can look in your Download folder.");
+            accessStatus.setTextColor(LIME);
             allow.setVisibility(View.GONE);
         }
         else
         {
             accessStatus.setText("The app looks for the game in the headset's Download folder. For that it needs "
                     + "\"All files access\": tap Allow, switch it on, and come back here.");
-            accessStatus.setTextColor(SOFT);
+            accessStatus.setTextColor(MUTED);
             allow.setVisibility(View.VISIBLE);
         }
-        row(zipRow, CmFiles.ZIP, cm.zip != null ? shortPath(cm.zip) : CmFiles.ZIP, cm, access);
-        row(discRow, CmFiles.DISC, cm.disc != null ? "the disc, confmiss/" + cm.disc.getName() : "the disc", cm, access);
-        row(biosRow, CmFiles.BIOS_ZIP, "the NAOMI BIOS", cm, access);
-        play.setVisibility(cm.missing.isEmpty() ? View.VISIBLE : View.GONE);
-        return cm;
+        if (cm != null && cm.zip != null)
+        {
+            foundAt.setText("Found: " + shortPath(cm.zip)
+                    + (cm.disc != null ? ", the disc confmiss/" + cm.disc.getName() : ""));
+            foundAt.setVisibility(View.VISIBLE);
+        }
+        else
+            foundAt.setVisibility(View.GONE);
+        // open while something's left to do, until the player opens or closes it themselves
+        if (!moreTouched)
+            setMore(!s.ready);
     }
 
-    /** One file of the three: found, or missing and where it goes (CmFiles' line for it). */
-    private void row(TextView row, String name, String found, CmFiles.Result cm, boolean access)
+    /** A file's mark: "confmiss.zip ✓" (the tick in lime), or "naomi.zip missing" in violet. */
+    private TextView mark(String mark)
     {
-        for (String line : cm.missing)
-        {
-            if (line.startsWith(name))
-            {
-                // before the access, Download hasn't been looked in yet
-                row.setText((access ? "Missing:  " : "Not checked yet:  ") + line);
-                row.setTextColor(access ? RED : SOFT);
-                return;
-            }
-        }
-        row.setText("Found:  " + found);
-        row.setTextColor(GOOD);
+        boolean found = mark.endsWith(CmStartStatus.FOUND);
+        SpannableString s = new SpannableString(mark);
+        if (found)
+            s.setSpan(new ForegroundColorSpan(LIME), mark.length() - 1, mark.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        TextView t = text(s, 18, found ? CREAM : VIOLET, 600);
+        t.setPadding(dp(14), dp(8), dp(16), dp(8));
+        t.setBackground(found ? shape(RAISED, LINE, round(10))
+                : shape(alpha(VIOLET, 0x1F), alpha(VIOLET, 0x80), round(10)));
+        return t;
+    }
+
+    /** "naomi.zip missing" in bold violet, then where it goes. */
+    private TextView missingLine(String line)
+    {
+        int cut = line.indexOf(CmStartStatus.MISSING) + CmStartStatus.MISSING.length();
+        SpannableString s = new SpannableString(line);
+        s.setSpan(new ForegroundColorSpan(VIOLET), 0, cut, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        s.setSpan(new StyleSpan(Typeface.BOLD), 0, cut, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return text(s, 17, MUTED, 500);
     }
 
     private void askForAccess()
@@ -177,7 +377,7 @@ public class CmStartActivity extends Activity
     {
         // the files as they are now (one may have gone since the screen was drawn)
         CmFiles.Result cm = refresh();
-        if (!cm.missing.isEmpty())
+        if (!status.ready)
             return;
         // A game may still be running in the app's own process (the app opened again from the
         // library while one played): the emulator has one game per process, and its task would
@@ -209,6 +409,16 @@ public class CmStartActivity extends Activity
         }
     }
 
+    /** "v1.1": the app's versionName (the vr build's is "<hubVersion>-g<commit>"); "" without one. */
+    private String version()
+    {
+        try {
+            return CmStartStatus.shortVersion(getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+        } catch (PackageManager.NameNotFoundException e) {
+            return "";
+        }
+    }
+
     private String shortPath(File f)
     {
         String path = f.getAbsolutePath();
@@ -216,49 +426,184 @@ public class CmStartActivity extends Activity
         return path.startsWith(root + "/") ? path.substring(root.length() + 1) : f.getName();
     }
 
-    private TextView text(String s, int sp, int colour)
+    /** The page's background: the deck, a violet glow top right and a dim teal one bottom left. */
+    private Drawable glow()
+    {
+        return new LayerDrawable(new Drawable[] { new ColorDrawable(DECK),
+                radial(alpha(VIOLET, 0x26), 0.74f, 0f, 560), radial(0x40253D3B, 0.12f, 1f, 480) });
+    }
+
+    private GradientDrawable radial(int colour, float x, float y, int radiusDp)
+    {
+        GradientDrawable g = new GradientDrawable();
+        g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        g.setColors(new int[] { colour, alpha(colour, 0) });
+        g.setGradientCenter(x, y);
+        g.setGradientRadius(dp(radiusDp));
+        return g;
+    }
+
+    private TextView headline(String s, int colour)
+    {
+        TextView t = text(s, 38, colour, 800);
+        t.setLetterSpacing(-0.02f);
+        t.setLineSpacing(0, 1f);
+        t.setIncludeFontPadding(false);
+        return t;
+    }
+
+    /** A step's heading in the steps' box: its number in lime, then its title. */
+    private View step(String number, String title)
+    {
+        LinearLayout r = row();
+        TextView n = text(number, 15, LIME, 800);
+        n.setLetterSpacing(0.08f);
+        r.addView(n);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
+        p.leftMargin = dp(12);
+        r.addView(text(title, 19, CREAM, 700), p);
+        return r;
+    }
+
+    private TextView text(CharSequence s, float sp, int colour, int weight)
     {
         TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         t.setTextColor(colour);
-        t.setLineSpacing(0, 1.15f);
+        t.setTypeface(Typeface.create(Typeface.SANS_SERIF, weight, false));
+        t.setLineSpacing(0, 1.2f);
         return t;
     }
 
-    private TextView heading(String s)
+    /** Text lined up with the panels' rounded edge. */
+    private TextView inset(TextView t)
     {
-        TextView t = text(s, 20, TEXT);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setPadding(dp(4), 0, dp(4), 0);
         return t;
     }
 
-    private Button button(String s)
+    private Button button(String label, int fill, int textColour, int pressedFill, int stroke)
     {
         Button b = new Button(this);
-        b.setText(s);
-        b.setAllCaps(false);
-        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-        b.setTextColor(Color.WHITE);
-        b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(28), dp(8), dp(28), dp(8));
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(RED);
-        shape.setCornerRadius(dp(8));
-        b.setBackground(shape);
+        b.setText(label);
+        style(b, 18, textColour, shape(fill, stroke, round(10)), shape(pressedFill, stroke, round(10)));
+        b.setPadding(dp(28), dp(11), dp(28), dp(11));
         return b;
+    }
+
+    private void style(Button b, float sp, int textColour, Drawable normal, Drawable lit)
+    {
+        b.setAllCaps(false);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        b.setTextColor(textColour);
+        b.setTypeface(Typeface.create(Typeface.SANS_SERIF, 700, false));
+        b.setGravity(Gravity.CENTER);
+        b.setStateListAnimator(null);
+        b.setBackground(pressable(normal, lit));
+    }
+
+    /** Lit while pressed or under the headset's pointer. */
+    private static StateListDrawable pressable(Drawable normal, Drawable lit)
+    {
+        StateListDrawable d = new StateListDrawable();
+        d.addState(new int[] { android.R.attr.state_pressed }, lit);
+        d.addState(new int[] { android.R.attr.state_hovered }, lit);
+        d.addState(new int[0], normal);
+        return d;
+    }
+
+    /** A panel: the panel colour, a 16 dp radius and a 1 dp line border, padded. */
+    private LinearLayout box()
+    {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(28), dp(24), dp(28), dp(26));
+        box.setBackground(shape(PANEL, LINE, round(16)));
+        return box;
+    }
+
+    private LinearLayout row()
+    {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        return r;
+    }
+
+    /** A rounded shape: fill (0: none), a 1 dp stroke (0: none), corner radii in dp. */
+    private GradientDrawable shape(int fill, int stroke, float[] radiiDp)
+    {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(fill);
+        if (stroke != 0)
+            g.setStroke(dp(1), stroke);
+        float[] radii = new float[8];
+        for (int i = 0; i < 8; i++)
+            radii[i] = dp(radiiDp[i]);
+        g.setCornerRadii(radii);
+        return g;
+    }
+
+    private static float[] round(float r)
+    {
+        return new float[] { r, r, r, r, r, r, r, r };
+    }
+
+    /** VR4All's cut corners: top left and bottom right round by a, the other two by b. */
+    private static float[] corners(float a, float b)
+    {
+        return new float[] { a, a, b, b, a, a, b, b };
+    }
+
+    private static int alpha(int colour, int a)
+    {
+        return (colour & 0x00FFFFFF) | (a << 24);
+    }
+
+    /** The file marks go one under another when the column can't fit three side by side. */
+    private boolean narrow()
+    {
+        DisplayMetrics m = getResources().getDisplayMetrics();
+        float width = Math.min(m.widthPixels / m.density - 80, COLUMN_DP);
+        return width - 56 < 600;
     }
 
     private LinearLayout.LayoutParams spaced(int top)
     {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
+        return sized(WRAP, WRAP, top);
+    }
+
+    private LinearLayout.LayoutParams sized(int width, int height, int top)
+    {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, height);
         p.topMargin = dp(top);
         return p;
     }
 
-    private int dp(int v)
+    private int dp(float v)
     {
         return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    /** A vertical column no wider than maxWidth (px); its parent centres it. */
+    private static final class Column extends LinearLayout
+    {
+        private final int maxWidth;
+
+        Column(Context context, int maxWidth)
+        {
+            super(context);
+            this.maxWidth = maxWidth;
+            setOrientation(VERTICAL);
+        }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec)
+        {
+            if (MeasureSpec.getMode(widthSpec) != MeasureSpec.UNSPECIFIED && MeasureSpec.getSize(widthSpec) > maxWidth)
+                widthSpec = MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.EXACTLY);
+            super.onMeasure(widthSpec, heightSpec);
+        }
     }
 }
