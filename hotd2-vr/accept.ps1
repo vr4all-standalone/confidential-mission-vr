@@ -791,10 +791,20 @@ function Test-CmControllersRun {
 	$name = 'accept-cm-controllers'
 	$params = Get-CmControllersParams $name $cmWidenArcade
 	$params.Expect = 'XR: runtime extensions: ', 'XR: controller models built in \(the runtime has no XR_FB_render_model\)',
-		'XR: controllers shown: left and right$', 'XR: controllers shown: none$', 'XR: labels: left x at .* in the grip pose \(built in\)$'
+		'XR: controllers shown: left and right$', 'XR: controllers shown: none$', 'XR: labels: left x at .* in the grip pose \(built in\)$',
+		'XR: labels: left trigger at .* in the grip pose \(built in\)$'
 	$params.Reject += 'XR: runtime extensions: .*XR_FB_render_model', 'XR: controller models from the runtime', 'XR: labels: .*\(from the file\)'
 	$why = Invoke-VrTest $params
 	if ($why) { return $why }
+	# the how-to-play labels, exactly the user's text (1.2, spec section 8), each hand's set logged once
+	foreach ($set in 'right: A - P1 Start, B - P1 Reload, Trigger - P1 Shoot, Stick - Laser',
+			'left: X - P2 Start, Y - P2 Reload, Trigger - P2 Shoot, Stick - Recenter, Menu') {
+		$lines = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XR: labels set: ' -SimpleMatch -CaseSensitive |
+			Where-Object { $_.Line -match ('XR: labels set: ' + $set.Split(':')[0] + ': ') })
+		$exact = @($lines | Where-Object { $_.Line.EndsWith("XR: labels set: $set") })
+		Write-Host "  $($lines.Count) lines 'XR: labels set: $($set.Split(':')[0])', $($exact.Count) of them exactly '$set' (want 1 and 1)"
+		if ($lines.Count -ne 1 -or $exact.Count -ne 1) { return "want one 'XR: labels set: $set', got $($lines.Count) lines: $(($lines | ForEach-Object { $_.Line }) -join ' | ')" }
+	}
 	$why = Test-RunShots $name 't025-in.png', 't026-out.png', 't057-playin.png', 't058-playout.png'
 	if ($why) { return $why }
 	$dir = Join-Path $repo "build-win\vrtest\$name"
@@ -1999,13 +2009,13 @@ function Test-OwnFolders {
 # both hands; the left hand in front of the eye at 24 s (before play starts) differs from the built-in controller there
 # (cm-controllers' shot). Without left.glb (accept-cm-own-controllers-right): the left hand's file isn't read and its
 # shot differs from the box's (the built-in shape is back), the right hand's still is.
-# Task 15b: the how-to-play labels' lines end on the sidecars' "buttons" points (the box's left x, y, stick; right a, b,
+# Task 15b: the how-to-play labels' lines end on the sidecars' "buttons" points (the box's left x, y, stick, trigger; right a, b,
 # trigger, stick: each "XR: labels: <hand> <button> at (x, y, z) in the aim pose (from the file)", logged once, within 2 mm
 # of the fixture's point placed as the model is); the left "menu" point, 5 m off (--bad-button), is refused with one log line
 # and keeps the built-in place. In the -right run the sidecar has no "buttons" (--no-buttons): the built-in places, saying so.
 function Test-CmOwnLabels([string]$name) {
 	$why = @()
-	foreach ($key in 'left x', 'left y', 'left stick', 'right a', 'right b', 'right trigger', 'right stick') {
+	foreach ($key in 'left x', 'left y', 'left stick', 'left trigger', 'right a', 'right b', 'right trigger', 'right stick') {
 		$hand, $button = $key -split ' '
 		$want = $script:ownLabels[$key]
 		$line = Select-String -LiteralPath (Get-RunLog $name) -Pattern "XR: labels: $hand $button at \((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\) in the aim pose \(from the file\)" -CaseSensitive | Select-Object -First 1

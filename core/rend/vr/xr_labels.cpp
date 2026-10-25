@@ -29,10 +29,13 @@ struct Label
 };
 
 // Each controller kind's labels by its interaction profile, each hand's from the top of its column
-// down, the stick's (above them) last. The words follow Task 2's bindings; the built-in shape is a
-// Quest controller's, so a PC controller's button points at the place doing the same job: Start at
-// A (X on the left), the reload at B (Y), the menu at the menu button. Roboto Bold, the panels'
-// font, has no triple bar (U+2261): Touch's menu button says "Menu".
+// down, the stick's (above them) last: "<button> - <what it does>", the user's words (1.2) on Quest
+// Touch, the same jobs under each PC controller's own button names. The built-in shape is a Quest
+// controller's, so a PC controller's button points at the place doing the same job: Start at A (X
+// on the left), the reload at B (Y), the menu at the menu button. Before player 2 joins, the left
+// trigger shoots for player 1 (the one gun goes to the hand that pulls); the label still says P2,
+// the user's text. Roboto Bold, the panels' font, has no triple bar (U+2261): Touch's menu button
+// says "Menu".
 struct Words
 {
 	const char *profile;
@@ -40,24 +43,28 @@ struct Words
 };
 const Words Kinds[] {
 	{ "/interaction_profiles/oculus/touch_controller", {
-		{ { controllers::Y, "Y Reload P2" }, { controllers::X, "X Player 2" }, { controllers::Menu, "Menu" },
-			{ controllers::Stick, "Stick click Recenter" } },
-		{ { controllers::B, "B Reload" }, { controllers::A, "A Start" }, { controllers::Trigger, "Trigger Shoot" },
-			{ controllers::Stick, "Stick click Laser" } } } },
+		{ { controllers::Y, "Y - P2 Reload" }, { controllers::X, "X - P2 Start" }, { controllers::Menu, "Menu" },
+			{ controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/valve/index_controller", {
-		{ { controllers::Y, "B Reload P2" }, { controllers::X, "A Player 2" }, { controllers::Menu, "Pad squeeze Menu" },
-			{ controllers::Stick, "Stick click Recenter" } },
-		{ { controllers::B, "B Reload" }, { controllers::A, "A Start" }, { controllers::Trigger, "Trigger Shoot" },
-			{ controllers::Stick, "Stick click Laser" } } } },
+		{ { controllers::Y, "B - P2 Reload" }, { controllers::X, "A - P2 Start" }, { controllers::Menu, "Pad squeeze - Menu" },
+			{ controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/htc/vive_controller", {
-		{ { controllers::Y, "Pad click Reload P2" }, { controllers::X, "Menu Player 2 (hold: Menu)" } },
-		{ { controllers::B, "Pad click Reload" }, { controllers::A, "Menu Start" }, { controllers::Trigger, "Trigger Shoot" } } } },
+		{ { controllers::Y, "Pad click - P2 Reload" }, { controllers::X, "Menu - P2 Start (hold: Menu)" },
+			{ controllers::Trigger, "Trigger - P2 Shoot" } },
+		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" } } } },
 	{ "/interaction_profiles/microsoft/motion_controller", {
-		{ { controllers::Y, "Pad click Reload P2" }, { controllers::X, "Menu Player 2 (hold: Menu)" },
-			{ controllers::Stick, "Stick click Recenter" } },
-		{ { controllers::B, "Pad click Reload" }, { controllers::A, "Menu Start" }, { controllers::Trigger, "Trigger Shoot" },
-			{ controllers::Stick, "Stick click Laser" } } } },
+		{ { controllers::Y, "Pad click - P2 Reload" }, { controllers::X, "Menu - P2 Start (hold: Menu)" },
+			{ controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+			{ controllers::Stick, "Stick - Laser" } } } },
 };
+// The log's order, the README's: Start, the reload, the shot, the stick, the menu (by Button: A, B, X, Y, Menu, Stick,
+// Trigger, Grip)
+constexpr int ReadingOrder[controllers::Buttons] { 0, 1, 0, 1, 4, 3, 2, 5 };
 
 // A label's letters (its picture's pixels) and its height in the room: letters ~7.5 mm high, about
 // as sharp as a Quest 3 shows them at 40 cm. The column: from the hand's outermost button, and from
@@ -106,6 +113,8 @@ struct Logged
 	bool operator==(const Logged& o) const { return button == o.button && ownModel == o.ownModel && fromFile == o.fromFile && local == o.local; }
 };
 std::vector<Logged> logged[2];
+// Each hand's set as last logged (once a session, unless the controller kind changes)
+const Words *setLogged[2] {};
 const char *const HandName[2] { "left", "right" };
 
 const Words& wordsFor(const char *profile)
@@ -247,6 +256,19 @@ void draw(const glm::mat4& viewProj, int hand, const glm::mat4& grip, const glm:
 			layout.at[i] = points[i].room;
 		layOut(layout, hand, grip, words, eye);
 	}
+	// the log: the set this hand shows, in the reading order, when it changes
+	if (setLogged[hand] != &words)
+	{
+		setLogged[hand] = &words;
+		std::vector<Label> sorted(list);
+		std::stable_sort(sorted.begin(), sorted.end(), [](const Label& a, const Label& b) {
+			return ReadingOrder[a.button] < ReadingOrder[b.button];
+		});
+		std::string set;
+		for (const Label& l : sorted)
+			set += (set.empty() ? "" : ", ") + std::string(l.text);
+		NOTICE_LOG(RENDERER, "XR: labels set: %s: %s", HandName[hand], set.c_str());
+	}
 	// the log: where each line ends on the controller, when that changes (not with the pose)
 	bool same = logged[hand].size() == count;
 	for (size_t i = 0; i < count && same; i++)
@@ -299,6 +321,7 @@ void term()
 		layout = Layout();
 	for (std::vector<Logged>& l : logged)
 		l.clear();
+	setLogged[0] = setLogged[1] = nullptr;
 }
 
 }
