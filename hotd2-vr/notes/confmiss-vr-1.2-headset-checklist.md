@@ -139,16 +139,19 @@ where it is.
 ## 10. Cutscenes
 
 - [ ] **Do:** Start a game and watch the stage 1 intro.
-  **Expect:** about 0.3 s after the letterbox bars come, both hands show their Quest controllers (no labels); the guns
-  come back the moment play resumes (about 0.1 s after the bars go).
+  **Expect:** about 0.3 s after the letterbox bars come, both hands are empty: no gun, no controller, no laser line or
+  dot; the guns come back the moment play resumes (about 0.1 s after the bars go).
 - [ ] **Do:** a new game; press A (Start) in the intro.
   **Expect:** the game leaves the scene (about 1.4 s in the stage 1 intro) and the guns come back with it.
 - [ ] **Do:** in a cutscene, pull the trigger at the screen.
-  **Expect:** either nothing (the game ignores it; the controllers stay), or, if the game fires a round, the guns come
+  **Expect:** either nothing (the game ignores it; the hands stay empty), or, if the game fires a round, the guns come
   back at once and stay until the scene ends (`XR: cutscene ended by a shot (P1)`).
 - [ ] **Do:** play through stage 1's hall (its entrance scene) and on into stages 2 and 3.
-  **Expect:** no flicker between guns and controllers in fights. **Note** any letterboxed moment where you need to
+  **Expect:** no flicker between guns and empty hands in fights. **Note** any letterboxed moment where you need to
   shoot: the guns should come back on your first shot.
+- [ ] **Do:** in a cutscene, open ≡, point at a row, turn How to play on, then close the menu.
+  **Expect:** the menu's pointer line and dot show while it's open; How to play shows both labelled controllers; once
+  the menu closes the hands are empty again, until play resumes.
 
 ## 11. Player 2
 

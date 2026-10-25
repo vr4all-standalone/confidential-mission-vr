@@ -813,16 +813,12 @@ function Test-CmControllersRun {
 	if ($why) { return "no controller in the left hand: $why" }
 	$why = Invoke-VrCheck 'same', (Join-Path $dir 't057-playin.png'), (Join-Path $dir 't058-playout.png'), '--box', $cmControllerBox
 	if ($why) { return "a controller drawn in the left hand in play: $why" }
-	# the controllers go with the first Start (how to play ends) and stay gone, but for the game's cutscenes (1.2): the
-	# stage 1 intro, cut short by the Starts at ~46-49 s, shows both and takes them away again
+	# the controllers go with the first Start (how to play ends) and stay gone, the game's cutscenes too (1.2 round 2:
+	# the hands are empty there; the stage 1 intro, cut short by the Starts at ~46-49 s)
 	$n = Get-LogCount $name 'XR: controllers shown: ' -From 29 -To 62
 	$none = Get-LogCount $name 'XR: controllers shown: none$' -From 29 -To 62
-	$both = Get-LogCount $name 'XR: controllers shown: left and right$' -From 29 -To 62
-	$scenes = Get-LogCount $name 'XR: right hand: gun -> controller \(cutscene\)$' -From 29 -To 62
-	Write-Host "  $n lines 'XR: controllers shown' at 29-62 s, $none of them none, $both both, in $scenes cutscenes (want 1 + 2 a scene: the first Start, then both and none a scene)"
-	if ($scenes -gt 1 -or $n -ne 1 + 2 * $scenes -or $none -ne 1 + $scenes -or $both -ne $scenes) {
-		return "$n lines 'XR: controllers shown' after the first Start ($none none, $both both) with $scenes cutscenes, want one none and both/none a scene"
-	}
+	Write-Host "  $n lines 'XR: controllers shown' at 29-62 s, $none of them none (want 1 and 1: the first Start)"
+	if ($n -ne 1 -or $none -ne 1) { return "$n lines 'XR: controllers shown' after the first Start ($none none), want one, none" }
 	return $null
 }
 
@@ -2086,17 +2082,19 @@ function Test-CmOwnControllers {
 }
 
 # Controllers in the game's cutscenes (CM VR 1.2, spec section 7): vr::cutscene() is CM's letterbox bars (tex 400680)
-# in 18 frames in a row while a player is in (0x0C15A494), off at the sixth frame without them; both hands then hold
-# their controllers (no labels) and the guns come back when play resumes (findings, Cutscenes).
+# in 18 frames in a row while a player is in (0x0C15A494), off at the sixth frame without them; the hands are then empty
+# (1.2 round 2, the user's ask: no controller, no gun, no laser; "XR: in the hands: left nothing, right nothing") and
+# the guns come back when play resumes (findings, Cutscenes).
 # - intro (accept-cm-cutscene): Start to 44 s, so the briefing and the stage 1 intro play out (log ~59.5-81.4 s); then
 #   the first room with no shots, player 1 out (~90 s), game over and the attract, whose scenes have the bars too
-#   (~104-107 s) with no player in. One flip to the controller in the intro, one back before the first room, none after.
+#   (~104-107 s) with no player in. One flip to empty hands in the intro, one back before the first room, none after;
+#   nothing drawn in the hands from the flip to the gun's return, no controller after the first Start.
 # - skip (accept-cm-cutscene-skip): the same, player 2 joining with X at 50 s (the briefing), and A 1 s after the
 #   intro's flip (a key on that line): both hands flip, and both guns come back within 2 s of the press, with the
 #   bars: the game takes ~1.4 s to leave its intro after a Start, the bars on to the end (findings, Cutscenes; the
 #   hall run's Start at 48 s the same), and the guns come back within 6 frames (~0.1 s) of them.
 # - shot (accept-cm-cutscene-shot): the intro with the right trigger held 1 s after its flip (a key on that line). The
-#   game ignores a pull in its stage 1 intro (no round: tried, the controllers stayed to the scene's end), so the round
+#   game ignores a pull in its stage 1 intro (no round: tried, the hands stayed empty to the scene's end), so the round
 #   is made by hand: player 1's shot counter (+0x60) set to 0 at 58 s, then during the pull to 1 with the ammo (+0x4C)
 #   6 -> 5, as a fired shot leaves them. A round in cutscene mode ends it until the bars go (cutsceneVeto): the veto's
 #   line, the right gun back within 0.1 s of it and kept (no flip back to the controller before the scene's end), and
@@ -2110,41 +2108,53 @@ function Test-CmCutscene {
 	$intro = 'accept-cm-cutscene'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $intro; Seconds = 135; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr -Until 44); Reject = @('XR: initialisation failed', 'XR: left hand: ')
-		Expect = 'VR: cutscene on$', 'VR: cutscene off$', 'XR: right hand: gun -> controller \(cutscene\)$', 'XR: right hand: controller -> gun \(play\)$' }
+		Expect = 'VR: cutscene on$', 'VR: cutscene off$', 'XR: right hand: gun -> nothing \(cutscene\)$', 'XR: right hand: nothing -> gun \(play\)$' }
 	if ($why) { return $why }
-	$on = @(Get-CmCutsceneClocks $intro 'XR: right hand: gun -> controller \(cutscene\)$')
-	$off = @(Get-CmCutsceneClocks $intro 'XR: right hand: controller -> gun \(play\)$')
+	$on = @(Get-CmCutsceneClocks $intro 'XR: right hand: gun -> nothing \(cutscene\)$')
+	$off = @(Get-CmCutsceneClocks $intro 'XR: right hand: nothing -> gun \(play\)$')
 	$changes = @(Get-CmCutsceneClocks $intro 'XR: (right|left) hand: ' 31)
 	$labels = @(Get-CmCutsceneClocks $intro 'XR: labels on' 31)
-	Write-Host "  intro: to the controller at $($on -join ', ') s, back at $($off -join ', ') s (want one each, 55-65 s and 75-85 s); $($changes.Count) hold changes after 31 s (want 2); $($labels.Count) 'labels on' after 31 s (want 0)"
-	if ($on.Count -ne 1 -or $on[0] -lt 55 -or $on[0] -ge 65) { return "intro: want one 'gun -> controller (cutscene)' at 55-65 s, got $($on -join ', ')" }
-	if ($off.Count -ne 1 -or $off[0] -lt 75 -or $off[0] -ge 85) { return "intro: want one 'controller -> gun (play)' at 75-85 s, got $($off -join ', ')" }
+	Write-Host "  intro: to empty hands at $($on -join ', ') s, back at $($off -join ', ') s (want one each, 55-65 s and 75-85 s); $($changes.Count) hold changes after 31 s (want 2); $($labels.Count) 'labels on' after 31 s (want 0)"
+	if ($on.Count -ne 1 -or $on[0] -lt 55 -or $on[0] -ge 65) { return "intro: want one 'gun -> nothing (cutscene)' at 55-65 s, got $($on -join ', ')" }
+	if ($off.Count -ne 1 -or $off[0] -lt 75 -or $off[0] -ge 85) { return "intro: want one 'nothing -> gun (play)' at 75-85 s, got $($off -join ', ')" }
 	if ($changes.Count -ne 2) { return "intro: $($changes.Count) hold changes after 31 s, want 2 (none in the room, the game over or the attract)" }
 	if ($labels.Count) { return "intro: the labels came back in the game ($($labels.Count) 'XR: labels on' after 31 s)" }
-	# the controllers drawn in the scene: both, with the flip, and gone with the gun's return
-	$both = @(Get-CmCutsceneClocks $intro 'XR: controllers shown: left and right$' 31)
-	$none = @(Get-CmCutsceneClocks $intro 'XR: controllers shown: none$' 31)
-	Write-Host "  intro: controllers shown both at $($both -join ', ') s, none at $($none -join ', ') s (want one each, with the flips)"
-	if ($both.Count -ne 1 -or [Math]::Abs($both[0] - $on[0]) -gt 0.1 -or $none.Count -ne 1 -or [Math]::Abs($none[0] - $off[0]) -gt 0.1) {
-		return "intro: want both controllers shown with the flip at $($on[0]) s and none with the gun back at $($off[0]) s, got $($both -join ', ') / $($none -join ', ')"
+	# what the hands draw: nothing from the flip (no controller, no gun, no laser line or dot), the gun again from its
+	# return, and no controller after the first Start
+	$empty = @(Get-CmCutsceneClocks $intro 'XR: in the hands: ' 31 | Where-Object { $_ -lt $off[0] - 0.1 })
+	$emptyOk = @(Get-CmCutsceneClocks $intro 'XR: in the hands: left nothing, right nothing$' 31)
+	$gun = @(Get-CmCutsceneClocks $intro 'XR: in the hands: left nothing, right gun$' 31)
+	$shown = @(Get-CmCutsceneClocks $intro 'XR: controllers shown: (left|right)' 31)
+	Write-Host "  intro: the hands draw nothing from $($emptyOk -join ', ') s ($($empty.Count) changes before the return, want 1), the gun again from $($gun -join ', ') s (want one each, with the flips); $($shown.Count) controllers shown after 31 s (want 0)"
+	if ($empty.Count -ne 1 -or $emptyOk.Count -ne 1 -or [Math]::Abs($emptyOk[0] - $on[0]) -gt 0.1) {
+		return "intro: want the hands to draw nothing from the flip at $($on[0]) s to the return, got 'nothing' at $($emptyOk -join ', ') s, $($empty.Count) changes"
 	}
+	if ($gun.Count -ne 1 -or [Math]::Abs($gun[0] - $off[0]) -gt 0.1) { return "intro: want the gun drawn again with its return at $($off[0]) s, got $($gun -join ', ')" }
+	if ($shown.Count) { return "intro: a controller drawn after the first Start ($($shown.Count) 'XR: controllers shown' lines)" }
 	$why = Test-LogCount $intro 'VR: cutscene on$' 1
 	if ($why) { return "intro: $why (the attract's scenes count with no player in)" }
 
 	$skip = 'accept-cm-cutscene-skip'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $skip; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
-		At = @(Get-CmStartsXr -Until 44) + '50=xr left/x 1 200'; On = 'XR: right hand: gun -> controller \(cutscene\)|1|xr right/a 1 200'
+		At = @(Get-CmStartsXr -Until 44) + '50=xr left/x 1 200'; On = 'XR: right hand: gun -> nothing \(cutscene\)|1|xr right/a 1 200'
 		Reject = @('XR: initialisation failed')
-		Expect = 'XR: player 2 joins', 'XR: right hand: gun -> controller \(cutscene\)$', 'XR: left hand: gun -> controller \(cutscene\)$',
-			'XR: right hand: controller -> gun \(play\)$', 'XR: left hand: controller -> gun \(play\)$' }
+		Expect = 'XR: player 2 joins', 'XR: right hand: gun -> nothing \(cutscene\)$', 'XR: left hand: gun -> nothing \(cutscene\)$',
+			'XR: right hand: nothing -> gun \(play\)$', 'XR: left hand: nothing -> gun \(play\)$' }
 	if ($why) { return $why }
-	$at = (Get-CmCutsceneClocks $skip 'XR: right hand: gun -> controller \(cutscene\)$')[0]
+	$at = (Get-CmCutsceneClocks $skip 'XR: right hand: gun -> nothing \(cutscene\)$')[0]
+	# two players: both hands empty with the flip, both guns again after the press
+	$empty = @(Get-CmCutsceneClocks $skip 'XR: in the hands: left nothing, right nothing$' ($at - 0.1))
+	$both = @(Get-CmCutsceneClocks $skip 'XR: in the hands: left gun, right gun$' $at)
+	Write-Host "  skip: both hands draw nothing at $($empty -join ', ') s (want one, with the flip at $at s), both guns again at $($both -join ', ') s"
+	if ($empty.Count -ne 1 -or [Math]::Abs($empty[0] - $at) -gt 0.1 -or $both.Count -lt 1) {
+		return "skip: want both hands drawing nothing with the flip at $at s and both guns after, got nothing at $($empty -join ', '), guns at $($both -join ', ')"
+	}
 	# the keyed press as vr-test logged it (its clock ~0.2 s ahead of the log's: taken as the log's, so the wait reads longer)
 	$press = @(Get-Content -LiteralPath (Join-Path $repo "build-win\vrtest\$skip\actions.log") | ForEach-Object {
 		if ($_ -match '^\s*(\d+(\.\d+)?) xr right/a 1') { [double]::Parse($Matches[1], $inv) } } | Where-Object { $_ -gt $at + 0.5 })[0]
 	if ($null -eq $press) { return "skip: no keyed 'xr right/a' after $at s in actions.log" }
 	foreach ($hand in 'right', 'left') {
-		$back = @(Get-CmCutsceneClocks $skip "XR: $hand hand: controller -> gun \(play\)$" $at)
+		$back = @(Get-CmCutsceneClocks $skip "XR: $hand hand: nothing -> gun \(play\)$" $at)
 		$d = $(if ($back) { [Math]::Round($back[0] - $press, 3) } else { 'none' })
 		$end = @(Get-CmCutsceneClocks $skip 'VR: cutscene off$' $at)
 		Write-Host "  skip: the $hand gun back at $($back -join ', ') s, $d s after the press at $press s, the scene's end at $($end -join ', ') s (want one, within 2.0 s of the press and 0.1 s of the end)"
@@ -2156,21 +2166,21 @@ function Test-CmCutscene {
 	$shot = 'accept-cm-cutscene-shot'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $shot; Seconds = 90; XrSim = $true; Config = $cmWidenArcade
 		At = @(Get-CmStartsXr -Until 44) + '58=poke 0c155818 2 0' + '58=poke 0c155804 1 6'
-		On = @('XR: right hand: gun -> controller \(cutscene\)|1|xr right/trigger 1 400', 'XR: right hand: gun -> controller \(cutscene\)|1.1|poke 0c155804 1 5',
-			'XR: right hand: gun -> controller \(cutscene\)|1.1|poke 0c155818 2 1')
+		On = @('XR: right hand: gun -> nothing \(cutscene\)|1|xr right/trigger 1 400', 'XR: right hand: gun -> nothing \(cutscene\)|1.1|poke 0c155804 1 5',
+			'XR: right hand: gun -> nothing \(cutscene\)|1.1|poke 0c155818 2 1')
 		Reject = @('XR: initialisation failed')
-		Expect = 'XR: right hand: gun -> controller \(cutscene\)$', 'VR: poke 0c155818 = 0*1$', 'XR: cutscene ended by a shot \(P1\)$', 'VR: cutscene off$' }
+		Expect = 'XR: right hand: gun -> nothing \(cutscene\)$', 'VR: poke 0c155818 = 0*1$', 'XR: cutscene ended by a shot \(P1\)$', 'VR: cutscene off$' }
 	if ($why) { return $why }
-	$at = (Get-CmCutsceneClocks $shot 'XR: right hand: gun -> controller \(cutscene\)$')[0]
+	$at = (Get-CmCutsceneClocks $shot 'XR: right hand: gun -> nothing \(cutscene\)$')[0]
 	$veto = @(Get-CmCutsceneClocks $shot 'XR: cutscene ended by a shot \(P1\)$' $at)
-	$back = @(Get-CmCutsceneClocks $shot 'XR: right hand: controller -> gun \(' $at)
-	$again = @(Get-CmCutsceneClocks $shot 'XR: right hand: gun -> controller \(' ($at + 0.01))
+	$back = @(Get-CmCutsceneClocks $shot 'XR: right hand: nothing -> gun \(' $at)
+	$again = @(Get-CmCutsceneClocks $shot 'XR: right hand: gun -> nothing \(' ($at + 0.01))
 	$end = @(Get-CmCutsceneClocks $shot 'VR: cutscene off$' $at)
 	$kicks = @(Get-CmCutsceneClocks $shot 'XR: P1 kick: ' $at)
 	Write-Host "  shot: the flip at $at s, the veto at $($veto -join ', ') s, the gun back at $($back -join ', ') s, the scene's end at $($end -join ', ') s, P1 kicks at $($kicks -join ', ') s"
 	if ($back.Count -ne 1 -or $again.Count -or $end.Count -lt 1) { return "shot: want one return to the gun and no flip back after $at s, got back $($back -join ', '), again $($again -join ', '), end $($end -join ', ')" }
 	if ($veto.Count -ne 1 -or $back[0] - $veto[0] -lt 0 -or $back[0] - $veto[0] -gt 0.1 -or $back[0] -ge $end[0]) { return "shot: the veto at $($veto -join ', ') s, want the gun back within 0.1 s of it and before the scene's end ($($end[0]) s), got $($back[0]) s" }
-	if (-not (Get-CmCutsceneClocks $shot 'XR: right hand: controller -> gun \(a shot\)$' $at).Count) { return "shot: no 'controller -> gun (a shot)' line" }
+	if (-not (Get-CmCutsceneClocks $shot 'XR: right hand: nothing -> gun \(a shot\)$' $at).Count) { return "shot: no 'nothing -> gun (a shot)' line" }
 	if (-not $kicks.Count -or $kicks[0] - $veto[0] -gt 0.5) { return "shot: the round fired in the scene gave no P1 kick near the veto ($($kicks -join ', ') s)" }
 
 	$why = Invoke-CmRun 'accept-cm-hall'

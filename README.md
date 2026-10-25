@@ -57,8 +57,8 @@ PC VR headsets are not tested yet (see [The game](#the-game)).
   (the menu's Reload row). B and Y reload too.
 * **Gun angle.** Tilt the gun in your hand from -30° to +30° in 1° steps, so it points where
   your hand points, whatever controller you hold.
-* **Controllers in the cutscenes.** In the stage intros and story scenes your hands show their
-  controllers, and the guns come back the moment play resumes.
+* **Empty hands in the cutscenes.** In the stage intros and story scenes your hands are empty (no
+  gun, no controller, no laser), and the guns come back the moment play resumes.
 * **A menu in the headset.** The left ≡ pauses the game: gun, gun angle, reload, hands, laser, haptics,
   world size, panel distance and a how-to-play view, each saved at once.
 * **A start screen that checks your files.** READY, or which file is missing and where it goes.
@@ -202,8 +202,8 @@ The how-to-play labels by the controllers' buttons (before play starts, and the 
 "Stick" is the stick click. Before player 2 joins, the left trigger shoots for player 1 too: the
 one gun goes to the hand that fires.
 
-In the game's cutscenes (the stage intros and the story scenes) both hands show their
-controllers, without labels, and the guns come back the moment play resumes. Start still skips
+In the game's cutscenes (the stage intros and the story scenes) both hands are empty: no gun,
+no controller, no laser. The guns come back the moment play resumes. Start still skips
 a scene. A round the game fires during one (a scene that takes shots) brings the guns back at
 once, until the scene ends.
 

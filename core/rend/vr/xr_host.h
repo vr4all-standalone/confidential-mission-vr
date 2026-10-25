@@ -14,8 +14,9 @@
 namespace vr::xr
 {
 
-// What a hand holds (holds()): its controller (drawn, with the how-to-play labels before play), or a gun.
-enum class Holds { Controller, Gun };
+// What a hand holds (holds()): its controller (drawn, with the how-to-play labels before play), a gun, or
+// nothing (a gun's hand in the game's cutscenes: no gun, no controller, no laser).
+enum class Holds { Controller, Gun, Nothing };
 
 struct Eye
 {
@@ -59,8 +60,9 @@ void quitToStart();
 // labels on (xr_labels.h). Player 1's gun hand (player 1's, p1Hand(), or the hand whose trigger was
 // pulled: the single gun's move) holds the gun from player 1's first Start or trigger pull, the labels
 // going then; the other holds player 2's gun while player 2 is in. In single play the other hand holds
-// its controller (not drawn once play starts). Haptics go to the gun's hand, so this is where a gun is
-// drawn. Render thread.
+// its controller (not drawn once play starts). In the game's cutscenes a hand that holds a gun holds
+// nothing instead, until play resumes. Haptics go to the gun's hand, so this is where a gun is drawn.
+// Render thread.
 Holds holds(int hand);
 // Player 1's controller (vr.P1Hand, the menu's Hands): 1 the right (the default), 0 the left. Its Start
 // and B are player 1's and, with two players, its hand holds player 1's gun; the other's are player 2's.

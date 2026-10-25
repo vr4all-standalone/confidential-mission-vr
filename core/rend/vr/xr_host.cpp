@@ -249,7 +249,8 @@ struct NewGameRegistration
 // first Start or pull, and while the menu's How to play is on. (The labels drawn only with the light
 // gun on, vr.XrGun; without it the controllers always show.)
 // The game's cutscenes once play has started (vr::cutscene(), read once a frame in updateLightgun):
-// both hands hold their controllers, with no labels, until play resumes. A round the game fires
+// the hands that hold a gun hold nothing (holds(): no gun, no controller, no laser line), the other
+// hand draws nothing as in play, no labels, until play resumes. A round the game fires
 // in cutscene mode (gunKnocks: cutsceneVeto) ends it until the bars have gone: play is live (a
 // letterboxed moment that takes shots, or a scene skipped with a shot), so the guns come back at
 // once and stay, even if the bars blink.
@@ -264,7 +265,7 @@ bool labelsOn()
 // What each hand holds and whether the labels show, logged where it changed (why: what did it).
 void noteHolds(const char *why)
 {
-	static const char *const Names[] { "controller", "gun" };
+	static const char *const Names[] { "controller", "gun", "nothing" };
 	for (int hand : { Left, Right })
 	{
 		const Holds now = holds(hand);
@@ -1837,15 +1838,14 @@ void retryControllerModels()
 }
 
 // The controllers drawn this frame (xr_controllers.h): only while how to play shows (labelsOn():
-// before play starts, the menu's How to play; always with the light gun off, vr.XrGun) and in the
-// game's cutscenes (inCutscene), in each
-// tracked hand that shows no gun, at its grip pose, while focused and vr.ShowControllers is on. Once
+// before play starts, the menu's How to play; always with the light gun off, vr.XrGun), in each
+// tracked hand that shows no gun (not in the game's cutscenes: the hands are empty then), at its grip pose, while focused and vr.ShowControllers is on. Once
 // play starts a hand without a gun draws nothing (the menu's pointer lines still start from it).
 // Logs "XR: controllers shown: left and right" (none, left, right) where that changes, tracking aside.
 void updateControllers(XrTime time)
 {
 	const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
-	const bool howToPlay = labelsOn() || inCutscene || !config::VrXrGun;
+	const bool howToPlay = labelsOn() || !config::VrXrGun;
 	int shown = 0;		// the hands that show one: 1 left, 2 right
 	for (int hand : { Left, Right })
 	{
@@ -1873,6 +1873,31 @@ void updateControllers(XrTime time)
 		static const char *const Shown[] { "none", "left", "right", "left and right" };
 		NOTICE_LOG(INPUT, "XR: controllers shown: %s", Shown[shown]);
 		shownWas = shown;
+	}
+}
+
+// What each hand draws this frame, logged where it changes: "XR: in the hands: left nothing, right gun".
+// Its gun (with its laser line and dot), its controller, the menu's pointer line from a hand without a
+// gun, or nothing (the game's cutscenes: both hands).
+void noteDrawn()
+{
+	static std::string drawnWas;
+	std::string drawn;
+	for (int hand : { Left, Right })
+	{
+		std::string what;
+		if (gunInHand(hand) != nullptr)
+			what = "gun";
+		if (controllerShown[hand])
+			what += what.empty() ? "controller" : " and controller";
+		if (pointerShown[hand])
+			what += what.empty() ? "pointer" : " and pointer";
+		drawn += std::string(hand == Left ? "left " : ", right ") + (what.empty() ? "nothing" : what);
+	}
+	if (drawn != drawnWas)
+	{
+		NOTICE_LOG(INPUT, "XR: in the hands: %s", drawn.c_str());
+		drawnWas = drawn;
 	}
 }
 
@@ -2738,11 +2763,11 @@ Holds holds(int hand)
 {
 	if (menuHowToPlay || (hand != Left && hand != Right))
 		return Holds::Controller;
-	if (p1Armed && inCutscene)
+	const bool gun = (dualWield && hand == guns[1].hand) || (p1Armed && hand == guns[0].hand);
+	if (!gun)
 		return Holds::Controller;
-	if (dualWield && hand == guns[1].hand)
-		return Holds::Gun;
-	return p1Armed && hand == guns[0].hand ? Holds::Gun : Holds::Controller;
+	// the game's cutscenes: the gun put away and nothing in its place, until play resumes
+	return p1Armed && inCutscene ? Holds::Nothing : Holds::Gun;
 }
 
 int p1Hand()
@@ -3019,6 +3044,7 @@ bool frame()
 	updateLightgun(frameState.predictedDisplayTime);
 	retryControllerModels();
 	updateControllers(frameState.predictedDisplayTime);
+	noteDrawn();
 
 	XrCompositionLayerProjectionView projViews[2] { { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW }, { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW } };
 	const bool render = frameState.shouldRender && located;
