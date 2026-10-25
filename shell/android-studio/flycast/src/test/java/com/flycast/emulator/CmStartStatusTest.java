@@ -114,16 +114,26 @@ public class CmStartStatusTest
     }
 
     @Test
-    public void noAccessIsNotReady() throws IOException
+    public void ownFolderNeedsNoAccess() throws IOException
     {
-        // all three in the app's own folder, which needs no access: found, but not ready
+        // all three in the app's own folder, which needs no access: ready without it
         allThree(games);
         CmFiles.Result r = CmFiles.find(roots());
         assertTrue(r.missing.toString(), r.missing.isEmpty());
         CmStartStatus s = CmStartStatus.from(r, false);
+        assertTrue(s.ready);
+        assertEquals("READY", s.badge);
+        assertEquals(Arrays.asList("confmiss.zip" + OK, "naomi.zip" + OK, "CHD" + OK), s.fileMarks);
+    }
+
+    @Test
+    public void missingWithoutAccessAsksForIt() throws IOException
+    {
+        // nothing found and no access: the files may be in Download, so the badge asks for the access
+        CmFiles.Result r = CmFiles.find(roots());
+        CmStartStatus s = CmStartStatus.from(r, false);
         assertFalse(s.ready);
         assertEquals("ALLOW ACCESS", s.badge);
-        assertEquals(Arrays.asList("confmiss.zip" + OK, "naomi.zip" + OK, "CHD" + OK), s.fileMarks);
     }
 
     @Test

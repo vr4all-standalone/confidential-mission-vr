@@ -20,7 +20,7 @@ final class CmStartStatus
     static final String FOUND = " ✓";
     static final String MISSING = " missing";
 
-    /** All three files found, and the app may read shared storage: Play may start. */
+    /** All three files found (shared storage, or the app's own folder without the access): Play may start. */
     final boolean ready;
     /** READY, ALLOW ACCESS, CHECKING (before the first check) or MISSING FILES. */
     final String badge;
@@ -54,7 +54,9 @@ final class CmStartStatus
                     lines.add(f[0] + MISSING + line.substring(f[0].length()));
             }
         }
-        boolean ready = r != null && canRead && lines.isEmpty() && r.missing.isEmpty();
+        // files in the app's own folder need no access: found is ready; without the access, a
+        // missing file may only be hidden in shared storage, so the badge asks for the access first
+        boolean ready = r != null && lines.isEmpty() && r.missing.isEmpty();
         String badge = ready ? READY : !canRead ? ALLOW_ACCESS : r == null ? CHECKING : MISSING_FILES;
         return new CmStartStatus(ready, badge, marks, lines);
     }
