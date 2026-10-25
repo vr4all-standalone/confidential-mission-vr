@@ -3,9 +3,9 @@
   (notes\adding-a-game.md, section 7): light-gun input over UDP at set times, window
   screenshots, rips, then checks over flycast.log. accept.ps1 runs the acceptance scenarios.
 
-  .\hotd2-vr\vr-test.ps1 -Game confmiss -Name boot -Seconds 40 -Expect 'NAOMI GAME ID'
-  .\hotd2-vr\vr-test.ps1 -Game mok -Seconds 90 -At '30=start','70=fire 0 5000 5000','72=shot','75=rip 1 1 1'
-  .\hotd2-vr\vr-test.ps1 -Game $env:VRLGH_HOTD2 -Config 'config:vr.FovScale=3'
+  .\cm-vr\vr-test.ps1 -Game confmiss -Name boot -Seconds 40 -Expect 'NAOMI GAME ID'
+  .\cm-vr\vr-test.ps1 -Game mok -Seconds 90 -At '30=start','70=fire 0 5000 5000','72=shot','75=rip 1 1 1'
+  .\cm-vr\vr-test.ps1 -Game $env:VRLGH_HOTD2 -Config 'config:vr.FovScale=3'
 
   -Game     a MAME set name, as <set>.zip in $env:VRLGH_GAMES (with its CHD in <set>\ and
             naomi.zip), or the path of a disc image (its gun in port A).
@@ -81,7 +81,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $Name -or $Name -match '^\.+$|\.\.|[\\/:*?\[\]]') { throw "-Name '$Name': want a plain folder name" }
 $repo = Split-Path -Parent $PSScriptRoot
 $exe = Join-Path $repo 'build-win\flycast.exe'
-if (-not (Test-Path $exe)) { throw "Build the Windows version first: hotd2-vr\build-win.cmd" }
+if (-not (Test-Path $exe)) { throw "Build the Windows version first: cm-vr\build-win.cmd" }
 $out = Join-Path $repo "build-win\vrtest\$Name"
 $dataDir = Join-Path $repo 'build-win\data'	# Flycast's writable data dir (winmain.cpp), where DebugShots go
 $port = 27016

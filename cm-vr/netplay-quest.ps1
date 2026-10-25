@@ -8,7 +8,7 @@
   network:hotd2vr.TestAnyCpu lets them connect for this test, and their games drift apart
   after a while. The cost is what this measures, not the sync.
 
-  .\hotd2-vr\netplay-quest.ps1 -QuestIp 192.168.1.155 [-Seconds 300] [-Delay 1]
+  .\cm-vr\netplay-quest.ps1 -QuestIp 192.168.1.155 [-Seconds 300] [-Delay 1]
 
   Start the headset side first (the script prints the adb command), then this.
 #>

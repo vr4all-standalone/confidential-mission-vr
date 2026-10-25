@@ -6,15 +6,15 @@
   video and sound RAM; HOTD2VR_SYNCLOG, ggpo.cpp): whether the two stay the same game. Also
   how much was rolled back and how fast it ran.
 
-  .\hotd2-vr\netplay-test.ps1                              HOTD2 PAL, 150 s, a perfect network
-  .\hotd2-vr\netplay-test.ps1 -Quest                       vr.FovScale 2 (online the game's
+  .\cm-vr\netplay-test.ps1                              HOTD2 PAL, 150 s, a perfect network
+  .\cm-vr\netplay-test.ps1 -Quest                       vr.FovScale 2 (online the game's
                                                            profile sets that on both sides anyway)
-  .\hotd2-vr\netplay-test.ps1 -OwnSaves                    each copy its own flash and memory
+  .\cm-vr\netplay-test.ps1 -OwnSaves                    each copy its own flash and memory
                                                            card (as two headsets): must still match
-  .\hotd2-vr\netplay-test.ps1 -NetDelay 80 -Loss 2         a bad connection: 80 ms each way
+  .\cm-vr\netplay-test.ps1 -NetDelay 80 -Loss 2         a bad connection: 80 ms each way
                                                            (with jitter), 2% of packets lost
-  .\hotd2-vr\netplay-test.ps1 -Game us -GamePath X.chd     the US version
-  .\hotd2-vr\netplay-test.ps1 -Game mok                    The Maze of the Kings (naomi\mok.zip)
+  .\cm-vr\netplay-test.ps1 -Game us -GamePath X.chd     the US version
+  .\cm-vr\netplay-test.ps1 -Game mok                    The Maze of the Kings (naomi\mok.zip)
 
   -Delay is GGPO's input delay in frames (fewer rollbacks, a later shot), -Oop the percentage of
   packets sent out of order, -Dump frames to write state + RAM of (e.g. '2,3860'), -Pages a hash

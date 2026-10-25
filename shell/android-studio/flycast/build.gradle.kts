@@ -25,7 +25,7 @@ fun gitShortHash(): String {
 // debug.keystore is public, so anyone could sign an "update" with it). A properties file with
 // storeFile (relative to the properties file), storePassword, keyAlias and keyPassword: the path
 // in the environment variable VRLGH_SIGNING, else ~/.vrlightgunhub/release-signing.properties.
-// hotd2-vr/make-release-key.ps1 makes the key and the file. Without it: the debug key, and a warning.
+// cm-vr/make-release-key.ps1 makes the key and the file. Without it: the debug key, and a warning.
 val hubSigningFile: File = providers.environmentVariable("VRLGH_SIGNING").orNull
     ?.takeIf { it.isNotBlank() }?.let { File(it) }
     ?: File(System.getProperty("user.home"), ".vrlightgunhub/release-signing.properties")
@@ -104,7 +104,7 @@ android {
             val hub = signingConfigs.findByName("hub")
             if (hub == null) {
                 logger.warn("hotd2-vr: no release key, $hubSigningFile not found (set VRLGH_SIGNING, or run " +
-                    "hotd2-vr\\make-release-key.ps1): the vr build is signed with the public debug key, not for release")
+                    "cm-vr\\make-release-key.ps1): the vr build is signed with the public debug key, not for release")
             }
             signingConfig = hub ?: signingConfigs.getByName("debug")
             // run-as for copying games into app storage and reading logs
@@ -152,7 +152,7 @@ android {
     }
 }
 
-// hotd2-vr: the models that come with the app, hotd2-vr/models (guns/, controllers/, CREDITS.txt): filled
+// hotd2-vr: the models that come with the app, cm-vr/models (guns/, controllers/, CREDITS.txt): filled
 // by hand from the models' own downloads for a release build and never in git (.gitignore; the README's
 // Releasing). The vr build's assets/models when that folder is there, else none (the plain public build).
 // BaseGLActivity copies them out to the data folder at start.
@@ -175,7 +175,7 @@ abstract class BundledModels : DefaultTask() {
         }.forEach { it.copyTo(File(out, "models/" + it.relativeTo(from).invariantSeparatorsPath), overwrite = true) }
     }
 }
-val bundledModels = file("../../../hotd2-vr/models")
+val bundledModels = file("../../../cm-vr/models")
 
 // hotd2-vr: the licence the app goes out under, assets/LICENSE.txt in the vr build (the APK is downloaded on its own):
 // GPL-3.0 (the copy that comes with Flycast's picoTCP), cgltf's MIT notice (core/deps/cgltf, it reads the GLB models)
@@ -249,7 +249,7 @@ androidComponents {
                 models.set(bundledModels)
             }
             variant.sources.assets?.addGeneratedSourceDirectory(copy, BundledModels::assets)
-            logger.lifecycle("hotd2-vr: hotd2-vr/models goes in the ${variant.name} build as assets/models")
+            logger.lifecycle("hotd2-vr: cm-vr/models goes in the ${variant.name} build as assets/models")
         }
     }
 }

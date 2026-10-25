@@ -67,9 +67,9 @@ How games are told apart: `settings.content.gameId` [V]
 | `VrGames.java:125` `score()` | file name contains "hotd" | sort order |
 | `VrSetupActivity.java:57, 79-81` | - | title and help text naming HOTD2 + MOK |
 | `.gitignore` | file name | `hands*.bin`, `staff*.bin` |
-| `hotd2-vr/run-test.ps1` | - | HOTD2 PAL `vr.ProjAddr=5006816, vr.ViewportAddr=5007112` baked in; picks `game\*.cue/gdi/chd` |
-| `hotd2-vr/rip-hands.ps1` | - | HOTD2 texture `5fe380`, Start timings 44-58.5 s |
-| `hotd2-vr/netplay-test.ps1:28,52,65` | `-Game pal/us/mok` | MOK at `<data>\naomi\mok.zip`, route timings |
+| `cm-vr/run-test.ps1` | - | HOTD2 PAL `vr.ProjAddr=5006816, vr.ViewportAddr=5007112` baked in; picks `game\*.cue/gdi/chd` |
+| `cm-vr/rip-hands.ps1` | - | HOTD2 texture `5fe380`, Start timings 44-58.5 s |
+| `cm-vr/netplay-test.ps1:28,52,65` | `-Game pal/us/mok` | MOK at `<data>\naomi\mok.zip`, route timings |
 | `core/hw/maple/maple_jvs.cpp:1526-1537` (upstream) | NAOMI gameId | light-gun I/O board (section 4) |
 | `README.md` | - | per-game sections |
 
@@ -268,11 +268,11 @@ To add CM: one `ARCADE` row, the help text. Nothing else in Java [V].
 
 ## 7. Reverse-engineering recipe (PC), as done for MOK
 
-Sources: README "How it was worked out", profile comments, commit messages, `hotd2-vr/` tools. Steps
+Sources: README "How it was worked out", profile comments, commit messages, `cm-vr/` tools. Steps
 marked [I] are my reconstruction of how to apply it; the tools and config keys are [V].
 
 ### 7.0 Setup
-- `hotd2-vr\build-win.cmd` -> `build-win\flycast.exe`. Python + `pip install capstone numpy pillow`.
+- `cm-vr\build-win.cmd` -> `build-win\flycast.exe`. Python + `pip install capstone numpy pillow`.
 - Data layout like `netplay-test.ps1` uses for MOK: `<data>\naomi\confmiss.zip`,
   `<data>\naomi\confmiss\gds-0001.chd`, `<data>\naomi\naomi.zip`; `<data>` = folder above the repo or
   `%HOTD2VR_DATA%`. Run from `<data>\run` (rip files are relative to the working dir).
@@ -298,7 +298,7 @@ PC only. Write a file `rip.request` in the working dir: `count interval ram [tex
   colours, isp/tsp/tcw/pcw), `rip\vram0000.bin` + `pal0000.bin` (when changed), `rip\ram0000.bin`
   (whole main RAM, 32 MB on NAOMI, base 0x0C000000).
 - `20 60 1` -> 20 passes 60 apart; `1 1 0 5fe380 20` -> wait for >= 20 polys with texture 0x5fe380.
-- Header `RIP1`: fb size, live focal x/y, `vr.HudW`, `vr.Focal`. Read with `hotd2-vr\assets\riplib.py`
+- Header `RIP1`: fb size, live focal x/y, `vr.HudW`, `vr.Focal`. Read with `cm-vr\assets\riplib.py`
   (`Poly.tex`, `.lst` 0 opaque/1 punch-through/2 translucent) [V].
 - From rips: W histogram (HUD W, subtitle/menu W, letterbox W, the near-plane W where many corners are
   pinned, e.g. MOK 1.0), texture addresses of HUD sprites, P2 prompt, shot effects, weapon [I procedure].
@@ -315,7 +315,7 @@ Verify on PC: `,config:vr.ProjAddr=<decimal offset>,config:vr.ViewportAddr=<deci
 ### 7.4 Field of view (what the game builds its projection from)
 1. [I] Find code that references the projection address: search the RAM dump for the 32-bit value
    `0x8C000000|off` or `0x0C000000|off` (literal pools), then
-   `python hotd2-vr\re\sh4dis.py 8c08d8d0 8c08d960 rip\ram0000.bin` (shows literal values) [V tool].
+   `python cm-vr\re\sh4dis.py 8c08d8d0 8c08d960 rip\ram0000.bin` (shows literal values) [V tool].
 2. Look for the angle: SH4 `fsca` takes a 16-bit angle (65536 = turn) in FPUL; a halving (`shar`/`shlr`)
    before it is "A/2"; tan = sin/cos [I]. Trace callers to where A comes from.
    - A loaded from code literals (HOTD2: `0x1D3C` = 41.1 deg at `0x8C029C12`, `0x8C02B370`) -> `fovLiterals`
@@ -368,7 +368,7 @@ are drawn in depth layers with no 3D.
 Lift floor vertices from a rip (W and y with the focal) to measure.
 
 ### 7.10 Headset check
-`hotd2-vr\build-quest.cmd`, install, put the set in Download, play. The headset logs the first 8 shots'
+`cm-vr\build-quest.cmd`, install, put the set in Download, play. The headset logs the first 8 shots'
 diagnostics too (`VR diag: shot ...`) [V].
 
 ---

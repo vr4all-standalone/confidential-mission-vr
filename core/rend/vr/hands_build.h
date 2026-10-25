@@ -1,6 +1,6 @@
 /*
 	Making the agent's hands and pistol (hands.bin) from one render pass of the game itself
-	(hotd2-vr): the C++ twin of hotd2-vr/assets/rip_hands.py, so the headset makes them from
+	(hotd2-vr): the C++ twin of cm-vr/assets/rip_hands.py, so the headset makes them from
 	the player's own copy of the game, with no PC and nothing of the game in the app. The
 	same for the hero's staff in The Maze of the Kings (staff-mok.bin), in the same format,
 	and Confidential Mission's guns (gun-cm-*.bin), gun only.

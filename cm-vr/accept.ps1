@@ -3,9 +3,9 @@
   vr-test.ps1 and checks the run with re\vrcheck.py. HOTD2 and MOK are the baselines when
   adding a game: they must keep passing after every change to the C++.
 
-  .\hotd2-vr\accept.ps1                    all scenarios
-  .\hotd2-vr\accept.ps1 -Only hotd2,mok
-  .\hotd2-vr\accept.ps1 -Only cm-aim -Reuse   check the runs already there, without playing them
+  .\cm-vr\accept.ps1                    all scenarios
+  .\cm-vr\accept.ps1 -Only hotd2,mok
+  .\cm-vr\accept.ps1 -Only cm-aim -Reuse   check the runs already there, without playing them
 
   Needs $env:VRLGH_GAMES (the MAME sets: mok.zip, mok\gds-0022.chd, confmiss.zip,
   confmiss\gds-0001.chd, naomi.zip), $env:VRLGH_HOTD2 (the US disc of The House of the Dead 2,

@@ -111,7 +111,7 @@ Everything above, on the Quest 3 (primary) and PC VR.
 - **Showing another mod's launcher or names.**
 - **A menu that blanks the headset or runs the game on underneath it.**
 - **Losing frame rate:** 72 Hz on Quest 3 holds.
-- **Breaking v1's aim, HUD panel, floor or player 2.** All of `hotd2-vr/accept.ps1`'s CM scenarios (cm-boot, cm-widen, cm-aim, cm-hud, cm-p2, cm-floor) keep passing.
+- **Breaking v1's aim, HUD panel, floor or player 2.** All of `cm-vr/accept.ps1`'s CM scenarios (cm-boot, cm-widen, cm-aim, cm-hud, cm-p2, cm-floor) keep passing.
 
 ## Decided
 

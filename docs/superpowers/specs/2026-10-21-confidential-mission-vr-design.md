@@ -89,13 +89,13 @@ numbers; the Maze of the Kings commit (`eb2e300cd`) is the template.
   `E:\___flattovrdev\confidential mission\House of the Dead 2 The (USA).chd` (US profile `MK-51002`;
   the `hotd2` zips are the arcade sets, which have no profile).
 - Builds (both verified unmodified on this machine, about 2 minutes each):
-  - PC: `hotd2-vr\build-win.cmd` -> `build-win\flycast.exe`.
+  - PC: `cm-vr\build-win.cmd` -> `build-win\flycast.exe`.
   - Quest: `JAVA_HOME=E:\UnityEd\6000.0.78f1\Editor\Data\PlaybackEngines\AndroidPlayer\OpenJDK`,
-    `ANDROID_HOME=E:\AndroidSdk`, then `hotd2-vr\build-quest.cmd` ->
+    `ANDROID_HOME=E:\AndroidSdk`, then `cm-vr\build-quest.cmd` ->
     `shell\android-studio\flycast\build\outputs\apk\vr\flycast-vr.apk`.
 - The reverse engineering happens on the PC build (rips, RAM dumps, `vr.DebugShots`, scripted UDP gun
-  input, `hotd2-vr\re\sh4dis.py`). The procedure, MOK's profile values, the game-specific spots and
-  the known traps are in `hotd2-vr\notes\adding-a-game.md`; read it first.
+  input, `cm-vr\re\sh4dis.py`). The procedure, MOK's profile values, the game-specific spots and
+  the known traps are in `cm-vr\notes\adding-a-game.md`; read it first.
 - Headset tests are done by the user on their Quest 3 (sideload); each round needs them, so batch
   what goes into a headset build. PC VR can be checked with the Quest over Link.
 - Upstream already gives `confmiss` the same light-gun I/O board as MOK (`maple_jvs.cpp:1527`); its

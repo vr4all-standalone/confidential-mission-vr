@@ -24,7 +24,7 @@
 **Research:** read the sections each task names; this plan does not repeat them.
 - `.superpowers/sdd/2026-10-21-confidential-mission-vr/v11-research-code.md` ("code Qn" below).
 - `.superpowers/sdd/2026-10-21-confidential-mission-vr/v11-research-game.md` ("game An/Bn").
-- `hotd2-vr/notes/confmiss-findings.md` ("findings").
+- `cm-vr/notes/confmiss-findings.md` ("findings").
 
 ## Global Constraints
 
@@ -53,13 +53,13 @@ Carried over from v1 and the spec:
 - **CM's game ID** is `" CONFIDENTIAL MISSION ---------"`, and its profile log line is `VR: camera profile for  CONFIDENTIAL MISSION ---------` (two spaces).
 - **Per-game numbers live only in CM's `GameProfile`** (`core/rend/vr_reproject.cpp` ~415-484), each with a comment saying what it is and how it was found. Generic code stays generic.
   - Leave the HOTD2/MOK profiles, their rip runs, `buildStaff` and `vr.StaffHand` in place, unreachable from the app. This keeps upstream merges small.
-- **hotd2/mok accept scenarios stay as engine regression checks.** `.\hotd2-vr\accept.ps1 -Only hotd2,mok` must pass after every task that touches C++. No task here is expected to make them impossible. If one does, it says so in its report and its commit message, and names the scenario.
-- **CM regression after every task that touches C++:** `.\hotd2-vr\accept.ps1 -Only cm-boot,cm-widen,cm-aim,cm-hud,cm-p2,cm-floor` passes. So do the 1.1 scenarios added so far; `accept.ps1` with no `-Only` runs everything, so run it in the background.
-- **PC build:** `hotd2-vr\build-win.cmd` → `build-win\flycast.exe` (~2 min).
-- **Quest build:** used only where a task says so. Set `JAVA_HOME=E:\UnityEd\6000.0.78f1\Editor\Data\PlaybackEngines\AndroidPlayer\OpenJDK` and `ANDROID_HOME=E:\AndroidSdk`, then run `hotd2-vr\build-quest.cmd` → `shell\android-studio\flycast\build\outputs\apk\vr\flycast-vr.apk`. Signing goes through the existing Gradle `hub` config; never open or print its properties file.
+- **hotd2/mok accept scenarios stay as engine regression checks.** `.\cm-vr\accept.ps1 -Only hotd2,mok` must pass after every task that touches C++. No task here is expected to make them impossible. If one does, it says so in its report and its commit message, and names the scenario.
+- **CM regression after every task that touches C++:** `.\cm-vr\accept.ps1 -Only cm-boot,cm-widen,cm-aim,cm-hud,cm-p2,cm-floor` passes. So do the 1.1 scenarios added so far; `accept.ps1` with no `-Only` runs everything, so run it in the background.
+- **PC build:** `cm-vr\build-win.cmd` → `build-win\flycast.exe` (~2 min).
+- **Quest build:** used only where a task says so. Set `JAVA_HOME=E:\UnityEd\6000.0.78f1\Editor\Data\PlaybackEngines\AndroidPlayer\OpenJDK` and `ANDROID_HOME=E:\AndroidSdk`, then run `cm-vr\build-quest.cmd` → `shell\android-studio\flycast\build\outputs\apk\vr\flycast-vr.apk`. Signing goes through the existing Gradle `hub` config; never open or print its properties file.
 - **This PC has no headset.** `-Xr` falls back to the flat window (`XR_ERROR_FORM_FACTOR_UNAVAILABLE`, findings `## Acceptance`).
   - Everything XR is tested through the simulator (Task 1, `-XrSim`).
-  - What only a headset can show goes into `hotd2-vr/notes/confmiss-vr-1.1-headset-checklist.md`: Task 1 creates it, each task appends its own `## Task N` items, and Task 15 orders it.
+  - What only a headset can show goes into `cm-vr/notes/confmiss-vr-1.1-headset-checklist.md`: Task 1 creates it, each task appends its own `## Task N` items, and Task 15 orders it.
 - **PC-only debug input.** `vr.XrSim`, `vr.XrSim*`, `vr.Watch*` and the UDP lines `XR`, `XRPOSE`, `XRSTATE` and `POKE` exist only on PC (`#ifndef __ANDROID__`). They do nothing unless set.
 - **Simulator runs prepare guns only on request.** Under the simulator the first-start gun run (hands prep) runs only with `vr.HandsPrep=yes`, as on the flat PC; the headset always runs it.
   - Any CM run may still *watch* for a gun in play and save `build-win\data\gun-cm-*.bin`.
@@ -114,15 +114,15 @@ The order puts risk first, and deviates from the brief's suggested order for the
 | `core/rend/vr/xr_panel.{h,cpp}` | 7, 9 | row panels with a pose and hit test; small text textures |
 | `core/rend/vr/xr_menu.{h,cpp}` (new) | 7 | the settings menu |
 | `core/deps/cgltf/` (new), `core/rend/vr/glb_mesh.{h,cpp}` (new) | 8 | GLB loading |
-| `core/rend/vr/xr_controllers.{h,cpp}`, `controller_model.h` (new), `hotd2-vr/controller_model/make_controller.py` (new) | 8 | runtime or built-in controller models |
+| `core/rend/vr/xr_controllers.{h,cpp}`, `controller_model.h` (new), `cm-vr/controller_model/make_controller.py` (new) | 8 | runtime or built-in controller models |
 | `core/rend/vr/xr_labels.{h,cpp}` (new) | 9 | button labels |
 | `core/rend/vr/hands_rip.{h,cpp}`, `hands_build.{h,cpp}`, `xr_hands.{h,cpp}`, `xr_gun.{h,cpp}` | 10-14 | CM gun runs, gun-only build, HND1 v2, several models, tint |
 | `core/rend/vr_reproject.{h,cpp}` | 4, 6, 10-14 | RAM and texture watches, pokes, gun RAM, CM profile guns |
 | `core/cfg/option.{h,cpp}`, `core/input/udp_lightgun.cpp` | 1, 4, 6-8 | new options; UDP debug lines |
 | `shell/android-studio/flycast/...` (Java, manifest, gradle, icons) | 5, 7, 8 | standalone app, quit to start, render-model permission |
-| `hotd2-vr/vr-test.ps1`, `accept.ps1`, `re/vrcheck.py`, `re/make-test-glb.py` (new) | 1-15 | harness |
-| `hotd2-vr/package-release.ps1`, `assets/make-icon.py`, `assets/Play Confidential Mission.cmd` (new), `README.md`, `.github/ISSUE_TEMPLATE/bug_report.yml`, `.gitignore` | 5, 8, 15 | release |
-| `hotd2-vr/notes/confmiss-findings.md`, `notes/confmiss-vr-1.1-headset-checklist.md` (new) | 1-15 | evidence; the user's Quest checklist |
+| `cm-vr/vr-test.ps1`, `accept.ps1`, `re/vrcheck.py`, `re/make-test-glb.py` (new) | 1-15 | harness |
+| `cm-vr/package-release.ps1`, `assets/make-icon.py`, `assets/Play Confidential Mission.cmd` (new), `README.md`, `.github/ISSUE_TEMPLATE/bug_report.yml`, `.gitignore` | 5, 8, 15 | release |
+| `cm-vr/notes/confmiss-findings.md`, `notes/confmiss-vr-1.1-headset-checklist.md` (new) | 1-15 | evidence; the user's Quest checklist |
 
 ## Harness conventions (all tasks)
 
@@ -147,14 +147,14 @@ The order puts risk first, and deviates from the brief's suggested order for the
 - `udp_lightgun.cpp` 60-80.
 
 **Files:**
-- Create: `core/rend/vr/xr_sim.h`, `core/rend/vr/xr_sim.cpp`, `hotd2-vr/notes/confmiss-vr-1.1-headset-checklist.md`
+- Create: `core/rend/vr/xr_sim.h`, `core/rend/vr/xr_sim.cpp`, `cm-vr/notes/confmiss-vr-1.1-headset-checklist.md`
 - Modify:
   - `core/rend/vr/xr_host.cpp`: every `xr*(` call goes through the table;
   - `core/cfg/option.{h,cpp}`: the `vr.*` block, 80-129;
   - `core/ui/mainui.cpp:113`;
   - `core/input/udp_lightgun.cpp:69`, `handle()`;
   - `CMakeLists.txt:1281-1284` and `:1475-1478`, the xr source lists;
-  - `hotd2-vr/vr-test.ps1`, `hotd2-vr/re/vrcheck.py`, `hotd2-vr/accept.ps1`.
+  - `cm-vr/vr-test.ps1`, `cm-vr/re/vrcheck.py`, `cm-vr/accept.ps1`.
 
 **Interfaces:**
 - Produces, in options:
@@ -200,7 +200,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - two identical 64x64 images: `same` passes and `differ` fails;
   - the same pair with a 10%-wide box brightened by 40: `differ --box` over that box passes, and `same --box` over the rest passes.
   
-  Run `python hotd2-vr\re\vrcheck.py selftest`. Expected: FAIL (no `same` subcommand).
+  Run `python cm-vr\re\vrcheck.py selftest`. Expected: FAIL (no `same` subcommand).
 - [ ] **Step 2: Implement `same` and `differ`.** `selftest` passes.
 - [ ] **Step 3: Write the failing scenario `cm-sim`.** It is one vr-test run:
   - `Game confmiss`, `-XrSim`, `Config $cmWiden`, `Seconds 64`;
@@ -213,7 +213,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - `vrcheck differ b c`: the head turned, so the view changed.
   - `vrcheck differ a b`: the game runs.
   
-  Run `.\hotd2-vr\accept.ps1 -Only cm-sim`. Expected: FAIL (`vr.XrSim` is unknown, so XR init fails and the flat window shows).
+  Run `.\cm-vr\accept.ps1 -Only cm-sim`. Expected: FAIL (`vr.XrSim` is unknown, so XR init fails and the flat window shows).
 - [ ] **Step 4: Implement the simulator and the pieces around it.**
   - **The dispatch table and the simulator.** Handles are small integers. Swapchain images are GL_RGBA8 textures the simulator makes on the current context. Action spaces locate to their hand's pose, and `xrLocateViews` places the eyes at the head pose ± 32 mm.
   - **The option.**
@@ -221,13 +221,13 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - **UDP routing.** Lines starting `XR` go to `sim::udpLine`.
   - **vr-test:** the new actions and the `emu.cfg` restore.
 - [ ] **Step 5: Verify.**
-  - Run `hotd2-vr\build-win.cmd`.
+  - Run `cm-vr\build-win.cmd`.
   - `accept.ps1 -Only cm-sim` passes.
   - The CM regression and `-Only hotd2,mok` pass, since the simulator is off by default.
 - [ ] **Step 6: Create the headset checklist** with a header saying how the user reports results, plus `## Task 1`: "PC VR (Link/SteamVR) still uses the real runtime: the log says `XR: runtime <name>`, never `XRSIM`."
 - [ ] **Step 7: Commit.**
   ```bash
-  git add core/rend/vr/xr_sim.h core/rend/vr/xr_sim.cpp core/rend/vr/xr_host.cpp core/cfg/option.h core/cfg/option.cpp core/ui/mainui.cpp core/input/udp_lightgun.cpp CMakeLists.txt hotd2-vr/vr-test.ps1 hotd2-vr/re/vrcheck.py hotd2-vr/accept.ps1 hotd2-vr/notes/confmiss-vr-1.1-headset-checklist.md
+  git add core/rend/vr/xr_sim.h core/rend/vr/xr_sim.cpp core/rend/vr/xr_host.cpp core/cfg/option.h core/cfg/option.cpp core/ui/mainui.cpp core/input/udp_lightgun.cpp CMakeLists.txt cm-vr/vr-test.ps1 cm-vr/re/vrcheck.py cm-vr/accept.ps1 cm-vr/notes/confmiss-vr-1.1-headset-checklist.md
   git commit -m "hotd2-vr: OpenXR simulator for the PC harness (vr.XrSim), vrcheck same/differ" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 
@@ -241,7 +241,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
 - Modify:
   - `core/rend/vr/xr_host.cpp`: 207-352 for the actions and bindings; 1370-1489 for recenter, the ring dump, the join and the routing; and a new `XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED` case in pollEvents (593-647);
   - `README.md`, the controls section at :108-137;
-  - `hotd2-vr/accept.ps1`;
+  - `cm-vr/accept.ps1`;
   - the checklist.
 
 **Interfaces:**
@@ -316,7 +316,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - `core/rend/vr/xr_host.{h,cpp}`;
   - `shell/android-studio/flycast/src/main/jni/src/Android.cpp:321-330`;
   - `core/rend/vr/xr_sim.cpp` (focus events are already there from Task 1; check that they reach pollEvents);
-  - `hotd2-vr/accept.ps1`;
+  - `cm-vr/accept.ps1`;
   - the checklist.
 
 **Interfaces:**
@@ -383,8 +383,8 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - `core/rend/vr_reproject.cpp`: the watches and the poke queue (debug, PC);
   - `core/input/udp_lightgun.cpp`: the `POKE` line;
   - `core/cfg/option.{h,cpp}`;
-  - `hotd2-vr/vr-test.ps1`, `hotd2-vr/re/vrcheck.py`, `hotd2-vr/accept.ps1`;
-  - `hotd2-vr/notes/confmiss-findings.md`: a new `## Rifle` section.
+  - `cm-vr/vr-test.ps1`, `cm-vr/re/vrcheck.py`, `cm-vr/accept.ps1`;
+  - `cm-vr/notes/confmiss-findings.md`: a new `## Rifle` section.
 
 **Interfaces (produced):**
 - **`vr.WatchRam`** (string, PC): `"addr[:size],..."`, with hex SH4 addresses, size 1, 2 or 4 (default 1), at most 16 entries. Checked each VBlank; a change logs `VR: ram 0c155808 06 -> 2d`.
@@ -442,14 +442,14 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - `shell/android-studio/flycast/src/main/java/com/flycast/emulator/CmStartActivity.java`;
   - `.../emulator/CmFiles.java`;
   - `shell/android-studio/flycast/src/test/java/com/flycast/emulator/CmFilesTest.java`;
-  - `hotd2-vr/assets/Play Confidential Mission.cmd`.
+  - `cm-vr/assets/Play Confidential Mission.cmd`.
 - Modify:
   - `src/vr/AndroidManifest.xml`: the label at :34; the alias at 41-57 loses LAUNCHER; VrSetupActivity at 62-74 leaves; CmStartActivity is added in `:setup` with MAIN, LAUNCHER and `com.oculus.intent.category.2D`. Keep the alias exported with MAIN, `com.oculus.intent.category.VR` and `IMMERSIVE_HMD`.
   - `build.gradle.kts`: :16 `hubVersion = "1.1.0"` and :160 `com.vrlightgunhub.confmiss`.
   - `BaseGLActivity.java`: 166-185 (`VR_APPLICATION_ID`) and 210-241 (`findVrGame` takes `EXTRA_GAME` or `CmFiles`; `showVrSetup` opens CmStartActivity).
-  - `hotd2-vr/assets/make-icon.py` and `src/vr/res/drawable-*/ic_launcher.png`: a new look, no game art.
+  - `cm-vr/assets/make-icon.py` and `src/vr/res/drawable-*/ic_launcher.png`: a new look, no game art.
   - `core/rend/vr/xr_host.cpp:509` and `core/sdl/sdl.cpp:113`: "Confidential Mission VR".
-  - `hotd2-vr/package-release.ps1`: names at :2-5 and :136-138; checks at :146-172; the banned list at :36 adds `gun-*.bin`; the zip adds the `.cmd`; README.txt and LICENSE.txt texts.
+  - `cm-vr/package-release.ps1`: names at :2-5 and :136-138; checks at :146-172; the banned list at :36 adds `gun-*.bin`; the zip adds the `.cmd`; README.txt and LICENSE.txt texts.
   - `README.md`: a CM-only app. The HOTD2 and MOK sections at :139-244 go, as does the migration paragraph at :75-80.
   - `.github/ISSUE_TEMPLATE/bug_report.yml`: the title, a Game field that lists CM only, and an app version field.
   - `.gitignore`: `gun-*.bin`.
@@ -492,7 +492,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
 - [ ] **Step 3: Implement** everything in Files.
 - [ ] **Step 4: Verify.**
   - `CmFilesTest` passes.
-  - `hotd2-vr\build-quest.cmd`, then `hotd2-vr\package-release.ps1`: every check passes, producing `dist\confidential-mission-vr-quest.apk` and `dist\confidential-mission-vr-pcvr.zip`. Do not install anything.
+  - `cm-vr\build-quest.cmd`, then `cm-vr\package-release.ps1`: every check passes, producing `dist\confidential-mission-vr-quest.apk` and `dist\confidential-mission-vr-pcvr.zip`. Do not install anything.
   - PC build; then `cm-sim`'s Expect is tightened to `XRSIM: runtime up for "Confidential Mission VR"` and passes; the CM regression passes.
 - [ ] **Step 5: Checklist items:**
   - the Library shows "Confidential Mission VR" with its icon;
@@ -517,7 +517,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - `core/rend/vr_reproject.{h,cpp}`: the `GunRam` field, CM's values, `gunState`, and the VBlank log;
   - `core/rend/vr/xr_host.cpp`;
   - `core/cfg/option.{h,cpp}`;
-  - `README.md`, `hotd2-vr/accept.ps1`, the checklist.
+  - `README.md`, `cm-vr/accept.ps1`, the checklist.
 
 **Interfaces (produced):**
 - **The gun state:**
@@ -646,14 +646,14 @@ The order puts risk first, and deviates from the brief's suggested order for the
 **Read:**
 - code Q3;
 - `xr_gun.cpp` 56-61 (materials), 99-195 (the model program) and 372-414 (`drawGunModel`);
-- the head of `core/rend/vr/gun_model.h` and `hotd2-vr/gun_model/convert_gun.py` (the bake pattern);
+- the head of `core/rend/vr/gun_model.h` and `cm-vr/gun_model/convert_gun.py` (the bake pattern);
 - `build-win/_deps/openxr_sdk-src/include/openxr/openxr.h` 4451-4530 (`XR_FB_render_model`).
 
 **Files:**
 - Create:
   - `core/deps/cgltf/cgltf.h` and `core/deps/cgltf/LICENSE`: cgltf v1.14 from `https://raw.githubusercontent.com/jkuhlmann/cgltf/v1.14/cgltf.h`;
   - `core/rend/vr/glb_mesh.{h,cpp}`, `core/rend/vr/xr_controllers.{h,cpp}`, `core/rend/vr/controller_model.h` (generated);
-  - `hotd2-vr/controller_model/make_controller.py`, `hotd2-vr/re/make-test-glb.py`.
+  - `cm-vr/controller_model/make_controller.py`, `cm-vr/re/make-test-glb.py`.
 - Modify:
   - `xr_host.cpp`: at 493-498, enable `XR_FB_render_model` when listed, and log the extension list once; in `frame`, draw the controllers;
   - `xr_sim.cpp`: render-model functions when `vr.XrSimRenderModel` is set;
@@ -698,7 +698,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
 
 **Steps:**
 
-- [ ] **Step 1: Write the test GLB maker.** `python hotd2-vr\re\make-test-glb.py <out.glb>` writes a box (12 triangles) and a 64-segment cylinder (128 triangles) with a 2x2 PNG texture: 140 triangles in all.
+- [ ] **Step 1: Write the test GLB maker.** `python cm-vr\re\make-test-glb.py <out.glb>` writes a box (12 triangles) and a 64-segment cylinder (128 triangles) with a 2x2 PNG texture: 140 triangles in all.
 - [ ] **Step 2: Write the failing scenarios** (`-XrSim`, `Seconds 62`, `Get-CmStartsXr`). The hand-box shots happen after 56 s, with the left hand moved in front of the left eye: `pose left -0.1 1.45 -0.3 0 0`.
   - **`cm-controllers`:**
     - Expect `XR: controller models built in \(the runtime has no XR_FB_render_model\)`.
@@ -799,7 +799,7 @@ The order puts risk first, and deviates from the brief's suggested order for the
   - `core/rend/vr/xr_hands.cpp`: reading version 2; gun-only models with empty hand meshes;
   - `core/rend/vr_reproject.cpp`: CM's profile `p.model`;
   - `core/rend/vr/xr_host.cpp`: the panel's CM wording;
-  - `hotd2-vr/re/vrcheck.py`: `hnd`;
+  - `cm-vr/re/vrcheck.py`: `hnd`;
   - `accept.ps1`, the checklist.
 
 **Interfaces:**
@@ -1044,11 +1044,11 @@ The order puts risk first, and deviates from the brief's suggested order for the
 **Read:** the spec (all of it); `accept.ps1`; the checklist file as Tasks 1-14 left it; findings `## Baselines` (how v1 measured verts p95).
 
 **Files:**
-- Modify: `hotd2-vr/notes/confmiss-vr-1.1-headset-checklist.md`, `hotd2-vr/accept.ps1` (only if a scenario needs fixing), and `README.md` (a final pass).
+- Modify: `cm-vr/notes/confmiss-vr-1.1-headset-checklist.md`, `cm-vr/accept.ps1` (only if a scenario needs fixing), and `README.md` (a final pass).
 
 **Steps:**
 
-- [ ] **Step 1: Run everything.** In the background: `.\hotd2-vr\accept.ps1`, every scenario, with one blocking wait. Then `.\hotd2-vr\accept.ps1 -Only hotd2,mok`. Everything passes. A failure is fixed in the owning task's code, with its own commit, or reported with the run folder and the log line.
+- [ ] **Step 1: Run everything.** In the background: `.\cm-vr\accept.ps1`, every scenario, with one blocking wait. Then `.\cm-vr\accept.ps1 -Only hotd2,mok`. Everything passes. A failure is fixed in the owning task's code, with its own commit, or reported with the run folder and the log line.
 - [ ] **Step 2: Frame budget.** CM's verts p95 over `accept-cm-tour`, `accept-cm-hall` and a `cm-rifle` run, measured by the `## Baselines` method, is ≤ 13904. Note the added draws: the controllers at most 2 × (runtime model or ≤ 1500 triangles), the guns at most a few hundred polys each.
 - [ ] **Step 3: Spec coverage.** Walk the spec's "What the player experiences" (items 1-8) and `## Weapon pickups`. Each line points to a passing scenario or a checklist item; add any item that is missing.
 - [ ] **Step 4: Order the checklist for one session on the user's Quest 3:**
@@ -1068,6 +1068,6 @@ The order puts risk first, and deviates from the brief's suggested order for the
   
   Each item has a checkbox, what to do, and what should happen.
 - [ ] **Step 5: Release build.**
-  - `hotd2-vr\build-win.cmd`, `hotd2-vr\build-quest.cmd` (with the Quest env), then `hotd2-vr\package-release.ps1`. Every check passes: names, ID, label, versionName `1.1.0-g<HEAD>`, the LAUNCHER, the render-model permission, the zip contents, and no banned files.
+  - `cm-vr\build-win.cmd`, `cm-vr\build-quest.cmd` (with the Quest env), then `cm-vr\package-release.ps1`. Every check passes: names, ID, label, versionName `1.1.0-g<HEAD>`, the LAUNCHER, the render-model permission, the zip contents, and no banned files.
   - Record the dist paths and the versionName in the checklist's header. Do not install.
 - [ ] **Step 6: Commit** the checklist (and any README or accept fixes), with the message "hotd2-vr: CM VR 1.1 acceptance and headset checklist".

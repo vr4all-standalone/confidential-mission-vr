@@ -24,14 +24,14 @@ CMakeUserPresets.json
 # hotd2-vr: Windows build, local tool data
 build-win/
 dist/
-hotd2-vr/fingergun/.venv/
-hotd2-vr/fingergun/settings.json
-hotd2-vr/fingergun/settings_2p_*.json
-hotd2-vr/fingergun/session.csv
-hotd2-vr/fingergun/status.json
-hotd2-vr/fingergun/crash.log
-hotd2-vr/fingergun/*.task
-hotd2-vr/gun_model/*.png
+cm-vr/fingergun/.venv/
+cm-vr/fingergun/settings.json
+cm-vr/fingergun/settings_2p_*.json
+cm-vr/fingergun/session.csv
+cm-vr/fingergun/status.json
+cm-vr/fingergun/crash.log
+cm-vr/fingergun/*.task
+cm-vr/gun_model/*.png
 __pycache__/
 
 # hotd2-vr: models ripped from the game are Sega data, never commit them
@@ -42,7 +42,7 @@ gun-*.bin
 
 # hotd2-vr: the models a release build comes with (guns/, controllers/, CREDITS.txt) are other people's
 # work under their own licences: filled by hand for a build (README, Releasing), never committed
-hotd2-vr/models/
+cm-vr/models/
 
 # hotd2-vr: VR Light Gun Hub's release key lives outside the repository (make-release-key.ps1);
 # never commit a key or its password. Flycast's own playstore.jks stays tracked.

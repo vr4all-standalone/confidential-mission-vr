@@ -11,7 +11,7 @@
 - the labels: `xr_labels.cpp`;
 - the start screen: `CmStartActivity.java`.
 
-Every item gets a PC test through the OpenXR simulator in `hotd2-vr\accept.ps1`. The start screen's logic moves into a pure Java class with JUnit tests.
+Every item gets a PC test through the OpenXR simulator in `cm-vr\accept.ps1`. The start screen's logic moves into a pure Java class with JUnit tests.
 
 **Tech Stack:** C++17 (Flycast fork, OpenXR 1.1.43), Java + JUnit 4 (Gradle Kotlin DSL), Windows PowerShell 5.1 harness, Python 3.13 fixtures.
 
@@ -24,10 +24,10 @@ Every item gets a PC test through the OpenXR simulator in `hotd2-vr\accept.ps1`.
 From the spec and the brief, verbatim where quoted:
 - "Never print or log the release key's password. Never copy, move or delete `C:\Users\ege19\.vrlightgunhub`. The key never goes in the repo or `dist`."
 - "No game data in the repo, the APK, the zip or any report: no ROMs, CHDs, rips or RAM dumps; no game screenshots or disassembly listings; no ripped models; none of the game's on-screen text." Addresses and offsets are fine.
-- The user's models are never committed to git. They ship in the APK and the zip from the gitignored `hotd2-vr/models/`, credited in CREDITS. The Zapper (CC BY-ND) gets technical changes only.
+- The user's models are never committed to git. They ship in the APK and the zip from the gitignored `cm-vr/models/`, credited in CREDITS. The Zapper (CC BY-ND) gets technical changes only.
 - "Never stage or touch the modified `core/deps/gamesdk` submodule. Nothing is pushed or published. The orchestrator installs on the Quest 3 (`2G0YC1ZF840H2Y`) at the end; tasks don't install."
 - Downloads are untrusted: each extraction goes in its own new scratchpad folder, and Python runs on them with `-I`.
-- Test fixtures come from `hotd2-vr/re/make-own-models.py`. Never assert on the user's own models: a harness run that would draw the bundled `namco.glb`/`zapper.glb` from `build-win\data\models` uses `-Bundled` fixtures or `vr.BuiltInGun=yes` (Task 1).
+- Test fixtures come from `cm-vr/re/make-own-models.py`. Never assert on the user's own models: a harness run that would draw the bundled `namco.glb`/`zapper.glb` from `build-win\data\models` uses `-Bundled` fixtures or `vr.BuiltInGun=yes` (Task 1).
 - Commit messages start with `hotd2-vr:` and end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Stage files by name, never `git add -A`.
 - The user is never asked anything mid-run. Decide, note the decision in the report, and keep going.
 - Engine work is C++ and PowerShell here; there is no Unity or Godot skill to load.
@@ -75,16 +75,16 @@ All tasks run one after another; none can run in parallel safely, because they s
 | `core/rend/vr/xr_gun.h` | 3 | `RifleTint` (removed if unused) |
 | `core/rend/vr/xr_labels.cpp` | 5 | the label set |
 | `shell/android-studio/flycast/src/main/java/com/flycast/emulator/CmStartActivity.java`, `CmStartStatus.java` (new), `src/test/java/.../CmStartStatusTest.java` (new) | 6 | the start screen |
-| `hotd2-vr/re/make-own-models.py` | 1 | `--namco-zapper` fixture |
-| `hotd2-vr/accept.ps1` | 1-7 | scenarios |
-| `hotd2-vr/notes/confmiss-findings.md` | 2, 5 | rip timing; cutscene signal |
-| `README.md`, `hotd2-vr/notes/confmiss-vr-1.2-headset-checklist.md` (new), `shell/android-studio/flycast/build.gradle.kts:16,52`, `hotd2-vr/package-release.ps1:55` | all, 7 | docs, release |
-| local, gitignored: `hotd2-vr/models/guns/`, `build-win/data/models/guns/`, `E:\___flattovrdev\confidential mission\my-models\ready\guns\` | 1 | the Zapper's length, the Arcade gun's name |
+| `cm-vr/re/make-own-models.py` | 1 | `--namco-zapper` fixture |
+| `cm-vr/accept.ps1` | 1-7 | scenarios |
+| `cm-vr/notes/confmiss-findings.md` | 2, 5 | rip timing; cutscene signal |
+| `README.md`, `cm-vr/notes/confmiss-vr-1.2-headset-checklist.md` (new), `shell/android-studio/flycast/build.gradle.kts:16,52`, `cm-vr/package-release.ps1:55` | all, 7 | docs, release |
+| local, gitignored: `cm-vr/models/guns/`, `build-win/data/models/guns/`, `E:\___flattovrdev\confidential mission\my-models\ready\guns\` | 1 | the Zapper's length, the Arcade gun's name |
 
 ## Harness conventions (all tasks)
 
-- **Run a scenario:** `.\hotd2-vr\accept.ps1 -Only cm-gun,cm-menu`. Each prints `PASS <name>` or `FAIL <name>: <why>`. Add `-Reuse` to re-check runs already there without playing them again. A scenario is `function Test-X { ...; return $why }` (empty means pass), listed in the `$scenarios` table at ~`accept.ps1:1688`.
-- **Build:** `hotd2-vr\build-win.cmd`, and `hotd2-vr\build-quest.cmd` (with the Quest env) where a task says so.
+- **Run a scenario:** `.\cm-vr\accept.ps1 -Only cm-gun,cm-menu`. Each prints `PASS <name>` or `FAIL <name>: <why>`. Add `-Reuse` to re-check runs already there without playing them again. A scenario is `function Test-X { ...; return $why }` (empty means pass), listed in the `$scenarios` table at ~`accept.ps1:1688`.
+- **Build:** `cm-vr\build-win.cmd`, and `cm-vr\build-quest.cmd` (with the Quest env) where a task says so.
 - **Long runs:** run anything over ~4 minutes in the background, then wait with one blocking `until ...; do sleep 20; done` check per call. Don't poll repeatedly.
 - **Simulator actions** go in a run's `At` list as `"<sec>=<action>"`:
   - `xr <hand>/<input> <v> [ms]`;
@@ -131,8 +131,8 @@ All tasks run one after another; none can run in parallel safely, because they s
 - Modify: `core/rend/vr/xr_menu.cpp`: `gunAt()`, and the Gun branch of `value()` and `change()`.
 - Modify: `core/rend/vr/xr_own.cpp:341-395` (`scan()`; the sort is at 387); the header comment at `xr_own.h:16-17`.
 - Modify: `core/cfg/option.cpp:140` and `option.h:505`. Also add `VrBuiltInGun` under the PC-only `#ifndef __ANDROID__` block, next to `VrXrSim`.
-- Modify: `hotd2-vr/re/make-own-models.py` (new `--namco-zapper` option).
-- Modify: `hotd2-vr/accept.ps1`:
+- Modify: `cm-vr/re/make-own-models.py` (new `--namco-zapper` option).
+- Modify: `cm-vr/accept.ps1`:
   - `$cmWidenArcade` 166;
   - `Test-CmGun` 1183;
   - `Test-CmOwnGun` 1458;
@@ -201,7 +201,7 @@ else Arcade (why "no gun file loads")
     - It expects `XR: own gun guns/zapper.glb offered`.
     - The menu steps read Arcade gun → My Zapper → (the player's first gun by name).
   - **`Test-CmBundled`:** keep its assertions. Update only an order assertion that assumed one mixed name sort.
-- [ ] **Step 2: Run them and see them fail.** Build (`hotd2-vr\build-win.cmd`), then `.\hotd2-vr\accept.ps1 -Only cm-gun,cm-own-gun,cm-bundled`. They should FAIL on the gun lines.
+- [ ] **Step 2: Run them and see them fail.** Build (`cm-vr\build-win.cmd`), then `.\cm-vr\accept.ps1 -Only cm-gun,cm-own-gun,cm-bundled`. They should FAIL on the gun lines.
 - [ ] **Step 3: Implement** the interfaces above.
   - **Removing the cabinet** in the C++ outside `hands_rip`/the profile: delete every `GunKind::Cabinet` use (grep `Cabinet` in `core/rend/vr/`). `gunModel` keeps `gameModelSource()->guns[(int)kind - 1]`.
   - **The menu:**
@@ -215,22 +215,22 @@ else Arcade (why "no gun file loads")
     - fix the `xr_own.h` comment ("bundled guns first, in file-name order, then the others").
   - **The fixture:** add `--namco-zapper` to `make-own-models.py`. Follow how `--guns` writes a box gun and its sidecar; print the same "muzzle"/"textures" lines the harness parses.
 - [ ] **Step 4: Update the local model copies** (gitignored; never `git add` them).
-  - **Files:** in each of `E:\___flattovrdev\hotd2-vr\hotd2-vr\models\guns`, `E:\___flattovrdev\hotd2-vr\build-win\data\models\guns` and `E:\___flattovrdev\confidential mission\my-models\ready\guns`:
+  - **Files:** in each of `E:\___flattovrdev\hotd2-vr\cm-vr\models\guns`, `E:\___flattovrdev\hotd2-vr\build-win\data\models\guns` and `E:\___flattovrdev\confidential mission\my-models\ready\guns`:
     - `zapper.json` `"length"`: 0.25 → 0.30;
     - `namco.json` `"name"`: "Namco gun" → "Arcade gun".
-  - **How:** use one `python -I` script that loads, edits and dumps each file, keeping its key order and indent. Then check `git check-ignore hotd2-vr/models/guns/zapper.json`.
-  - **CREDITS:** `hotd2-vr/models/CREDITS.txt` keeps the real title and author; don't edit it.
+  - **How:** use one `python -I` script that loads, edits and dumps each file, keeping its key order and indent. Then check `git check-ignore cm-vr/models/guns/zapper.json`.
+  - **CREDITS:** `cm-vr/models/CREDITS.txt` keeps the real title and author; don't edit it.
 - [ ] **Step 5: Verify.**
-  - `hotd2-vr\build-win.cmd`.
+  - `cm-vr\build-win.cmd`.
   - In the background: the quick regression, then `-Only hotd2,mok`. All pass.
-  - `hotd2-vr\build-quest.cmd` compiles: the new option is PC-only, and `chosenGun` must guard its use with `#ifndef __ANDROID__`.
+  - `cm-vr\build-quest.cmd` compiles: the new option is PC-only, and `chosenGun` must guard its use with `#ifndef __ANDROID__`.
   - Don't run the rip set; Task 2 owns it. Until then, `cm-rip-hand` still passes `vr.Gun=2`, which now means the pistol.
 - [ ] **Step 6: README.** Update:
   - "The menu": the Gun row lists In-game pistol, Arcade gun, Zapper, then your own guns; no Auto; the fallback chain.
   - "Your own models / Guns": bundled guns first; a file of the same name replaces a bundled one in its place.
 - [ ] **Step 7: Commit.**
   ```
-  git add core/rend/vr/xr_hands.h core/rend/vr/xr_hands.cpp core/rend/vr/xr_menu.cpp core/rend/vr/xr_own.h core/rend/vr/xr_own.cpp core/cfg/option.h core/cfg/option.cpp hotd2-vr/re/make-own-models.py hotd2-vr/accept.ps1 README.md
+  git add core/rend/vr/xr_hands.h core/rend/vr/xr_hands.cpp core/rend/vr/xr_menu.cpp core/rend/vr/xr_own.h core/rend/vr/xr_own.cpp core/cfg/option.h core/cfg/option.cpp cm-vr/re/make-own-models.py cm-vr/accept.ps1 README.md
   git commit -m "hotd2-vr: CM 1.2 three guns (in-game pistol, Arcade gun, Zapper)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 
@@ -267,7 +267,7 @@ else Arcade (why "no gun file loads")
   - `Source::modelFile()` (grep it), which returns `guns[0].file` for CM and must return `guns[1].file`.
 - Modify: `core/rend/vr_reproject.cpp:507-528`. `guns[0]` (the `"cabinet gun"`, `gun-cm-cabinet.bin`, `{0x400000}`, 279, 200, 0.27f, ... target) becomes `{}`, so `used()` is false. Keep the slot so `guns[(int)kind-1]` still lines up.
 - Modify, only if the code is cabinet-only: `core/rend/vr/hands_build.cpp:141`, the plain-texture vertex-colour path whose comment names the cabinet. If the pistol or rifle can reach it, keep it and fix the comment.
-- Modify: `hotd2-vr/accept.ps1`:
+- Modify: `cm-vr/accept.ps1`:
   - `$cmCabinetFile`, `Remove-CmGuns` 957;
   - `Test-CmRipCabinet` 981 → `Test-CmRipStart`, and the table row `cm-rip-cabinet` → `cm-rip-start`;
   - `Test-CmRipHand` 1012;
@@ -277,7 +277,7 @@ else Arcade (why "no gun file loads")
   - `Test-CmRipPistol` 1113, `Test-CmRipPistolOne` 1119;
   - `Test-CmRipRifle` 1139;
   - the scenario list in the file's header comment.
-- Modify: `hotd2-vr/notes/confmiss-findings.md` `## Guns` (268): the 1.2 timing (game seconds per phase; no game text).
+- Modify: `cm-vr/notes/confmiss-findings.md` `## Guns` (268): the 1.2 timing (game seconds per phase; no game text).
 - Modify: `README.md` "The game" (166), the first-start paragraph.
 
 **Interfaces:**
@@ -286,7 +286,7 @@ else Arcade (why "no gun file loads")
 - Consumes: Task 1's `GunKind` (no Cabinet).
 
 - [ ] **Step 1: Baseline.** Before editing, find the newest local run folders of `cm-rip-pistol` and `cm-rip-rifle` (under the harness's run root; `accept.ps1 -Reuse` reads them).
-  - If none exist, run `.\hotd2-vr\accept.ps1 -Only cm-rip-pistol,cm-rip-rifle` once on the unchanged code, in the background.
+  - If none exist, run `.\cm-vr\accept.ps1 -Only cm-rip-pistol,cm-rip-rifle` once on the unchanged code, in the background.
   - From the logs, record the game-second times of: the Start, the cabinet's saved line, the first pistol press, the merge, done, and for the rifle run the rifle capture.
   - `CmPistolAfter` = (cabinet saved − Start), rounded up to the next 2 s Start beat.
 - [ ] **Step 2: Write the failing tests.**
@@ -315,7 +315,7 @@ else Arcade (why "no gun file loads")
 - [ ] **Step 6: README** "The game": the first start makes the in-game pistol (and the rifle); give the new typical time.
 - [ ] **Step 7: Commit.**
   ```
-  git add core/rend/vr/hands_rip.h core/rend/vr/hands_rip.cpp core/rend/vr_reproject.cpp hotd2-vr/accept.ps1 hotd2-vr/notes/confmiss-findings.md README.md
+  git add core/rend/vr/hands_rip.h core/rend/vr/hands_rip.cpp core/rend/vr_reproject.cpp cm-vr/accept.ps1 cm-vr/notes/confmiss-findings.md README.md
   ```
   Also add `core/rend/vr/hands_build.{h,cpp}` if they changed.
   ```
@@ -344,7 +344,7 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   - the rifle tint draw at 2977.
 - Modify: `core/rend/vr/xr_hands.cpp` `handGun` 756-772.
 - Modify: `core/rend/vr/xr_gun.h:40`: remove `RifleTint` if nothing else uses it.
-- Modify: `hotd2-vr/accept.ps1`:
+- Modify: `cm-vr/accept.ps1`:
   - new `Test-CmKick`, `Test-CmRifleFile`;
   - `Test-CmHaptics` 696, `Test-CmHapticsOff` 721;
   - `Test-CmRifleSim` 1295 (the arcade variant);
@@ -402,7 +402,7 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   - The rifle paragraph: the in-game pistol becomes the in-game rifle; other guns stay in hand and fire in bursts with recoil and haptics.
 - [ ] **Step 6: Commit.**
   ```
-  git add core/rend/vr/xr_host.cpp core/rend/vr/xr_hands.cpp core/rend/vr/xr_gun.h hotd2-vr/accept.ps1 README.md
+  git add core/rend/vr/xr_host.cpp core/rend/vr/xr_hands.cpp core/rend/vr/xr_gun.h cm-vr/accept.ps1 README.md
   git commit -m "hotd2-vr: CM 1.2 kick only on a fired round; the rifle with file guns" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 
@@ -429,7 +429,7 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   - `updateGun` 1557-1660: the placement, muzzle log, ray, `view.pose`, the pointed-down reload at 1640-1653, and the `if (!live)` return at 1655;
   - `updateMenu` 1825-1922 (the stick edges, `stickWas`).
 - Modify: `core/cfg/option.cpp` (next to `VrGun` at 140) and `option.h`.
-- Modify: `hotd2-vr/accept.ps1`:
+- Modify: `cm-vr/accept.ps1`:
   - `$cmMenuTop` 600;
   - `Test-CmMenu` 619;
   - `Test-CmHapticsReload` 736;
@@ -504,13 +504,13 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
 - [ ] **Step 4: Verify:**
   - build;
   - in the background, the quick regression with `cm-kick,cm-rifle-file,cm-gun-angle,cm-reload-point` (`cm-pause`'s 23 counted lines must not change), then `-Only hotd2,mok`;
-  - `hotd2-vr\build-quest.cmd` compiles.
+  - `cm-vr\build-quest.cmd` compiles.
 - [ ] **Step 5: README:**
   - "The menu": the two rows, the hold-repeat, ±30° in 1° steps.
   - "Options": `vr.GunAngle`, `vr.Reload`.
 - [ ] **Step 6: Commit.**
   ```
-  git add core/rend/vr/xr_menu.h core/rend/vr/xr_menu.cpp core/rend/vr/xr_host.cpp core/cfg/option.h core/cfg/option.cpp hotd2-vr/accept.ps1 README.md
+  git add core/rend/vr/xr_menu.h core/rend/vr/xr_menu.cpp core/rend/vr/xr_host.cpp core/cfg/option.h core/cfg/option.cpp cm-vr/accept.ps1 README.md
   git commit -m "hotd2-vr: CM 1.2 Gun angle and Reload menu rows" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 
@@ -540,12 +540,12 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   - `holds()` 2640-2647;
   - the per-frame hold check near 2701 (`heldWas`) and `noteHolds(why)` 252;
   - the laser and dot draw, if they don't already follow `holds()`.
-- Modify: `hotd2-vr/accept.ps1`:
+- Modify: `cm-vr/accept.ps1`:
   - `Get-CmStartsXr` (171) gets an `-Until` parameter (default 52);
   - new `Test-CmCutscene`;
   - `Test-CmControllers` 773 (the label-set lines);
   - table row.
-- Modify: `hotd2-vr/notes/confmiss-findings.md`: a new `## Cutscenes` section (addresses, method, timings; no game text).
+- Modify: `cm-vr/notes/confmiss-findings.md`: a new `## Cutscenes` section (addresses, method, timings; no game text).
 - Modify: `README.md` "Controls" (85): the label list.
 
 **Interfaces:**
@@ -574,7 +574,7 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   - The label panel width follows the longer text; check the `shot` in `cm-controllers` with `python ~/.claude/tools/shot.py fit` so the labels don't overlap.
   - Commit:
     ```
-    git add core/rend/vr/xr_labels.cpp hotd2-vr/accept.ps1
+    git add core/rend/vr/xr_labels.cpp cm-vr/accept.ps1
     git commit -m "hotd2-vr: CM 1.2 how-to-play labels" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     ```
 - [ ] **Step 3 (cutscenes): Research the signal** (about 25 calls at most).
@@ -604,7 +604,7 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   - in the background, the quick regression with `cm-kick,cm-rifle-file,cm-gun-angle,cm-reload-point,cm-cutscene` (`cm-pause`, `cm-hands`, `cm-floor` and `cm-p2` especially), then `-Only hotd2,mok`. The signal must be CM-only; other profiles have no cutscene source and `cutscene()` returns false.
 - [ ] **Step 7: README** "Controls": the label list (the same text as the table above), and one line on cutscenes. **Commit:**
   ```
-  git add core/rend/vr_reproject.h core/rend/vr_reproject.cpp core/rend/vr/xr_host.cpp hotd2-vr/accept.ps1 hotd2-vr/notes/confmiss-findings.md README.md
+  git add core/rend/vr_reproject.h core/rend/vr_reproject.cpp core/rend/vr/xr_host.cpp cm-vr/accept.ps1 cm-vr/notes/confmiss-findings.md README.md
   git commit -m "hotd2-vr: CM 1.2 controllers during cutscenes" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 
@@ -633,7 +633,7 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
 - Create: `shell/android-studio/flycast/src/main/java/com/flycast/emulator/CmStartStatus.java`.
 - Create: `shell/android-studio/flycast/src/test/java/com/flycast/emulator/CmStartStatusTest.java`.
 - Modify: `core/rend/vr/xr_host.cpp`, the CM first-start panel ~2788-2830 (today: the title, "Taking the guns from your copy of the game", "About a minute or two, only this once", footer "B: skip (the built-in gun this time)"; done: "Got it. The gun from your game is in your hand." / "Reload: B, or point it away from the screen and pull.").
-- Modify: `hotd2-vr/accept.ps1`: `Test-CmRipSkip` 1041 and `Invoke-CmRipPistol` 1095 (panel lines).
+- Modify: `cm-vr/accept.ps1`: `Test-CmRipSkip` 1041 and `Invoke-CmRipPistol` 1095 (panel lines).
 - Modify: `README.md`: the start-screen paragraph.
 
 **Interfaces:**
@@ -683,13 +683,13 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   
   Build and run `-Only cm-rip-skip,cm-rip-pistol` in the background.
 - [ ] **Step 5: Verify.**
-  - `hotd2-vr\build-quest.cmd` (Java and native) passes.
+  - `cm-vr\build-quest.cmd` (Java and native) passes.
   - Both JUnit classes pass.
   - The step-4 scenarios pass.
   - The screen can't be screenshotted on the PC. The checklist item covers it at the headset round.
 - [ ] **Step 6: README:** the start screen (the badges, Play enabled when ready, where the files go). **Commit:**
   ```
-  git add shell/android-studio/flycast/src/main/java/com/flycast/emulator/CmStartActivity.java shell/android-studio/flycast/src/main/java/com/flycast/emulator/CmStartStatus.java shell/android-studio/flycast/src/test/java/com/flycast/emulator/CmStartStatusTest.java core/rend/vr/xr_host.cpp hotd2-vr/accept.ps1 README.md
+  git add shell/android-studio/flycast/src/main/java/com/flycast/emulator/CmStartActivity.java shell/android-studio/flycast/src/main/java/com/flycast/emulator/CmStartStatus.java shell/android-studio/flycast/src/test/java/com/flycast/emulator/CmStartStatusTest.java core/rend/vr/xr_host.cpp cm-vr/accept.ps1 README.md
   git commit -m "hotd2-vr: CM 1.2 VR4All-style start screen and first-start wording" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 
@@ -709,9 +709,9 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
 
 **Files:**
 - Modify: `shell/android-studio/flycast/build.gradle.kts:16` (`val hubVersion = "1.1.0"` → `"1.2.0"`) and `:52` (`versionCode = 8` → `9`).
-- Modify: `hotd2-vr/package-release.ps1:55` (`$appVersion = '1.1.0'` → `'1.2.0'`).
-- Create: `hotd2-vr/notes/confmiss-vr-1.2-headset-checklist.md` (start from the 1.1 checklist's form).
-- Modify: `README.md` (a final pass; "Releasing" 415 names 1.2.0); `hotd2-vr/accept.ps1` only if a scenario needs fixing.
+- Modify: `cm-vr/package-release.ps1:55` (`$appVersion = '1.1.0'` → `'1.2.0'`).
+- Create: `cm-vr/notes/confmiss-vr-1.2-headset-checklist.md` (start from the 1.1 checklist's form).
+- Modify: `README.md` (a final pass; "Releasing" 415 names 1.2.0); `cm-vr/accept.ps1` only if a scenario needs fixing.
 
 - [ ] **Step 1: Run everything** in the background, with blocking waits.
   - **The CM list:** 31 quick + 7 rip + 5 new (`cm-kick`, `cm-rifle-file`, `cm-gun-angle`, `cm-reload-point`, `cm-cutscene`) = 43.
@@ -735,15 +735,15 @@ The haptics already come from the game's own shot counter. In `gunKnocks` (1444-
   
   Use each task's "Checklist items".
 - [ ] **Step 4: Release build.**
-  - `hotd2-vr\build-win.cmd`, `hotd2-vr\build-quest.cmd`.
-  - Then `hotd2-vr\package-release.ps1` **without** `-SkipBuild`. It signs with the user's key; never print the key or its password, and never touch `C:\Users\ege19\.vrlightgunhub`.
-  - Every check passes: versionName `1.2.0-g<HEAD>`, versionCode 9, the CREDITS `File:` lines, the bundled models from `hotd2-vr/models/` (the edited Zapper and Arcade gun sidecars), and no banned files.
+  - `cm-vr\build-win.cmd`, `cm-vr\build-quest.cmd`.
+  - Then `cm-vr\package-release.ps1` **without** `-SkipBuild`. It signs with the user's key; never print the key or its password, and never touch `C:\Users\ege19\.vrlightgunhub`.
+  - Every check passes: versionName `1.2.0-g<HEAD>`, versionCode 9, the CREDITS `File:` lines, the bundled models from `cm-vr/models/` (the edited Zapper and Arcade gun sidecars), and no banned files.
   - Record the dist paths and the versionName in the checklist header. Do not install.
 - [ ] **Step 5: Commit.**
   ```
-  git add shell/android-studio/flycast/build.gradle.kts hotd2-vr/package-release.ps1 hotd2-vr/notes/confmiss-vr-1.2-headset-checklist.md README.md
+  git add shell/android-studio/flycast/build.gradle.kts cm-vr/package-release.ps1 cm-vr/notes/confmiss-vr-1.2-headset-checklist.md README.md
   ```
-  Also add `hotd2-vr/accept.ps1` if it changed.
+  Also add `cm-vr/accept.ps1` if it changed.
   ```
   git commit -m "hotd2-vr: CM VR 1.2.0 release and headset checklist" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```

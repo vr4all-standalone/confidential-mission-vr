@@ -1,7 +1,7 @@
 /*
 	Making the agent's hands and pistol from one render pass (hotd2-vr). See hands_build.h.
 
-	Step for step what hotd2-vr/assets/rip_hands.py does (the comments there say why):
+	Step for step what cm-vr/assets/rip_hands.py does (the comments there say why):
 	the pistol, the hand around its grip and the open hand are found by their textures, lifted
 	back into 3D with the game's focal length, the pistol is stood upright along its barrel,
 	its slide is cut free along the line painted on its sides (with a cap and a barrel

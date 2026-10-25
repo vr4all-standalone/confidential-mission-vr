@@ -261,7 +261,7 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
     }
 
     // hotd2-vr: the models that come with the app (assets/models: guns/, controllers/ and CREDITS.txt, in
-    // the vr build when hotd2-vr/models was there to build it with) copied to <home>/data/models, the
+    // the vr build when cm-vr/models was there to build it with) copied to <home>/data/models, the
     // data folder's models/ where the native side looks for them last (get_writable_data_path("models"),
     // xr_own.cpp). Copied again only when the app was installed or updated since the last copy (its
     // versionName and install time, in models/.installed) or a file is missing; a new copy replaces the

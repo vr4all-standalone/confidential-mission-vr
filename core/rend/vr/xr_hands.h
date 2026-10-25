@@ -1,7 +1,7 @@
 /*
 	The agent's own hands and pistol in the headset (hotd2-vr), taken from the player's copy
 	of the game: hands.bin in the data directory, made by the app (hands_rip.h) or on the PC
-	by hotd2-vr/assets/rip_hands.py from a rip of the game over scene. In The Maze of the
+	by cm-vr/assets/rip_hands.py from a rip of the game over scene. In The Maze of the
 	Kings the hero's staff in his fist, and his other glove, from staff-mok.bin. Each game
 	has its own file; nothing of the game is in this source; without the file the built-in gun
 	of xr_gun.h (v1's arcade gun) is drawn instead.

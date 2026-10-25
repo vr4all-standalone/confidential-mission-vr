@@ -59,7 +59,7 @@ if ($code -ne 0 -or -not (Test-Path -LiteralPath $jks)) { Write-Host "keytool fa
 
 # PKCS12 has one password for the store and the key
 Set-Content -LiteralPath $props -Encoding ascii -Value @"
-# VR Light Gun Hub's release key (hotd2-vr/make-release-key.ps1). Private: never commit or share it.
+# VR Light Gun Hub's release key (cm-vr/make-release-key.ps1). Private: never commit or share it.
 storeFile=release.jks
 storePassword=$password
 keyAlias=vrlightgunhub

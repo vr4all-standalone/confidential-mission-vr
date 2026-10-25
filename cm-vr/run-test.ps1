@@ -2,7 +2,7 @@
   Runs the Windows Flycast build on HOTD2 with VR test settings, grabs window
   screenshots at fixed times and closes the emulator again.
 
-  .\hotd2-vr\run-test.ps1 -Name sway -Config 'config:vr.Animate=yes,config:vr.Yaw=12' -Shots 20,30,40
+  .\cm-vr\run-test.ps1 -Name sway -Config 'config:vr.Animate=yes,config:vr.Yaw=12' -Shots 20,30,40
 
   -Keys takes "seconds=key" pairs, key being a .NET Keys name, e.g. '6=Return','14=Return'
   (Return is Start on Flycast's default keyboard map). Keys are posted to the Flycast

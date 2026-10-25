@@ -47,7 +47,7 @@ For each check: **OK** or **not OK**. For not OK, add the scene and roughly when
 Anything else you notice is welcome too.
 
 The PC already passed boot, the wider view, the aim at the centre, corners and edges, the HUD on
-the panel and player 2 joining and leaving (`hotd2-vr/notes/confmiss-findings.md`,
+the panel and player 2 joining and leaving (`cm-vr/notes/confmiss-findings.md`,
 `## Acceptance`). These checks are what only a headset can show.
 
 ## Checks

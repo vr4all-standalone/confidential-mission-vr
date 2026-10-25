@@ -24,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $data = if ($env:HOTD2VR_DATA) { $env:HOTD2VR_DATA } else { Split-Path -Parent $repo }
 $exe = Join-Path $repo 'build-win\flycast.exe'
-if (-not (Test-Path $exe)) { throw "Build the Windows version first: hotd2-vr\build-win.cmd" }
+if (-not (Test-Path $exe)) { throw "Build the Windows version first: cm-vr\build-win.cmd" }
 $cue = Get-ChildItem (Join-Path $data 'game') -Include *.cue, *.gdi, *.chd -Recurse | Select-Object -First 1
 if (-not $cue) { throw "No game found in $(Join-Path $data 'game')" }
 $runDir = Join-Path $data 'run'

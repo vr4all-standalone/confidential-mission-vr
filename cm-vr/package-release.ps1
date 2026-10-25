@@ -15,12 +15,12 @@
   (its package, version and label, and its start screen the only entry in the headset's library),
   and the zip for holding exactly its files, with a README.txt that names no other game.
 
-  The models that come with the app, hotd2-vr\models (guns\, controllers\ and CREDITS.txt: other
+  The models that come with the app, cm-vr\models (guns\, controllers\ and CREDITS.txt: other
   people's work under their own licences, filled by hand and never in git): when the folder is
   there the APK has them as assets/models (the vr build takes the folder) and the zip as
   data\models\ with CREDITS.txt at its top, the same files in both. Every GLB in either must be
   named on a "File:" line of its CREDITS.txt (File: guns/zapper.glb), and git must track nothing
-  in hotd2-vr\models; -CheckOnly checks those two as well.
+  in cm-vr\models; -CheckOnly checks those two as well.
 
   The licence, LICENSE.txt: GPL-3.0 and cgltf's MIT notice (and, with the bundled models, a line
   that they aren't under it). The vr build writes it into the APK as assets/LICENSE.txt
@@ -49,7 +49,7 @@ $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # The app: its application ID, label and version (shell\android-studio\flycast\build.gradle.kts and
-# src\vr\AndroidManifest.xml), its library entry, and the PC zip's start script (hotd2-vr\assets).
+# src\vr\AndroidManifest.xml), its library entry, and the PC zip's start script (cm-vr\assets).
 $appId = 'com.vrlightgunhub.confmiss'
 $appLabel = 'Confidential Mission VR'
 $appVersion = '1.2.0'
@@ -151,17 +151,17 @@ function Test-Archives([string[]]$archives) {
 	-not $bad
 }
 
-# hotd2-vr\models is never in git (other people's models, under their own licences; .gitignore)
+# cm-vr\models is never in git (other people's models, under their own licences; .gitignore)
 function Test-ModelsUntracked {
 	$ErrorActionPreference = 'Continue'
-	$tracked = @(& git -C $repo ls-files -- hotd2-vr/models 2>$null)
-	if ($LASTEXITCODE -ne 0) { Write-Host 'git ls-files failed: hotd2-vr\models not checked' -ForegroundColor Red; return $false }
+	$tracked = @(& git -C $repo ls-files -- cm-vr/models 2>$null)
+	if ($LASTEXITCODE -ne 0) { Write-Host 'git ls-files failed: cm-vr\models not checked' -ForegroundColor Red; return $false }
 	if ($tracked.Count) {
-		Write-Host 'git tracks files in hotd2-vr\models, never released that way (git rm --cached them):' -ForegroundColor Red
+		Write-Host 'git tracks files in cm-vr\models, never released that way (git rm --cached them):' -ForegroundColor Red
 		$tracked | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
 		return $false
 	}
-	Write-Host 'git check: nothing in hotd2-vr\models is tracked'
+	Write-Host 'git check: nothing in cm-vr\models is tracked'
 	$true
 }
 
@@ -286,7 +286,7 @@ $certs | Select-String 'certificate DN' | ForEach-Object { Write-Host "$_" }
 if ($digests -contains $debugDigest) {
 	if (-not $AllowDebugKey) {
 		Write-Host ("The APK is signed with the public debug key (shell\android-studio\debug.keystore): not released. " +
-			'Make the release key with hotd2-vr\make-release-key.ps1 and build again (or -AllowDebugKey for a test build).') -ForegroundColor Red
+			'Make the release key with cm-vr\make-release-key.ps1 and build again (or -AllowDebugKey for a test build).') -ForegroundColor Red
 		exit 1
 	}
 	Write-Host 'Signed with the public debug key: a test build, do not publish it.' -ForegroundColor Yellow
@@ -336,7 +336,7 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item (Join-Path $repo 'build-win\flycast.exe') $stage
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "assets\$playCmd") $stage
-# the models that come with the app, when hotd2-vr\models is there: data\models\ (where flycast.exe looks last, after
+# the models that come with the app, when cm-vr\models is there: data\models\ (where flycast.exe looks last, after
 # the player's folders) and their CREDITS.txt at the top; the APK must have the same ones (assets/models)
 $models = Join-Path $PSScriptRoot 'models'
 $modelFiles = @()
@@ -356,7 +356,7 @@ if (Test-Path -LiteralPath $models) {
 		$modelFiles += 'CREDITS.txt'
 	}
 } else {
-	Write-Host 'No hotd2-vr\models: this release comes without the bundled models (README, Releasing).' -ForegroundColor Yellow
+	Write-Host 'No cm-vr\models: this release comes without the bundled models (README, Releasing).' -ForegroundColor Yellow
 }
 $a = [IO.Compression.ZipFile]::OpenRead($apk)
 try {
@@ -367,7 +367,7 @@ $wantModels = @($modelFiles | ForEach-Object { $_ -replace '^data/models/', '' }
 $modelsGood = ($apkModels -join '|') -eq ($wantModels -join '|')
 if ($modelsGood) { Write-Host "models check: the APK and the zip have the same $($wantModels.Count) bundled model files" }
 else {
-	Write-Host ("The APK's bundled models ($($apkModels -join ', ')) are not those of hotd2-vr\models ($($wantModels -join ', ')): " +
+	Write-Host ("The APK's bundled models ($($apkModels -join ', ')) are not those of cm-vr\models ($($wantModels -join ', ')): " +
 		'build again without -SkipBuild.') -ForegroundColor Red
 }
 Set-Content -Path (Join-Path $stage 'emu.cfg') -Encoding ascii -Value @'

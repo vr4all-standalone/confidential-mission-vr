@@ -5,7 +5,7 @@ plain shapes only. No font, no game or company art (nothing of Sega's logo or th
 the five legacy densities into the vr source set, where they override the main source set's
 ic_launcher.png at the same sizes:
 
-    python hotd2-vr\\assets\\make-icon.py [preview.png]
+    python cm-vr\\assets\\make-icon.py [preview.png]
 
 Needs Pillow (requirements.txt). With an argument it also saves all five side by side,
 upscaled without smoothing, to look at.

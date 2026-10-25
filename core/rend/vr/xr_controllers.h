@@ -2,7 +2,7 @@
 	The player's controllers drawn in the hands (hotd2-vr): the runtime's own models where it
 	has them (XR_FB_render_model: a Quest's Touch controllers, glTF read by glb_mesh.h), else a
 	built-in low-poly shape like a Quest 3 Touch Plus (controller_model.h, made by
-	hotd2-vr/controller_model/make_controller.py: self-made, no Meta data). Drawn by
+	cm-vr/controller_model/make_controller.py: self-made, no Meta data). Drawn by
 	xr_host.cpp into each eye, with the guns' lighting (xr_gun.h ModelLightingSource), for each
 	tracked hand that holds no gun.
 

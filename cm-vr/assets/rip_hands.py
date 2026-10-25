@@ -1,7 +1,7 @@
 """Makes the headset's hands and pistol (hands.bin) from a Flycast rip of The House of the Dead 2.
 
 The models come from your own copy of the game, as the emulator drew them: run the PC
-build to the game over scene with a rip request (hotd2-vr/rip-hands.ps1 does it all), then
+build to the game over scene with a rip request (cm-vr/rip-hands.ps1 does it all), then
 
     py rip_hands.py <rip dir> <hands.bin> [--pass N] [--preview preview.png]
 

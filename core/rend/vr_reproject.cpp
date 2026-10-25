@@ -1578,7 +1578,7 @@ bool player2Prompting() {
 // last one) closes that frame: on after CutsceneOnFrames frames in a row with the bars (~0.3 s), off
 // at the CutsceneOffFrames-th frame without them (6, ~0.1 s: the hall's entrance blinks for up to 2
 // frames; a Start that skips a scene brings the guns back at once). Counted per drawn frame, not by
-// the clock, so a slow frame doesn't end a scene. See hotd2-vr/notes/confmiss-findings.md, Cutscenes.
+// the clock, so a slow frame doesn't end a scene. See cm-vr/notes/confmiss-findings.md, Cutscenes.
 constexpr u32 CutsceneOnFrames = 18, CutsceneOffFrames = 6;
 static std::atomic<u32> cutscenePasses { 0 }, cutsceneBars { 0 };
 static std::atomic<bool> cutsceneOn { false };
@@ -1782,12 +1782,12 @@ static void logShotTextures(const rend_context& ctx, const RenderPass& pass, con
 
 //
 // PC: "rip.request" in the working directory dumps the next render pass as the TA got it,
-// for hotd2-vr/assets/rip_hands.py to lift into 3D models (models from your own copy of the
+// for cm-vr/assets/rip_hands.py to lift into 3D models (models from your own copy of the
 // game, never shipped): rip/passNNNN.bin with every polygon and vertex, plus the VRAM and
 // palette when they changed. The request file may hold "count interval ram texture polys":
 // that many passes, that many passes apart, with ram 1 also the main RAM; with a texture
 // (VRAM address, hex) only from the first pass with at least that many polygons using it
-// (hotd2-vr/rip-hands.ps1 waits for the agent's pistol that way).
+// (cm-vr/rip-hands.ps1 waits for the agent's pistol that way).
 //
 static void ripRequested(const rend_context& ctx, const RenderPass& pass, const RenderPass& prev)
 {

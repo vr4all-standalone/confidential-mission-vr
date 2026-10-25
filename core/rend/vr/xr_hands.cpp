@@ -3,7 +3,7 @@
 	xr_hands.h.
 
 	hands.bin in the data directory (little endian, made from the player's own game by
-	hands_rip.cpp, or on the PC by hotd2-vr/assets/rip_hands.py), and in the same format the
+	hands_rip.cpp, or on the PC by cm-vr/assets/rip_hands.py), and in the same format the
 	hero's staff of The Maze of the Kings, staff-mok.bin, and Confidential Mission's guns,
 	gun-cm-*.bin (only the running game's files are read, again when one is made or another game
 	starts; Confidential Mission's guns each on first use):

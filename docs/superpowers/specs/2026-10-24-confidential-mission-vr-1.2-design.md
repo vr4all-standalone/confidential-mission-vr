@@ -30,7 +30,7 @@ Any extra guns a player drops into a guns folder still follow the bundled ones, 
 - **Old saved choices (my call):** a saved cabinet, arcade or Auto choice becomes the in-game pistol, falling back as above.
 - **Built-in fallback (my call):** v1's built-in arcade model stays in the code only as a hidden last resort, used when no gun file can load at all. It never appears on the menu.
 - **The cabinet rip (my call):** if the cabinet gun is ripped in its own step, that step goes. This makes the first start shorter, and the parts that only fed the cabinet gun go too. If the cabinet rip is tied into the pistol rip, keep the shared part and say so.
-- **Zapper size:** 1.2x its 1.1 size, from 0.25 m to 0.30 m long. Scaling is a technical change, so the Zapper's CC BY-ND licence allows it. Make the change in the Zapper's sidecar (or wherever its size is set). Update the user's local copies too: `my-models\ready`, `hotd2-vr/models` and `build-win`.
+- **Zapper size:** 1.2x its 1.1 size, from 0.25 m to 0.30 m long. Scaling is a technical change, so the Zapper's CC BY-ND licence allows it. Make the change in the Zapper's sidecar (or wherever its size is set). Update the user's local copies too: `my-models\ready`, `cm-vr/models` and `build-win`.
 - **Arcade gun name:** set the Namco sidecar's `"name"` to "Arcade gun" in the same three local copies. CREDITS keeps the model's real title and author.
 
 ## 2. The rifle pickup with a file gun
@@ -138,7 +138,7 @@ During the game's story cutscenes, each hand shows its Quest controller model in
 - **Labels (my call):** no how-to-play labels during cutscenes, just the controllers.
 - **What counts as a cutscene:** a span where the game shows a non-interactive scene during a game in progress. That covers the stage intros and story scenes between and inside stages.
   - Attract mode and the title screen already have their own behaviour; leave them as they are.
-  - Detection is the builder's research. Possible sources: a game-state value in RAM (see `hotd2-vr/notes/confmiss-findings.md`), or the game's own "gun input ignored" state, e.g. the HUD/ammo display or the reticle being absent.
+  - Detection is the builder's research. Possible sources: a game-state value in RAM (see `cm-vr/notes/confmiss-findings.md`), or the game's own "gun input ignored" state, e.g. the HUD/ammo display or the reticle being absent.
   - The detection must not flicker. If a scene can be skipped with a shot or Start, the guns must come back the moment play resumes.
   - Record what was found in `confmiss-findings.md`, with addresses and the method, and no game text.
 - **Player 2:** a hand that is player 2's follows the same rule.
@@ -208,7 +208,7 @@ The user suggested shipping the ripped pistol and rifle in the APK ("idk up to y
 
 **The user's models:**
 - They are never committed to git.
-- They ship in the APK and the zip, credited in CREDITS, from the gitignored `hotd2-vr/models/`.
+- They ship in the APK and the zip, credited in CREDITS, from the gitignored `cm-vr/models/`.
 - The Zapper (CC BY-ND) gets technical changes only.
 
 **Git and devices:**
@@ -220,7 +220,7 @@ The user suggested shipping the ripped pistol and rifle in the APK ("idk up to y
 
 ## Done means
 
-- Every item has a test with fixtures or the sim where it can (`hotd2-vr\accept.ps1` scenarios).
+- Every item has a test with fixtures or the sim where it can (`cm-vr\accept.ps1` scenarios).
 - The full regression passes: 38 CM scenarios plus `hotd2,mok`, with existing scenarios updated where the gun list or the menu rows changed.
 - Both builds pass.
 - `package-release.ps1` passes all checks, for 1.2.0, versionCode 9.

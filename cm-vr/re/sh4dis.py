@@ -17,7 +17,7 @@ def _ram_path():
         return Path(sys.argv[3])
     if os.environ.get('HOTD2VR_RAM'):
         return Path(os.environ['HOTD2VR_RAM'])
-    # <data>/<repo>/hotd2-vr/re/sh4dis.py
+    # <data>/<repo>/cm-vr/re/sh4dis.py
     data = Path(os.environ.get('HOTD2VR_DATA') or Path(__file__).resolve().parents[3])
     return data / 'run' / 'ram.bin'
 
