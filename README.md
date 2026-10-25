@@ -57,15 +57,16 @@ PC VR headsets are not tested yet (see [The game](#the-game)).
     round of a rifle burst, a light click on an empty gun, nothing on a reload.
   * **Haptics Off, Light, Medium or Strong**, from the menu.
 * **Two Players, One Headset:** Player 2 presses Start on the other controller (**Left `X`**)
-  and joins with a gun in that hand, both lives and scores on screen. The menu's **Hands** row
-  puts player 1 on your **left or right hand**, to match P1 left / P2 right on the screen.
+  and joins, both lives and scores on screen. With two players, **player 1 is on the left hand
+  and player 2 on the right** by default, matching the game's screen (the menu's **Two players**
+  row turns it round). Playing alone, either hand's trigger takes the gun.
 * **Arcade Reloads, or Not:** Shoot away from the game's view as at the arcade, or just point
   away (the menu's **Reload** row). **`B`** and **`Y`** reload too.
 * **Empty Hands in the Cutscenes:** In the stage intros and story scenes your hands are empty
   (no gun, no controller, no laser). The guns come back the moment play resumes, and **Start**
   skips the scene.
 * **A Pause Menu in the Headset:** The **Left `≡`** button pauses the game: gun, gun angle,
-  reload, hands, laser, haptics, world size, panel distance and a how-to-play view, each saved
+  reload, two players' hands, laser, haptics, world size, panel distance and a how-to-play view, each saved
   at once.
 * **A Start Screen That Checks Your Files:** **READY**, or exactly which file is missing and
   where it goes.
@@ -78,9 +79,9 @@ PC VR headsets are not tested yet (see [The game](#the-game)).
 
 | Action | Quest Touch controller |
 | :--- | :--- |
-| **Shoot** | **Trigger** (right hand player 1, left hand player 2) |
-| **Start / join** | **Right `A`** player 1 · **Left `X`** player 2 joins |
-| **Reload** | **Right `B`** player 1 · **Left `Y`** player 2 · or shoot away from the view |
+| **Shoot** | **Trigger**: alone, either hand (the gun goes to the hand that fires) · two players: left hand player 1, right hand player 2 |
+| **Start / join** | **Right `A`** player 1 · **Left `X`** player 2 joins · two players: **`X`** player 1, **`A`** player 2 |
+| **Reload** | alone, **`B`** or **`Y`** · two players: **Left `Y`** player 1, **Right `B`** player 2 · or shoot away from the view |
 | **Settings menu (pauses)** | **Left `≡` Menu** button |
 | **Recenter** | **Left thumbstick click** *or* hold the **Meta** button |
 | **Laser off / on** | **Right thumbstick click** |
@@ -205,10 +206,10 @@ Quest Touch:
 
 | Button | Does |
 |---|---|
-| A | Start, player 1 |
-| B | reload, player 1 |
-| X | Start, player 2 (player 2 joins: a gun in each hand) |
-| Y | reload, player 2 |
+| A | Start, player 1 (with two players in: player 2's Start) |
+| B | reload, player 1 (with two players in: player 2's reload) |
+| X | Start, player 2: player 2 joins, a gun in each hand (with two players in: player 1's Start) |
+| Y | reload, player 1, as B (with two players in: player 1's reload) |
 | ≡ (left menu button) | opens or closes the settings menu |
 | left thumbstick click | recenter |
 | right thumbstick click | laser off/on (kept) |
@@ -216,9 +217,16 @@ Quest Touch:
 | grip + thumbstick up/down | world size (kept) |
 | thumbstick | the game's D-pad (menus) |
 
-The how-to-play labels by the controllers' buttons (before play starts, and the menu's How to play):
+The two-player meanings are the menu's Two players at its default, "P1 left hand - P2 right hand"; at "P1 right hand -
+P2 left hand" the right controller's buttons stay player 1's and the left's player 2's.
+
+The how-to-play labels by the controllers' buttons (before play starts, and the menu's How to play while you play alone):
 - right controller: A - P1 Start · B - P1 Reload · Trigger - P1 Shoot · Stick - Laser
 - left controller: X - P2 Start · Y - P2 Reload · Trigger - P2 Shoot · Stick - Recenter · Menu
+
+With two players in, the menu's How to play shows them as they are then (P1 on the left, the default):
+- left controller: X - P1 Start · Y - P1 Reload · Trigger - P1 Shoot · Stick - Recenter · Menu
+- right controller: A - P2 Start · B - P2 Reload · Trigger - P2 Shoot · Stick - Laser
 
 "Stick" is the stick click. Before player 2 joins, the left trigger shoots for player 1 too: the
 one gun goes to the hand that fires.
@@ -244,12 +252,16 @@ With the assault rifle (shoot one a fallen enemy drops) the trigger held keeps f
 knock for the first bullet, then a short lighter one for each bullet after, 12 a second, each
 with a small kick and its flash.
 
-**Two guns.** Press X and player 2 joins, as at the cabinet: the right hand holds player 1's
-gun (red aim), the left player 2's (blue aim), both lives and scores on screen. When player 2
-is out of the game (the game asks for player 2's Start again), it's one gun again. X only
-joins while the game takes player 2; at other times it does nothing. `vr.DualWield = no` turns
-joining off.
-The menu's Hands at "P1 left hand - P2 right hand" turns this round to match the screen (P1 on the left): the left hand holds player 1's gun, with X its Start and Y its reload, and the right hand player 2's, with A (join) and B.
+**Two guns.** Press X and player 2 joins, as at the cabinet, both lives and scores on screen.
+With two players, player 1 is on the left hand and player 2 on the right, matching the game's
+screen: player 1's gun (red aim) moves to the left hand and player 2's (blue aim) appears in the
+right. Each controller's buttons are then its own player's: X is player 1's Start and Y its
+reload, A player 2's Start and B its reload (the X you joined with counts as player 2's Start
+until you let it go). The menu's Two players at "P1 right hand - P2 left hand" turns this round:
+player 1 keeps the right hand, as in 1.2.0. When player 2 is out of the game (the game asks for
+player 2's Start again), it's one gun again, in player 1's hand, and either trigger takes it as
+before. X only joins while the game takes player 2; at other times it does nothing.
+`vr.DualWield = no` turns joining off.
 
 Holding the Meta button recenters too.
 Quit with the Meta button, then *Quit*.
@@ -266,8 +278,10 @@ Quit with the Meta button, then *Quit*.
 | The game's D-pad (menus) | thumbstick | trackpad | thumbstick |
 | World size | grip + thumbstick up/down | grip + trackpad up/down | grip + thumbstick up/down |
 
-Where the settings menu is a hold, a shorter press of the left menu button is player 2's Start
-when you let go. Their how-to-play labels name each controller's own buttons the same way
+With two players in, each controller's Start and reload are its own player's, as on the Quest:
+by default the left's are player 1's and the right's player 2's. Where the settings menu is a
+hold, a shorter press of the left menu button is the left Start when you let go: player 2's
+(it lets player 2 join), or with two players in, player 1's by default. Their how-to-play labels name each controller's own buttons the same way
 ("Pad click - P1 Reload", "Menu - P2 Start (hold: Menu)").
 
 ---
@@ -284,7 +298,7 @@ nothing.
 Point at a row with either hand and pull the trigger, or move with a thumbstick (up and down,
 round from the bottom to the top) and press A. On a row with - and +, the left half of the row
 is - and the right half +; the thumbstick left and right are - and +, and A is +. On an On/Off
-row (Hands, Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it.
+row (Two players, Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it.
 Held left or right on Gun angle, World size or Panel distance, the thumbstick keeps stepping. The pointer's line and dot show while the menu is open,
 even with the laser off.
 
@@ -295,7 +309,7 @@ even with the laser off.
 | Gun | the gun in your hand: In-game pistol, Arcade gun, Zapper, then any of your own (`vr.Gun`, `vr.GunFile`; see The guns below, and Your own models). There is no Auto: the in-game pistol is the default. A gun not made yet is skipped; an in-game pistol made without all of it says "(incomplete)" and can still be chosen. If the chosen gun isn't there, the hand takes the in-game pistol; without that (the first start skipped, or not done yet), the Arcade gun; and if no gun file loads at all, a plain built-in gun. The new gun shows at once, while the game is paused |
 | Gun angle | the gun tilted in your hand, -30° to +30° in 1° steps, + the muzzle up (`vr.GunAngle`): for a controller that holds a gun at a different angle than your hand points. The laser and the shots follow the barrel, in both hands, the assault rifle too |
 | Reload | Shoot off-screen (a pull away from the game's view reloads, as in the arcade) or Point off-screen (pointing away is enough; `vr.Reload`). B and Y reload either way |
-| Hands | P1 right hand - P2 left hand (the default) or P1 left hand - P2 right hand (`vr.P1Hand`): which controller is player 1's, with its trigger, Start and reload. At P1 left hand, X is player 1's Start and Y its reload, A player 2's Start (join) and B its reload, and the how-to-play labels follow. With two players in, the guns change hands when the menu closes; with one gun, the gun still goes to the hand that fires |
+| Two players | P1 left hand - P2 right hand (the default) or P1 right hand - P2 left hand (`vr.TwoPlayerP1Hand`): which controller is player 1's once player 2 is in, with its gun, trigger, Start and reload; the other is player 2's. At the default, as the game shows the players, X is player 1's Start and Y its reload, A player 2's Start and B its reload, and the how-to-play labels follow. Changed with two players in, the guns change hands when the menu closes; changed playing alone, it applies at the next join. Playing alone it changes nothing: A is player 1's Start and either hand's trigger takes the gun |
 | Laser | the laser line and dot, On or Off (`vr.Laser`) |
 | Haptics | Off, Light, Medium (the default) or Strong (`vr.Haptics`): Light is 1.2's Normal, Medium 1.2's Strong, Strong half as long again; each change gives a sample knock at the new level in the hand that made it |
 | World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
@@ -334,8 +348,9 @@ Sega's NAOMI light-gun game from 2000, with its own profile:
   gun adjustment screen before each game needs nothing from you.
 - **On the panel.** The HUD, the subtitles, the briefing and the menus sit on the 2D plane; the
   game's own shot marker is hidden, and so is player 2's start prompt in a one-player game.
-- **Two guns.** X (the left controller's Start) lets player 2 join with a gun in your left
-  hand; when player 2 is out, it's one gun again.
+- **Two guns.** X (the left controller's Start) lets player 2 join: player 1's gun goes to your
+  left hand and player 2's to the right (the menu's Two players); when player 2 is out, it's one
+  gun again.
 - **Free play.** No coins: Start (A) begins a game.
 
 Checked on the PC: the profile, the widened view in the attract scenes, the story and stage 1,
@@ -495,9 +510,9 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.GunFile` | (none) | with `vr.Gun` 4: your gun's file name in `guns/`, without `.glb` (set by the menu) |
 | `vr.GunAngle` | 0 | the gun tilted in the hand about the grip, degrees, -30 to 30 (+ the muzzle up); the menu's Gun angle |
 | `vr.Reload` | 0 | 0 reload by shooting away from the game's view; 1 by pointing away from it too, once each time (the menu's Reload) |
-| `vr.P1Hand` | right | player 1's controller: `right`, or `left` for player 1's gun, Start (X) and reload (Y) in the left hand and player 2's (A, B) in the right (the menu's Hands) |
+| `vr.TwoPlayerP1Hand` | left | with two players in, player 1's controller: `left` (player 1's gun, Start (X) and reload (Y) in the left hand, player 2's (A, B) in the right, as the game shows them) or `right` the other way round; anything else reads as left. Playing alone it changes nothing (the menu's Two players). 1.2.0's `vr.P1Hand` is no longer read |
 | `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
-| `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join with a gun in your left hand |
+| `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join, a gun in each hand (`vr.TwoPlayerP1Hand` says which is whose) |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |
 | `vr.DropShotFlash` | yes | hide a bright full-screen flash right after a shot, should the game draw one |
 | `vr.ComfortStart` / `vr.ComfortMin` | 0.8 / 0.4 | comfort zone, metres (0: off) |

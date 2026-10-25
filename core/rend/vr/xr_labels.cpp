@@ -36,8 +36,8 @@ struct Label
 // controller's, so a PC controller's button points at the place doing the same job: Start at A (X
 // on the left), the reload at B (Y), the menu at the menu button. Before player 2 joins, the left
 // trigger shoots for player 1 (the one gun goes to the hand that pulls); the label still says P2,
-// the user's text. With vr.P1Hand left (the menu's Hands) the same buttons name the other player
-// (KindsP1Left): player 1's on the left, player 2's on the right. Roboto Bold, the panels' font, has no triple bar (U+2261): Touch's menu button
+// the user's text. With two players in and vr.TwoPlayerP1Hand left (the menu's Two players, the default) the
+// same buttons name the other player (KindsP1Left): player 1's on the left, player 2's on the right. Roboto Bold, the panels' font, has no triple bar (U+2261): Touch's menu button
 // says "Menu".
 struct Words
 {
@@ -65,7 +65,7 @@ const Words Kinds[] {
 		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 };
-// vr.P1Hand left: each hand's buttons its own player's, P1 on the left and P2 on the right (the same
+// Two players in, vr.TwoPlayerP1Hand left: each hand's buttons its own player's, P1 on the left and P2 on the right (the same
 // buttons and order as Kinds)
 const Words KindsP1Left[] {
 	{ "/interaction_profiles/oculus/touch_controller", {
@@ -145,7 +145,8 @@ std::vector<Logged> logged[2];
 const Words *setLogged[2] {};
 const char *const HandName[2] { "left", "right" };
 
-// The words for a profile, by vr.P1Hand (p1Hand(): 0 left)
+// The words for a profile, by player 1's controller now (p1Hand(), 0 left: the right playing alone and before
+// the game starts, the menu's Two players with two players in)
 const Words& wordsFor(const char *profile)
 {
 	const Words (&kinds)[std::size(Kinds)] = p1Hand() == 0 ? KindsP1Left : Kinds;

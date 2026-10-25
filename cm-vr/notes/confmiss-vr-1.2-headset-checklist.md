@@ -76,7 +76,7 @@ where it is.
   "Y - P2 Reload", "Trigger - P2 Shoot", "Stick - Recenter", "Menu". Readable at arm's length.
 - [ ] **Do:** look where each controller's "Trigger - ... Shoot" box sits.
   **Expect:** directly on top of its "Stick - ..." box (not under A or X), its line from the box's outer end to the
-  trigger; the same in the menu's How to play and with the Hands row flipped.
+  trigger; the same in the menu's How to play, alone and with two players in (P1's labels on the left).
 - [ ] **Do:** tip the left controller up to see its trigger.
   **Expect:** the new "Trigger - P2 Shoot" line ends on the left trigger's front, as the right one's does. Note any
   line that points beside its button (which, how far).
@@ -160,20 +160,23 @@ where it is.
   **Expect:** the menu's pointer line and dot show while it's open; How to play shows both labelled controllers; once
   the menu closes the hands are empty again, until play resumes.
 
-## 11. Player 2
+## 11. Player 2 (1.2.1: P1 on the left with two players)
 
-- [ ] **Do:** before player 2 joins, pull the left trigger.
-  **Expect:** it shoots for player 1: the one gun goes to the left hand (expected, as the README says).
-- [ ] **Do:** press X while the game takes player 2, then shoot with each hand.
-  **Expect:** the left hand holds player 2's gun (blue aim), the left trigger shoots for player 2 only, each hand's
-  knocks in its own controller. When player 2 is out, it's one gun again.
-- [ ] **Do:** ≡, the Hands row (under Reload): flip it to "P1 left hand - P2 right hand", look at How to play, close the
-  menu; Start with X, let player 2 join with A, shoot with each hand, then Y and B with some rounds gone. Flip it back
-  to "P1 right hand - P2 left hand" with both players in, and close the menu.
-  **Expect:** the labels read X - P1 Start, Y - P1 Reload on the left and A - P2 Start, B - P2 Reload on the right; the
-  left hand holds player 1's gun (red aim, P1's lives and score), the right player 2's (blue); Y reloads player 1 and
-  B player 2. Flipped back, the guns change hands as the menu closes, both players still in. The row keeps its value
-  after a restart.
+- [ ] **Do:** before player 2 joins, pull the left trigger, then the right; press B, then Y, with some rounds gone.
+  **Expect:** each pull shoots for player 1: the one gun goes to the hand that pulls (as the README says). A is player
+  1's Start; B and Y both reload player 1.
+- [ ] **Do:** with the Two players row as it came (a fresh install, or over 1.2.0), press X while the game takes player
+  2, then shoot with each hand, then Y and B with some rounds gone; look at the menu's How to play.
+  **Expect:** player 1's gun moves to the left hand (red aim, P1's lives and score) and player 2's appears in the right
+  (blue), the right controller buzzing for the join; the X press starts nothing for player 1. The left trigger shoots
+  for player 1 only, the right for player 2, each hand's knocks in its own controller; Y reloads player 1 and B player
+  2. The labels read X - P1 Start, Y - P1 Reload on the left and A - P2 Start, B - P2 Reload on the right. When player
+  2 is out, it's one gun again, staying in the left hand until the right trigger takes it.
+- [ ] **Do:** ≡, the Two players row (under Reload): flip it to "P1 right hand - P2 left hand" with both players in,
+  and close the menu. Later, playing alone, flip it back to "P1 left hand - P2 right hand" and let player 2 join.
+  **Expect:** flipped with both players in, the guns change hands as the menu closes, both players still in, and the
+  right trigger is then player 1's. Flipped playing alone, nothing moves until player 2 joins; then the guns go where
+  the row says. The row keeps its value after a restart.
 
 ## 12. 72 Hz
 

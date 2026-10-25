@@ -164,6 +164,9 @@ $cmWiden = 'config:vr.FovScale=2,config:vr.WidenFov=yes'
 # vr.BuiltInGun (PC, CM VR 1.2) holds it whatever vr.Gun says, so these runs never draw a bundled gun
 # (the user's own models in build-win\data\models): "XR: gun: built-in gun (chosen: vr.BuiltInGun)".
 $cmWidenArcade = "$cmWiden,config:vr.GameHands=no,config:vr.BuiltInGun=yes"
+# The two-player runs from before CM VR 1.2.1 had player 1 keep the right hand once player 2 joins; the menu's Two
+# players at "P1 right hand - P2 left hand" keeps that path tested as it was (the default, P1 left: cm-p1-left).
+$cmP1Right = 'config:vr.TwoPlayerP1Hand=right'
 $cmPoints = @(@(5000, 5000), @(1000, 1000), @(9000, 1000), @(1000, 9000), @(9000, 9000), @(5000, 1000), @(5000, 9000), @(1000, 5000), @(9000, 5000))
 
 function Get-CmStarts { for ($t = 30; $t -le 52; $t += 2) { "$t=start 0" } }
@@ -491,7 +494,7 @@ function Test-CmSim {
 # Start lines before 53 s on the log's clock (so the count sees them), and none come after.
 function Test-CmButtons {
 	$name = 'accept-cm-buttons'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 74; XrSim = $true; Config = $cmWidenArcade
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 74; XrSim = $true; Config = "$cmWidenArcade,$cmP1Right"
 		At = @(Get-CmStartsXr) + '56=xr right/b 1 200', '60=xr left/x 1 200', '62=xr left/y 1 200', '66=xr left/thumbstick 1 200',
 			'68=xr right/thumbstick 1 200', '70=xr left/menu 1 200'
 		Expect = 'Light gun P1 at .*start 1', 'Light gun P1 at .* B 1', 'XR: player 2 joins: a gun in each hand',
@@ -511,12 +514,14 @@ function Test-CmButtons {
 # (trackpad/force) is the menu button, once. Vive wands (and Windows Mixed Reality): the left
 # menu button is Start; held 0.8 s it is the menu instead. A short press (33 s) acts as the left
 # Start when let go (player 2 joins, Start for player 2 by 35 s on the log's clock), a 1.2 s
-# hold (36 s) opens the menu: one menu line, no second join and no player 2 Start from 35 s on.
+# hold (36 s) opens the menu: one menu line, no second join and no player 2 Start from 35 s on. The menu's Two players
+# at its default (CM VR 1.2.1): player 1's gun goes to the left hand at the join, and the short press, held on by the
+# Vive's 150 ms, stays player 2's Start (a whole press) and is no player 1 Start, though the left is player 1's then.
 function Test-CmButtonsPc {
 	foreach ($pc in @(
 			@{ Name = 'accept-cm-buttons-index'; Profile = 'valve/index_controller'; At = @('35=xr left/trackpad/force 1 300'); Expect = @() },
 			@{ Name = 'accept-cm-buttons-vive'; Profile = 'htc/vive_controller'; At = @('33=xr left/menu 1 200', '36=xr left/menu 1 1200')
-				Expect = @('XR: player 2 joins: a gun in each hand') })) {
+				Expect = @("XR: player 2 joins: a gun in each hand \(player 1's in the left\)$") })) {
 		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $pc.Name; Seconds = 40; XrSim = $true
 			Config = "$cmWidenArcade,config:vr.XrSimProfile=$($pc.Profile)"; At = $pc.At
 			Expect = @("XR: controllers: /interaction_profiles/$($pc.Profile)") + $pc.Expect; Reject = 'XR: initialisation failed' }
@@ -528,7 +533,14 @@ function Test-CmButtonsPc {
 			$tap = Get-LogCount $pc.Name 'Light gun P2 at .*start 1' -From 33 -To 35
 			$hold = Get-LogCount $pc.Name 'Light gun P2 at .*start 1' -From 35
 			$joins = Get-LogCount $pc.Name 'XR: player 2 joins'
+			$p1 = Get-LogCount $pc.Name 'Light gun P1 at .*start 1'
+			$on = @(Get-LogClocks $pc.Name 'Light gun P2 at .*start 1') | Select-Object -First 1
+			$off = @(Get-LogClocks $pc.Name 'Light gun P2 at .*start 0' | Where-Object { $null -ne $on -and $_ -gt $on }) | Select-Object -First 1
+			$held = if ($null -ne $on -and $null -ne $off) { [Math]::Round($off - $on, 3) } else { -1 }
 			Write-Host "  player 2 Start lines: $tap at 33-35 s (the short press, want some), $hold from 35 s on (the hold, want 0); $joins joins (want 1)"
+			Write-Host "  the short press: player 2's Start for $held s (want 0.1 or more), $p1 player 1 Start lines (want 0)"
+			if ($held -lt 0.1) { return "$($pc.Profile): the short press was player 2's Start for $held s, want 0.1 s or more" }
+			if ($p1 -ne 0) { return "$($pc.Profile): $p1 player 1 Start lines: the join press became player 1's" }
 			if ($tap -lt 1) { return "$($pc.Profile): no player 2 Start from the short press (33-35 s)" }
 			if ($hold -ne 0) { return "$($pc.Profile): $hold player 2 Start lines from 35 s on: the menu hold was a Start too" }
 			if ($joins -ne 1) { return "$($pc.Profile): $joins lines 'XR: player 2 joins', want 1" }
@@ -594,7 +606,7 @@ function Test-CmPause {
 
 # The settings menu's place, as its open line says it (xr_menu.cpp): 1.2 m ahead of the head
 # (0, 1.6, 0) at 1.5 m (0.1 m below the eyes), 0.9 m wide, its 13 rows 0.063 m apart, the top
-# row's middle 0.369 m over the panel's (13 rows: CM VR 1.2 with its Hands row). -Row and -U (0..1 across): where the simulator's right
+# row's middle 0.369 m over the panel's (13 rows: CM VR 1.2 with its Hands row, 1.2.1's Two players). -Row and -U (0..1 across): where the simulator's right
 # hand at (0.18, 1.3, -0.35) points ("yaw pitch", degrees) to put its pointer there. The pointer
 # leaves the arcade gun's muzzle (vr.GunScale 0.68), which in the simulator, where the grip pose
 # is the aim pose, is 4.4 cm over the hand and 13.7 cm ahead of it: a few rounds of aiming from it.
@@ -698,7 +710,7 @@ function Get-CmHapticsActions {
 # knock, none on the empty pulls.
 function Test-CmHaptics {
 	$name = 'accept-cm-haptics'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true; Config = "$cmWidenArcade,$cmP1Right"
 		At = @(Get-CmHapticsActions); Expect = 'XR: player 2 joins: a gun in each hand'
 		Reject = 'XR: initialisation failed', 'VR: P1 magazine 6 -> ' }
 	if ($why) { return $why }
@@ -721,7 +733,7 @@ function Test-CmHaptics {
 # 0.030 s at 1.0, the clicks 0.012 s at 0.35; none at 1.2's Low amplitude (0.45 of each), none at Medium's length.
 function Test-CmHapticsLow {
 	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-low'; Seconds = 75; XrSim = $true
-		Config = "$cmWidenArcade,config:vr.Haptics=1"; At = @(Get-CmHapticsActions)
+		Config = "$cmWidenArcade,$cmP1Right,config:vr.Haptics=1"; At = @(Get-CmHapticsActions)
 		Expect = 'XR: player 1 shot at', 'XRSIM: haptic right 0\.030 1\.000', 'XRSIM: haptic right 0\.012 0\.350'
 		Reject = 'XR: initialisation failed', 'XRSIM: haptic .* 0\.450$', 'XRSIM: haptic .* 0\.15[78]$', 'XRSIM: haptic \w+ 0\.048 ' }
 }
@@ -734,7 +746,7 @@ function Test-CmHapticsLow {
 function Test-CmHapticsStrong {
 	$name = 'accept-cm-haptics-strong'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true
-		Config = "$cmWidenArcade,config:vr.Haptics=strong"; At = @(Get-CmHapticsActions); Expect = 'XR: player 2 joins: a gun in each hand'
+		Config = "$cmWidenArcade,$cmP1Right,config:vr.Haptics=strong"; At = @(Get-CmHapticsActions); Expect = 'XR: player 2 joins: a gun in each hand'
 		Reject = 'XR: initialisation failed', 'XRSIM: haptic \w+ 0\.0(30|48) 1\.000', 'XRSIM: haptic \w+ 0\.01[29] 0\.350' }
 	if ($why) { return $why }
 	$shot = Get-LogCount $name 'XRSIM: haptic right 0\.072 1\.000'
@@ -759,7 +771,7 @@ function Test-CmHapticsStrong {
 function Test-CmHapticsOff {
 	$name = 'accept-cm-haptics-off'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true
-		Config = "$cmWidenArcade,config:vr.Haptics=off"; At = @(Get-CmHapticsActions)
+		Config = "$cmWidenArcade,$cmP1Right,config:vr.Haptics=off"; At = @(Get-CmHapticsActions)
 		Expect = 'XR: player 1 shot at'; Reject = 'XR: initialisation failed', 'XRSIM: haptic' }
 	if ($why) { return $why }
 	$kicks = Get-LogCount $name 'XR: P1 kick: built-in gun$'
@@ -912,7 +924,7 @@ function Test-CmControllersRtRun {
 # back on the game) does. The checks count lines between the menu's own open and close lines in the log.
 function Test-CmHands {
 	$name = 'accept-cm-hands'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 104; XrSim = $true; Config = $cmWidenArcade
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 104; XrSim = $true; Config = "$cmWidenArcade,$cmP1Right"
 		At = @('20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '27=shot labels2') + @(Get-CmStartsXr) + @('35=shot gun', '60=xr left/x 1 200',
 			'90=xr left/menu 1 150', '90.5=stick right 0 1 150', '91=stick right 0 1 150', '91.5=xr right/a 1 150', '92.5=xr right/a 1 150',
 			'93.5=stick right 1 0 150', '95=xr left/menu 1 150', '96=xr right/trigger 1 100', '97=xr left/menu 1 150',
@@ -1536,7 +1548,7 @@ function Test-CmRifleSim {
 # Player 2's rifle: X at 60 s (a gun in each hand), the rifle poked into player 2's block at 61 s, the left trigger
 # held 2 s from 62 s (a Shot and Auto knocks in the left hand only, one per round), the pistol poked back at 65 s.
 function Get-CmRifleP2Params([string]$name, [string]$config = '') {
-	@{ Game = 'confmiss'; Name = $name; Seconds = 67; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c15592c:2$config"
+	@{ Game = 'confmiss'; Name = $name; Seconds = 67; XrSim = $true; Config = "$cmWiden,$cmP1Right,config:vr.WatchRam=0c15592c:2$config"
 		At = @(Get-CmStartsXr) + '60=xr left/x 1 200' + @(Get-CmRiflePoke 61 1) + '62=xr left/trigger 1 2000' + @(Get-CmRiflePoke 65 1 -Pistol)
 		Reject = @('XR: initialisation failed', 'XRSIM: haptic (left|right) 0\.019', 'XRSIM: haptic right 0\.032', 'XR: P1 hand: (assault rifle|rifle rounds)') }
 }
@@ -1763,7 +1775,7 @@ function Test-CmReloadPoint {
 	$name = 'accept-cm-reload-point'
 	$on = 'pose right 0.18 1.3 -0.35 0 0'; $away = 'pose right 0.18 1.3 -0.35 90 0'; $pull = 'xr right/trigger 1 100'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 74; XrSim = $true
-		Config = "$cmWidenArcade,config:vr.Reload=1,config:vr.WatchRam=0c155804,0c155808,0c155918"
+		Config = "$cmWidenArcade,$cmP1Right,config:vr.Reload=1,config:vr.WatchRam=0c155804,0c155808,0c155918"
 		At = @(Get-CmStartsXr) + "54=$pull", "54.5=$pull", "55=$pull", '55.5=pose right 0.18 1.3 -0.35 42 0', "56=$pull", "56.5=$away",
 			"58=$on", "58.5=$pull", "59=$away", "60=$on", "60.3=$pull", '61=xr left/menu 1 150', "61.5=$away", '62.5=xr right/b 1 150',
 			'63=xr right/b 1 150', "63.5=$on", "64=$away", '69=xr left/x 1 200', '71=xr left/trigger 1 100', '71.5=pose left -0.18 1.3 -0.35 90 0'
@@ -2165,7 +2177,7 @@ function Test-CmCutscene {
 	if ($why) { return "intro: $why (the attract's scenes count with no player in)" }
 
 	$skip = 'accept-cm-cutscene-skip'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $skip; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $skip; Seconds = 75; XrSim = $true; Config = "$cmWidenArcade,$cmP1Right"
 		At = @(Get-CmStartsXr -Until 44) + '50=xr left/x 1 200'; On = 'XR: right hand: gun -> nothing \(cutscene\)|1|xr right/a 1 200'
 		Reject = @('XR: initialisation failed')
 		Expect = 'XR: player 2 joins', 'XR: right hand: gun -> nothing \(cutscene\)$', 'XR: left hand: gun -> nothing \(cutscene\)$',
@@ -2227,58 +2239,84 @@ function Test-CmCutscene {
 	return $null
 }
 
-# The menu's Hands set to "P1 left hand - P2 right hand" (vr.P1Hand=left, 1.2 round 2: the game shows P1 on the left)
-# through the simulator, widened: each controller's buttons are its own player's. Before the first Start the labels
-# say so (left: X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot, Stick - Recenter, Menu; right: A - P2 Start, B - P2
-# Reload, Trigger - P2 Shoot, Stick - Laser), the controllers in front of the left eye at 20-29 s (a window shot at 25 s:
-# the callouts). X is player 1's Start (30-52 s), which puts the single gun in the left
-# hand; the left controller where the right one rests by default (53 s: aimed as cm-haptics' right, so player 1 clears
-# stage 1's first room and stays in: with fewer hits player 1 was out by ~58 s, tried); 6 left pulls (54-57 s), Y at
-# 59.2 s (player 1's reload); A lets player 2 join at 60 s (the right hand takes player 2's gun); 2 left pulls (60.8,
-# 61.4 s) fire player 1's rounds, 3 right pulls (62-63.2 s) player 2's: each player's shot counter (+0x60, P1
-# 0c155818, P2 0c15592c, watched) and kick with its own hand's pulls only. Y at 63.7 s reloads player 1 (its ammo,
-# 0c155804, back to 6: before ~64.3 s on the log's clock, where the first room ends and the game refills player 1's
-# gun itself, tried), B at 67 s player 2 (0c155918). The menu at 68 s, down 5 to Hands, right at 70.4 s: "P1 right
-# hand - P2 left hand", saved in emu.cfg at once; B closes it at 71 s and the guns swap hands, player 2 still in;
-# the right pull at 72 s is player 1's: its light gun's trigger, and its buzz in the right hand. (The game takes no
-# shots there: after the first room it took none of player 1's right pulls up to 82.5 s, tried; so no shot counter.) (The log's clock is ~0.25 s behind the -At times.)
+# The menu's Two players at its default, "P1 left hand - P2 right hand" (CM VR 1.2.1: the run's emu.cfg has no
+# vr.TwoPlayerP1Hand; with two players the game shows P1 on the left), through the simulator, widened. Playing alone it
+# is 1.2.0's default whatever the row says: before the first Start the labels are the default set (right: A - P1 Start,
+# B - P1 Reload, Trigger - P1 Shoot, Stick - Laser; left: X - P2 Start, Y - P2 Reload, Trigger - P2 Shoot, Stick -
+# Recenter, Menu), the controllers in front of the left eye at 20-29 s (a window shot at 25 s: the callouts). A is
+# player 1's Start (30-52 s): the gun in the right hand. The left controller where the right one rests (53 s: aimed as
+# cm-haptics' right, so player 1 clears stage 1's first room and stays in: with fewer hits player 1 was out by ~58 s,
+# tried); 4 left pulls (54-55.8 s, 150 ms each) move the gun to the left hand and fire player 1's rounds, 2 right pulls
+# (56.4, 57 s) move it back and fire player 1's too (a pull can go unseen in a slow frame: the move is checked over both); B at 59.2 s reloads player 1. X lets player 2 join at 60 s: player 1's gun goes
+# to the left hand and player 2's to the right, and the X held through the join stays player 2's Start (a whole press,
+# no player 1 Start). 2 left pulls (60.8, 61.4 s) fire player 1's rounds, 3 right pulls (62-63.2 s) player 2's: each
+# player's shot counter (+0x60, P1 0c155818, P2 0c15592c, watched) and kick with its own hand's pulls only. Y at 63.7 s
+# reloads player 1 (its ammo, 0c155804, back to 6: before ~64.3 s on the log's clock, where the first room ends and the
+# game refills player 1's gun itself, tried), B at 67 s player 2 (0c155918). The menu at 68 s, up 2 to How to play: A
+# turns it on at 69.1 s (the two-player labels, P1 on the left: left X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot,
+# Stick - Recenter, Menu; right A - P2 Start, B - P2 Reload, Trigger - P2 Shoot, Stick - Laser) and off at 69.8 s; up 6
+# to Two players, right at 72.6 s: "P1 right hand - P2 left hand", saved in emu.cfg at once; B closes it at 73.2 s and
+# the guns swap hands, player 2 still in; the right pull at 74.2 s is player 1's: its light gun's trigger, and its buzz
+# in the right hand. (The game takes no shots there: after the first room it took none of player 1's right pulls up to
+# 82.5 s, tried; so no shot counter.) (The log's clock is ~0.25 s behind the -At times.)
 function Test-CmP1Left {
 	$name = 'accept-cm-p1-left'
 	$p1Shots = '^\d+:\d\d:\d{3} .*VR: ram 0c155818 '; $p2Shots = '^\d+:\d\d:\d{3} .*VR: ram 0c15592c '
-	$downs = @(foreach ($t in 68.4, 68.75, 69.1, 69.45, 69.8) { "$(T $t)=stick right 0 -1 150" })
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 76; XrSim = $true
-		Config = "$cmWidenArcade,config:vr.P1Hand=left,config:vr.WatchRam=0c155804,0c155918,0c155818:2,0c15592c:2"
+	$ups = @(foreach ($t in 68.4, 68.75) { "$(T $t)=stick right 0 1 150" })
+	$ups2 = @(foreach ($t in 70.2, 70.55, 70.9, 71.25, 71.6, 71.95) { "$(T $t)=stick right 0 1 150" })
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 78; XrSim = $true
+		Config = "$cmWidenArcade,config:vr.WatchRam=0c155804,0c155918,0c155818:2,0c15592c:2"
 		At = @('20=pose left -0.1 1.45 -0.3 0 0', '20=pose right 0.1 1.45 -0.3 0 0', '25=shot labels', '29=pose left -0.18 1.3 -0.35 0 0',
-			'29=pose right 0.18 1.3 -0.35 0 0') + @(for ($t = 30; $t -le 52; $t += 2) { "$t=xr left/x 1 200" }) +
-			'53=pose left 0.18 1.3 -0.35 0 0' + @(for ($i = 0; $i -lt 6; $i++) { "$(T (54 + 0.6 * $i))=xr left/trigger 1 100" }) +
-			'59.2=xr left/y 1 200' + '60=xr right/a 1 200' + @(foreach ($t in 60.8, 61.4) { "$(T $t)=xr left/trigger 1 100" }) + @(foreach ($t in 62, 62.6, 63.2) { "$(T $t)=xr right/trigger 1 100" }) +
-			'63.7=xr left/y 1 200', '67=xr right/b 1 200', '68=xr left/menu 1 150' + $downs + @('70.1=shot menu', '70.4=stick right 1 0 150',
-			'71=xr right/b 1 150', '72=xr right/trigger 1 100')
-		Expect = 'XR: the gun is in the left hand$', 'XR: right hand: controller -> gun \(start\)$|XR: left hand: controller -> gun \(start\)$',
-			'XR: player 2 joins: a gun in each hand', 'XR: menu open \(paused\)',
+			'29=pose right 0.18 1.3 -0.35 0 0') + @(Get-CmStartsXr) +
+			'53=pose left 0.18 1.3 -0.35 0 0' + @(for ($i = 0; $i -lt 4; $i++) { "$(T (54 + 0.6 * $i))=xr left/trigger 1 150" }) +
+			@(foreach ($t in 56.4, 57) { "$(T $t)=xr right/trigger 1 150" }) + '59.2=xr right/b 1 200' + '60=xr left/x 1 200' +
+			@(foreach ($t in 60.8, 61.4) { "$(T $t)=xr left/trigger 1 100" }) + @(foreach ($t in 62, 62.6, 63.2) { "$(T $t)=xr right/trigger 1 100" }) +
+			'63.7=xr left/y 1 200', '67=xr right/b 1 200', '68=xr left/menu 1 150' + $ups + @('69.1=xr right/a 1 150', '69.8=xr right/a 1 150') +
+			$ups2 + @('72.3=shot menu', '72.6=stick right 1 0 150', '73.2=xr right/b 1 150', '74.2=xr right/trigger 1 100')
+		Expect = 'XR: right hand: controller -> gun \(start\)$', 'XR: the gun is in the left hand$', 'XR: the gun is in the right hand$',
+			"XR: player 2 joins: a gun in each hand \(player 1's in the left\)$", 'XR: menu open \(paused\)',
 			"XR: menu at 1\.20 m, 13 rows, row pitch $($cmMenuPitch.ToString('0.000', $inv) -replace '\.', '\.') m, top row \+$($cmMenuTop.ToString('0.000', $inv) -replace '\.', '\.') m",
-			'XR: menu Hands -> P1 right hand - P2 left hand$', 'XR: menu closed \(resumed\)', "XR: the guns swap hands: player 1's in the right$"
-		Reject = 'XR: initialisation failed', 'XR: menu Hands -> P1 left hand' }
+			'XR: menu How to play$', 'XR: how to play on$', 'XR: how to play off \(chosen\)$',
+			'XR: menu Two players -> P1 right hand - P2 left hand$', 'XR: menu closed \(resumed\)', "XR: the guns swap hands: player 1's in the right$"
+		Reject = 'XR: initialisation failed', 'XR: menu Two players -> P1 left hand', "XR: player 2 joins: .*player 1's in the right" }
 	if ($why) { return $why }
-	# the labels, each hand's set once: the players the other way round
-	foreach ($set in 'left: X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot, Stick - Recenter, Menu',
-			'right: A - P2 Start, B - P2 Reload, Trigger - P2 Shoot, Stick - Laser') {
-		$lines = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern ('XR: labels set: ' + $set.Split(':')[0] + ': ') -SimpleMatch -CaseSensitive)
-		$exact = @($lines | Where-Object { $_.Line.EndsWith("XR: labels set: $set") })
-		Write-Host "  $($lines.Count) lines 'XR: labels set: $($set.Split(':')[0])', $($exact.Count) of them exactly '$set' (want 1 and 1)"
-		if ($lines.Count -ne 1 -or $exact.Count -ne 1) { return "want one 'XR: labels set: $set', got $($lines.Count) lines: $(($lines | ForEach-Object { $_.Line }) -join ' | ')" }
+	# the labels, each hand's set once before play (the default set) and once in the menu's How to play with two players in (P1 on the left)
+	$log = Get-RunLog $name
+	foreach ($set in @(@('right: A - P1 Start, B - P1 Reload, Trigger - P1 Shoot, Stick - Laser', 0, 53),
+			@('left: X - P2 Start, Y - P2 Reload, Trigger - P2 Shoot, Stick - Recenter, Menu', 0, 53),
+			@('left: X - P1 Start, Y - P1 Reload, Trigger - P1 Shoot, Stick - Recenter, Menu', 68, 72.6),
+			@('right: A - P2 Start, B - P2 Reload, Trigger - P2 Shoot, Stick - Laser', 68, 72.6))) {
+		$exact = @(Get-LogClocks $name ('XR: labels set: ' + [regex]::Escape($set[0]) + '$'))
+		$inWindow = @($exact | Where-Object { $_ -ge $set[1] -and $_ -lt $set[2] })
+		Write-Host "  'XR: labels set: $($set[0])': $($exact.Count) lines, $($inWindow.Count) in $($set[1])-$($set[2]) s (want 1 and 1)"
+		if ($exact.Count -ne 1 -or $inWindow.Count -ne 1) { return "want one 'XR: labels set: $($set[0])' in $($set[1])-$($set[2]) s, got $($exact.Count) at $($exact -join ', ') s" }
 	}
-	# X is player 1's Start, never player 2's; A (60 s) player 2's, never player 1's
-	$x1 = Get-LogCount $name 'Light gun P1 at .*start 1' -To 53
-	$x2 = Get-LogCount $name 'Light gun P2 at .*start 1' -To 53
-	$a1 = Get-LogCount $name 'Light gun P1 at .*start 1' -From 53
-	Write-Host "  X: $x1 player 1 Start lines before 53 s (want some), $x2 player 2's (want 0); $a1 player 1 Start lines from 53 s (want 0: A is player 2's)"
-	if ($x1 -lt 1 -or $x2 -ne 0 -or $a1 -ne 0) { return "X gave $x1 player 1 and $x2 player 2 Start lines before 53 s, A $a1 player 1 Start lines after" }
+	foreach ($hand in 'left', 'right') {
+		$lines = @(Select-String -LiteralPath $log -Pattern "XR: labels set: ${hand}: " -SimpleMatch -CaseSensitive)
+		if ($lines.Count -ne 2) { return "want two 'XR: labels set: ${hand}' lines (before play, two-player How to play), got $($lines.Count): $(($lines | ForEach-Object { $_.Line }) -join ' | ')" }
+	}
+	# A is player 1's Start; X (60 s) player 2's, never player 1's, and a whole press though the left is player 1's from the join
+	$a1 = Get-LogCount $name 'Light gun P1 at .*start 1' -To 53
+	$a2 = Get-LogCount $name 'Light gun P2 at .*start 1' -To 53
+	$x1 = Get-LogCount $name 'Light gun P1 at .*start 1' -From 53
 	$joined = (Get-LogClocks $name 'XR: player 2 joins')[0]
-	if ($joined -lt 59 -or $joined -ge 61) { return "player 2 joined at $joined s, want 59-61 s (A at 60 s)" }
+	$x2On = @(Get-LogClocks $name 'Light gun P2 at .*start 1' | Where-Object { $_ -ge 59 -and $_ -lt 61.5 })
+	$x2Off = @(Get-LogClocks $name 'Light gun P2 at .*start 0' | Where-Object { $x2On.Count -and $_ -gt $x2On[0] }) | Select-Object -First 1
+	$held = if ($x2On.Count -and $null -ne $x2Off) { [Math]::Round($x2Off - $x2On[0], 3) } else { -1 }
+	Write-Host "  A: $a1 player 1 Start lines before 53 s (want some), $a2 player 2's (want 0); from 53 s $x1 player 1 Start lines (want 0: the held X is player 2's)"
+	Write-Host "  player 2 joined at $joined s (want 59-61); X as player 2's Start from $($x2On | Select-Object -First 1) s, let go after $held s (want 0.15 or more: a whole press)"
+	if ($a1 -lt 1 -or $a2 -ne 0 -or $x1 -ne 0) { return "A gave $a1 player 1 and $a2 player 2 Start lines before 53 s; $x1 player 1 Start lines from 53 s (the held X?)" }
+	if ($joined -lt 59 -or $joined -ge 61) { return "player 2 joined at $joined s, want 59-61 s (X at 60 s)" }
+	if ($held -lt 0.15) { return "X held through the join: player 2's Start for $held s, want 0.15 s or more" }
+	# the one gun: to the left hand with the first left pull, back to the right with the first right pull
+	$toLeft = @(Get-LogClocks $name 'XR: the gun is in the left hand$')
+	$toRight = @(Get-LogClocks $name 'XR: the gun is in the right hand$')
+	Write-Host "  the one gun: to the left at $($toLeft -join ', ') s (want one, 53.5-54.2), to the right at $($toRight -join ', ') s (want one, 55.9-57.3)"
+	if ($toLeft.Count -ne 1 -or $toLeft[0] -lt 53.5 -or $toLeft[0] -gt 54.2) { return "the gun to the left hand at $($toLeft -join ', ') s, want once at 53.5-54.2 s" }
+	if ($toRight.Count -ne 1 -or $toRight[0] -lt 55.9 -or $toRight[0] -gt 57.3) { return "the gun to the right hand at $($toRight -join ', ') s, want once at 55.9-57.3 s" }
 	# each trigger its own player's rounds: the shot counters, the kicks and the knocks' hands
-	foreach ($w in @(@(53, 57.5, 'P1', 'left', 'the single gun, left pulls'), @(60.3, 61.7, 'P1', 'left', "player 1's left pulls, two guns"),
-			@(61.7, 63.4, 'P2', 'right', "player 2's right pulls"))) {
+	foreach ($w in @(@(53, 56, 'P1', 'left', 'the one gun, left pulls'), @(56, 57.5, 'P1', 'right', 'the one gun, right pulls'),
+			@(60.3, 61.7, 'P1', 'left', "player 1's left pulls, two guns"), @(61.7, 63.4, 'P2', 'right', "player 2's right pulls"))) {
 		$mine = $(if ($w[2] -eq 'P1') { $p1Shots } else { $p2Shots }); $other = $(if ($w[2] -eq 'P1') { $p2Shots } else { $p1Shots })
 		$counted = Get-LogCount $name $mine -From $w[0] -To $w[1]
 		$wrong = Get-LogCount $name $other -From $w[0] -To $w[1]
@@ -2292,15 +2330,18 @@ function Test-CmP1Left {
 			return "$($w[4]): $kicks $($w[2]) kicks of $otherKicks, $knocks $($w[3]) Shot knocks of $wrongKnocks, want them all $($w[2])'s in the $($w[3]) hand"
 		}
 	}
-	# Y reloads player 1 only, B player 2 only (their ammo back to 6), and the buttons' lines say whose
+	# B alone reloads player 1; with two players Y reloads player 1 only, B player 2 only (their ammo back to 6), and the buttons' lines say whose
+	$b0 = Get-LogCount $name 'Light gun P1 at .* B 1' -From 58.8 -To 59.8
+	$b0Ammo = Get-LogCount $name 'VR: ram 0c155804 0[0-5] -> 06' -From 58.8 -To 59.8
 	$y1 = Get-LogCount $name 'VR: ram 0c155804 0[0-5] -> 06' -From 63.4 -To 64.2
 	$y2 = Get-LogCount $name 'VR: ram 0c155918 0[0-5] -> 06' -From 63.4 -To 64.2
 	$b2 = Get-LogCount $name 'VR: ram 0c155918 0[0-5] -> 06' -From 66.7 -To 67.7
 	$b1 = Get-LogCount $name 'VR: ram 0c155804 0[0-5] -> 06' -From 66.7 -To 67.7
 	$yB = Get-LogCount $name 'Light gun P1 at .* B 1' -From 63.4 -To 64.2
 	$bB = Get-LogCount $name 'Light gun P2 at .* B 1' -From 66.7 -To 67.7
-	$wrongB = (Get-LogCount $name 'Light gun P2 at .* B 1' -From 63.4 -To 64.2) + (Get-LogCount $name 'Light gun P1 at .* B 1' -From 66.7 -To 67.7)
-	Write-Host "  Y: P1 ammo to 6 $y1 times, P2 $y2 (want 1 and 0); B: P2 $b2, P1 $b1 (want 1 and 0); B lines P1 $yB at Y, P2 $bB at B, $wrongB the other's (want 1+, 1+, 0)"
+	$wrongB = (Get-LogCount $name 'Light gun P2 at .* B 1' -From 58.8 -To 59.8) + (Get-LogCount $name 'Light gun P2 at .* B 1' -From 63.4 -To 64.2) + (Get-LogCount $name 'Light gun P1 at .* B 1' -From 66.7 -To 67.7)
+	Write-Host "  B alone: $b0 P1 B lines, P1 ammo to 6 $b0Ammo times (want 1+ and 1); Y: P1 ammo to 6 $y1 times, P2 $y2 (want 1 and 0); B: P2 $b2, P1 $b1 (want 1 and 0); B lines P1 $yB at Y, P2 $bB at B, $wrongB the other's (want 1+, 1+, 0)"
+	if ($b0 -lt 1 -or $b0Ammo -ne 1) { return "B playing alone gave $b0 player 1 B lines and refilled player 1's ammo $b0Ammo times, want 1 or more and 1" }
 	if ($y1 -ne 1 -or $y2 -ne 0) { return "Y: player 1's ammo refilled $y1 times, player 2's $y2, want 1 and 0" }
 	if ($b2 -ne 1 -or $b1 -ne 0) { return "B: player 2's ammo refilled $b2 times, player 1's $b1, want 1 and 0" }
 	if ($yB -lt 1 -or $bB -lt 1 -or $wrongB -ne 0) { return "the B lines: player 1 $yB at Y, player 2 $bB at B, $wrongB of the other player's" }
@@ -2318,18 +2359,20 @@ function Test-CmP1Left {
 	$buzzL = Get-LogCount $name 'XRSIM: haptic left ' -From $from -To $to
 	Write-Host "  the right pull after the swap: P1 trigger lines $p1Pull, P2's $p2Pull (want 1+ and 0); buzzes right $buzzR, left $buzzL (want 1+ and 0)"
 	if ($p1Pull -lt 1 -or $p2Pull -ne 0 -or $buzzR -lt 1 -or $buzzL -ne 0) { return "the right pull after the swap: P1 trigger lines $p1Pull, P2's $p2Pull, buzzes right $buzzR, left $buzzL" }
-	# saved at once, in the run's emu.cfg; build-win\emu.cfg is as it was
+	# none set before the run, saved at once in the run's emu.cfg; build-win\emu.cfg is as it was
 	$dir = Join-Path $repo "build-win\vrtest\$name"
 	$after = Join-Path $dir 'emu.cfg.after'
-	$hit = (Test-Path -LiteralPath $after) -and (Select-String -LiteralPath $after -Pattern '^vr\.P1Hand = right$' -CaseSensitive -Quiet)
-	Write-Host "  emu.cfg.after $(if ($hit) { 'has' } else { 'lacks' }) vr.P1Hand = right"
-	if (-not $hit) { return "the run's emu.cfg has no line 'vr.P1Hand = right'" }
-	$cfg = Join-Path $repo 'build-win\emu.cfg'
 	$before = Join-Path $dir 'emu.cfg.before'
+	$hit = (Test-Path -LiteralPath $after) -and (Select-String -LiteralPath $after -Pattern '^vr\.TwoPlayerP1Hand = right$' -CaseSensitive -Quiet)
+	$had = (Test-Path -LiteralPath $before) -and (Select-String -LiteralPath $before -Pattern '^vr\.TwoPlayerP1Hand\b' -Quiet)
+	Write-Host "  emu.cfg.before $(if ($had) { 'has' } else { 'lacks' }) vr.TwoPlayerP1Hand (want lacks); emu.cfg.after $(if ($hit) { 'has' } else { 'lacks' }) vr.TwoPlayerP1Hand = right"
+	if ($had) { return "the run's emu.cfg had a vr.TwoPlayerP1Hand before the run: the default isn't what was tested" }
+	if (-not $hit) { return "the run's emu.cfg has no line 'vr.TwoPlayerP1Hand = right'" }
+	$cfg = Join-Path $repo 'build-win\emu.cfg'
 	$same = if (Test-Path -LiteralPath $before) { (Get-FileHash -LiteralPath $before).Hash -eq (Get-FileHash -LiteralPath $cfg).Hash } else { -not (Test-Path -LiteralPath $cfg) }
 	Write-Host "  build-win\emu.cfg $(if ($same) { 'as it was' } else { 'changed' })"
 	if (-not $same) { return 'build-win\emu.cfg changed by the run' }
-	return Test-RunShots $name 't025-labels.png', 't070.1-menu.png'
+	return Test-RunShots $name 't025-labels.png', 't072.3-menu.png'
 }
 
 # The bundled models (S37) and the player's, merged file by file: re\make-own-models.py's fixtures in the player's

@@ -28,13 +28,14 @@ namespace
 constexpr float Distance = 1.2f, BelowEyes = 0.1f;
 constexpr int Left = 0, Right = 1;
 
-const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Hands", "Laser", "Haptics",
+const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Two players", "Laser", "Haptics",
 		"World size", "Panel distance", "Wider view", "How to play", "Quit" };
 const char *const HapticsNames[4] { "Off", "Light", "Medium", "Strong" };
 // vr.Haptics' words, saved by the Haptics row (hapticsLevel() reads them, and 1.2's numbers)
 const char *const HapticsWords[4] { "off", "light", "medium", "strong" };
 const char *const ReloadNames[2] { "Shoot off-screen", "Point off-screen" };
-// vr.P1Hand by p1Hand() (0 left, 1 right), the user's words: the game shows P1 on the left, P2 on the right
+// vr.TwoPlayerP1Hand by twoPlayerP1Hand() (0 left, the default; 1 right), the user's words: the game shows P1 on
+// the left, P2 on the right. It applies once player 2 is in; playing alone either hand's trigger takes the gun.
 const char *const HandsNames[2] { "P1 left hand - P2 right hand", "P1 right hand - P2 left hand" };
 constexpr int GunAngleMax = 30;	// vr.GunAngle's range, degrees either way
 
@@ -94,9 +95,9 @@ bool repeats(int row) {
 int gunAngle() {
 	return std::clamp((int)config::VrGunAngle, -GunAngleMax, GunAngleMax);
 }
-// (Hands too: either way, its other value)
+// (Two players too: either way, its other value)
 bool onOff(int row) {
-	return row == Hands || row == Laser || row == WiderView || row == HowToPlay;
+	return row == TwoPlayers || row == Laser || row == WiderView || row == HowToPlay;
 }
 
 std::string value(int row)
@@ -118,8 +119,8 @@ std::string value(int row)
 		return s;
 	case Reload:
 		return ReloadNames[std::clamp((int)config::VrReload, 0, 1)];
-	case Hands:
-		return HandsNames[p1Hand()];
+	case TwoPlayers:
+		return HandsNames[twoPlayerP1Hand()];
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
 	case Haptics:
@@ -216,12 +217,13 @@ void change(int row, int dir, int hand)
 		config::saveInt("config", "vr.Reload", reload);
 		break;
 	}
-	case Hands:
+	case TwoPlayers:
 	{
-		// with two players in, the guns swap hands once the menu closes (xr_host.cpp updateLightgun)
-		const char *const hand = p1Hand() == Right ? "left" : "right";
-		config::VrP1Hand.set(hand);
-		config::saveStr("config", "vr.P1Hand", hand);
+		// with two players in, the guns swap hands once the menu closes (xr_host.cpp updateLightgun); playing
+		// alone nothing moves: it's for the next time player 2 joins
+		const char *const hand = twoPlayerP1Hand() == Left ? "right" : "left";
+		config::VrTwoPlayerP1Hand.set(hand);
+		config::saveStr("config", "vr.TwoPlayerP1Hand", hand);
 		break;
 	}
 	case Laser:

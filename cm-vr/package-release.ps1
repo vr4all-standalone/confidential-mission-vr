@@ -393,7 +393,9 @@ light gun. Built on mikermak's hotd2-vr (https://github.com/mikermak/hotd2-vr).
 3. Double-click "Play Confidential Mission.cmd". The game plays in the headset.
 
 The controller is the light gun (Quest Touch): the trigger shoots, A is Start and B reloads.
-X is player 2's Start: player 2 joins with a gun in your left hand, and Y reloads that one.
+X is player 2's Start: player 2 joins, and then player 1's gun is in your left hand (X its Start,
+Y its reload) and player 2's in the right (A, B), as the game shows them; the menu's Two players
+turns that round. Playing alone, either trigger takes the gun.
 Shooting away from the game's view reloads too. The left menu button opens the settings menu;
 a click on the left thumbstick recenters, one on the right thumbstick turns the laser off or
 on. The project's readme has the other controllers and the rest. Without a headset the game
