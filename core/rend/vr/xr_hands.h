@@ -63,10 +63,11 @@ bool gunComplete(GunKind kind);
 // never draw the bundled models). The built-in gun in a game without these guns. Logs "XR: gun: <gun>
 // (chosen[: <why the fallback>])" at the start and at each change.
 GunKind chosenGun();
-// The gun in a player's (0, 1) hand: the assault rifle while the game says the player holds it
-// (vr::gunState's rifle; its model, or the built-in gun recoloured without one), else chosenGun().
-// Logs "XR: P1 hand: assault rifle (gun-cm-rifle.bin)" or "(arcade gun, recoloured)", and "XR: P1
-// hand: back to the <gun>".
+// The gun in a player's (0, 1) hand: while the game says the player holds the assault rifle
+// (vr::gunState's rifle) and the chosen gun is the in-game pistol with the rifle's model there, the
+// rifle; else chosenGun() (any other gun stays in the hand and fires the rifle's rounds). Logs "XR: P1
+// hand: assault rifle (gun-cm-rifle.bin)" then "XR: P1 hand: back to the <gun>"; or "XR: P1 hand: rifle
+// rounds with the <gun>" then "XR: P1 hand: rifle rounds over (the <gun>)".
 GunKind handGun(int player);
 // "in-game pistol", "assault rifle", "built-in gun", a folder gun: its name ("Arcade gun", "Zapper", ...)
 const char *gunName(GunKind kind);

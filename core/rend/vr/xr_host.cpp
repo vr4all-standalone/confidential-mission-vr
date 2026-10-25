@@ -1435,8 +1435,9 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 // each shot it fires (its shot counter goes up) that fired a round (vr::GunState::fired: the ammo
 // went down, or the rifle is held) is a Shot, else (a pull on an empty gun counted) a click. With
 // the assault rifle, the first round after a pull is a Shot and the rest of the burst Auto knocks
-// (autoKnock), one per round. A pull on the screen it hasn't fired for within 0.1 s (an empty
-// gun) is a click. Only shots of this hand's trigger knock: held, or let go under 0.25 s ago (the
+// (autoKnock), one per round. Each Shot and Auto knock also kicks the gun and flashes its muzzle
+// (whatever vr.Haptics says), so a pull that fires no round kicks none. A pull on the screen it
+// hasn't fired for within 0.1 s (an empty gun) is a click. Only shots of this hand's trigger knock: held, or let go under 0.25 s ago (the
 // counter also moves when the game clears its RAM at boot, and its attract demo's players shoot).
 // The knocks go to the hand one at a time, each once the one before has ended (two haptic calls
 // closer than that feel as one: the second cuts the first short). Without a GunRam in the game's
@@ -1493,6 +1494,13 @@ void gunKnocks(Gun& g, XrTime time, bool trigger)
 		{
 			g.shotsDue--;
 			lasts = recoil(g.hand);
+			// a round fired: the kick and the flash (whatever vr.Haptics says: off, the knock is none
+			// but the gun still kicks), at the muzzle of the gun the hand holds
+			g.lastShot = time;
+			g.shotCount++;
+			g.autoKick = false;
+			g.burstFlashes++;
+			NOTICE_LOG(INPUT, "XR: P%d kick: %s", g.player + 1, gunName(g.view.kind));
 		}
 		else if (g.autosDue > 0)
 		{
@@ -1586,11 +1594,13 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 			onScreen = aimAtScene(*ctx, og, dg, screen, dist);
 
 		// Recoil: back and muzzle up around the hand, with a small bounce (gunKick) and a
-		// little sideways twist that differs per shot. A shot fired now shows its flash
-		// and kick in this very frame.
+		// little sideways twist that differs per shot. With the game's gun state (gunRam) the
+		// kick and the flash come with each round it fires (gunKnocks' Shot and Auto knocks):
+		// a pull on an empty gun fires none, so it kicks none (CM VR 1.2 spec section 3). Without
+		// it, as in v1, on the pull: a shot fired now shows its flash and kick in this very frame.
 		if (trigger && !g.triggerWas)
 			g.burstFlashes = 0;
-		if (trigger && !g.triggerWas && onScreen)
+		if (trigger && !g.triggerWas && onScreen && !g.gunRam)
 		{
 			g.lastShot = time;
 			g.shotCount++;
@@ -2973,8 +2983,7 @@ bool frame()
 			for (const Gun& g : guns)
 				if (g.visible)
 				{
-					// (the assault rifle without its model: the arcade gun in olive)
-					drawGunModel(viewProj, eyePos, g.view, first, g.view.kind == GunKind::Rifle ? RifleTint : glm::vec3(1.f));
+					drawGunModel(viewProj, eyePos, g.view, first, glm::vec3(1.f));
 					first = false;
 				}
 			if (first)

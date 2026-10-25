@@ -35,10 +35,6 @@ constexpr glm::vec3 ModelPalm { 0.f, -0.018f, 0.062f };
 // 1.1.49; this app asks for 1.0.34).
 constexpr glm::vec3 HandPalm { 0.f, -0.078f, 0.068f };
 
-// The assault rifle without its model (no gun-cm-rifle.bin, or vr.GameHands off): the arcade gun
-// in olive (the spec's "changed in colour"; drawGunModel's tint).
-constexpr glm::vec3 RifleTint { 0.42f, 0.50f, 0.30f };
-
 // Whether a hand holding `kind` (handGun()) draws a model from the game (xr_hands.h
 // handModel(): the agent's own pistol, in The Maze of the Kings the hero's staff, in
 // Confidential Mission the gun of that kind) rather than the arcade gun. Model space is then

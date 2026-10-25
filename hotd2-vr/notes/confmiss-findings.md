@@ -336,7 +336,7 @@ Task 4b's runs (`vr-test.ps1 -Config "$cmWiden,config:vr.WatchRam=..."`, the act
     - The attract wait is about 88 % of the whole first start's clock. Its clock time varies from run to run, so the whole run's clock gain is within that noise. The game seconds are steady.
     - The quiet wait's clock is the difference between the done times of cm-rip-pistol with 20 s and with 10 s (9.35 s and 7.47 s from the first press). The merge time comes from a temporary NOTICE at the end of the quiet wait, since removed.
   - The cheap change: `CmQuietFor` 20 s -> **10 s**, kept.
-    - The last pass came at 64.0 s of game either way, so the merge got the same **403 captures**, all 403 merged.
+    - The last pass came at 64.0 s of game either way, so the merge got the same **403 captures**, 402-403 merged (cm-rip-start 403; cm-rip-pistol 402, 1 that didn't fit).
     - The result was the same: 91 polys (78/10/2/1), complete, 102780 bytes, and vrcheck's hnd readings unchanged (cm-rip-pistol, cm-rip-pistol-one, and all the rip scenarios after it).
     - It saves 10 s of game: about 2 s on the PC, 13 % of a run from Start and 3 % of the whole first start.
     - The headset's times aren't measured. The gain there is the same 10 s of game at the headset's own rate.

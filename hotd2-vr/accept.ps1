@@ -692,7 +692,8 @@ function Get-CmHapticsActions {
 # Normal strength: a Shot knock (0.030 s, 1.0) for each of the 9 shots, a light click (0.012 s,
 # 0.35) for each of the 2 empty pulls, player 2's shots in the left hand; the magazine stays 6
 # (its earlier changes: the game clearing its RAM at ~11 s, 16 -> 255 -> 0, and the reload
-# lesson's 0 -> 6 at ~30 s).
+# lesson's 0 -> 6 at ~30 s). CM VR 1.2 Task 3: a kick ("XR: P<n> kick: <gun>") with each Shot
+# knock, none on the empty pulls.
 function Test-CmHaptics {
 	$name = 'accept-cm-haptics'
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true; Config = $cmWidenArcade
@@ -706,6 +707,11 @@ function Test-CmHaptics {
 	if ($shot -ne 9) { return "$shot right shot knocks, want 9" }
 	if ($empty -ne 2) { return "$empty right empty clicks, want 2" }
 	if ($left -lt 1) { return 'no left shot knock (player 2)' }
+	$kicks = Get-LogCount $name 'XR: P1 kick: built-in gun$'
+	$leftKicks = Get-LogCount $name 'XR: P2 kick: built-in gun$'
+	$all = Get-LogCount $name 'XR: P\d kick: '
+	Write-Host "  kicks: $kicks player 1 (want 9, one per right Shot knock), $leftKicks player 2 (want $left, one per left Shot knock), $all in all"
+	if ($kicks -ne $shot -or $leftKicks -ne $left -or $all -ne $shot + $left) { return "$kicks + $leftKicks kicks ($all in all) for $shot + $left Shot knocks: want one each" }
 	return $null
 }
 
@@ -717,11 +723,20 @@ function Test-CmHapticsLow {
 		Reject = 'XR: initialisation failed', 'XRSIM: haptic .* 1\.000$' }
 }
 
-# vr.Haptics=0 (off): the same pulls, no haptics at all.
+# vr.Haptics=0 (off): the same pulls, no haptics at all, but the kicks as cm-haptics' (Review Focus 3): 9 for player
+# 1's shots (none for the 2 empty pulls), and player 2's.
 function Test-CmHapticsOff {
-	return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-haptics-off'; Seconds = 75; XrSim = $true
+	$name = 'accept-cm-haptics-off'
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 75; XrSim = $true
 		Config = "$cmWidenArcade,config:vr.Haptics=0"; At = @(Get-CmHapticsActions)
 		Expect = 'XR: player 1 shot at'; Reject = 'XR: initialisation failed', 'XRSIM: haptic' }
+	if ($why) { return $why }
+	$kicks = Get-LogCount $name 'XR: P1 kick: built-in gun$'
+	$leftKicks = Get-LogCount $name 'XR: P2 kick: built-in gun$'
+	Write-Host "  kicks with haptics off: $kicks player 1 (want 9, as cm-haptics), $leftKicks player 2 (want 1 or more)"
+	if ($kicks -ne 9) { return "$kicks player 1 kicks with haptics off, want 9" }
+	if ($leftKicks -lt 1) { return 'no player 2 kick with haptics off' }
+	return $null
 }
 
 # Player 1's magazine (+0x50) poked to the rifle's 45 at 60 s: the change is logged.
@@ -1412,7 +1427,8 @@ function Get-CmRifleSimParams([string]$name, [double]$seconds) {
 }
 # With the rifle's file: its model in the hand ("XR: P1 hand: assault rifle (gun-cm-rifle.bin)"), the knocks, the
 # pistol's feel back after; the two window shots differ in the hand's box. Without it (moved to .hold, back after):
-# the arcade gun recoloured, which differs from the model at 56 s.
+# the in-game pistol stays in the hand and fires the rifle's rounds (CM VR 1.2: no recoloured gun any more), which
+# differs from the model at 56 s.
 function Test-CmRifleSim {
 	if (-not (Test-Path -LiteralPath $cmRifleFile)) { return "no ${cmRifleFile}: run cm-rip-rifle first (the full list does)" }
 	$name = 'accept-cm-rifle-sim'
@@ -1442,13 +1458,13 @@ function Test-CmRifleSim {
 	if ($why) { return $why }
 	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't056-rifle.png'), (Join-Path $dir 't052.4-pistol.png'), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
 	if ($why) { return "the rifle and the pistol look alike: $why" }
-	$arcade = 'accept-cm-rifle-sim-arcade'
+	$arcade = 'accept-cm-rifle-sim-norifle'
 	$held = "$cmRifleFile.hold"
 	try {
 		if (-not $Reuse) { Move-Item -LiteralPath $cmRifleFile -Destination $held -Force }
 		$params = Get-CmRifleSimParams $arcade 57
-		$params.Expect = @('XR: P1 hand: assault rifle \(arcade gun, recoloured\)')
-		$params.Reject += 'XR: P1 hand: assault rifle \(gun-cm-rifle'
+		$params.Expect = @('XR: gun: in-game pistol \(chosen\)$', 'XR: P1 hand: rifle rounds with the in-game pistol$', 'XR: P1 kick: in-game pistol$')
+		$params.Reject += 'XR: P1 hand: assault rifle', 'XR: P1 kick: (?!in-game pistol$)'
 		$why = Invoke-VrTest $params
 	}
 	finally {
@@ -1462,24 +1478,140 @@ function Test-CmRifleSim {
 	$why = Test-RunShots $arcade 't056-rifle.png'
 	if ($why) { return $why }
 	$why = Invoke-VrCheck 'differ', (Join-Path $dir 't056-rifle.png'), (Join-Path $repo "build-win\vrtest\$arcade\t056-rifle.png"), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
-	if ($why) { return "the rifle's model and the recoloured arcade gun look alike: $why" }
+	if ($why) { return "the rifle's model and the in-game pistol firing its rounds look alike: $why" }
 	return $null
 }
 
 # Player 2's rifle: X at 60 s (a gun in each hand), the rifle poked into player 2's block at 61 s, the left trigger
 # held 2 s from 62 s (a Shot and Auto knocks in the left hand only, one per round), the pistol poked back at 65 s.
+function Get-CmRifleP2Params([string]$name, [string]$config = '') {
+	@{ Game = 'confmiss'; Name = $name; Seconds = 67; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c15592c:2$config"
+		At = @(Get-CmStartsXr) + '60=xr left/x 1 200' + @(Get-CmRiflePoke 61 1) + '62=xr left/trigger 1 2000' + @(Get-CmRiflePoke 65 1 -Pistol)
+		Reject = @('XR: initialisation failed', 'XRSIM: haptic (left|right) 0\.012', 'XRSIM: haptic right 0\.020', 'XR: P1 hand: (assault rifle|rifle rounds)') }
+}
+# With the in-game pistol: the rifle's model (or, without its file, the pistol firing the rifle's rounds).
 function Test-CmRifleP2 {
 	$name = 'accept-cm-rifle-p2'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 67; XrSim = $true; Config = "$cmWiden,config:vr.WatchRam=0c15592c:2"
-		At = @(Get-CmStartsXr) + '60=xr left/x 1 200' + @(Get-CmRiflePoke 61 1) + '62=xr left/trigger 1 2000' + @(Get-CmRiflePoke 65 1 -Pistol)
-		Expect = 'XR: player 2 joins: a gun in each hand', 'VR: P2 weapon pistol -> rifle',
-			'XR: P2 hand: assault rifle \((gun-cm-rifle\.bin|arcade gun, recoloured)\)', 'VR: P2 weapon rifle -> pistol', 'XR: P2 hand: back to the '
-		Reject = @('XR: initialisation failed', 'XRSIM: haptic (left|right) 0\.012', 'XRSIM: haptic right 0\.020', 'XR: P1 hand: assault rifle') }
+	$params = Get-CmRifleP2Params $name
+	$params.Expect = 'XR: player 2 joins: a gun in each hand', 'VR: P2 weapon pistol -> rifle',
+		'XR: P2 hand: (assault rifle \(gun-cm-rifle\.bin\)|rifle rounds with the in-game pistol)$', 'VR: P2 weapon rifle -> pistol',
+		'XR: P2 hand: (back to the |rifle rounds over \(the )in-game pistol'
+	$why = Invoke-VrTest $params
 	if ($why) { return $why }
 	$weapon = Get-LogCount $name 'VR: P[12] weapon '
 	Write-Host "  $weapon weapon lines (want 2: player 2's pistol -> rifle and back)"
 	if ($weapon -ne 2) { return "$weapon weapon lines, want 2" }
 	return Test-RifleBurst $name 'left' 1 61.7 64.6 18
+}
+
+# CM VR 1.2 Task 3 (spec section 3): the gun kicks only on a round the game fires (gunKnocks' Shot and Auto knocks),
+# never on a pull that fires none. One run per gun: the in-game pistol (its file from the rip scenarios), the Arcade gun
+# and the Zapper (the bundled stand-ins, --namco-zapper), the box gun (the player's, --guns --only-box) and the built-in
+# gun. Player 1's rounds poked to 0 at 53.5 s and a pull at 54 s: a click, no Shot knock and no "XR: P1 kick" line; 6
+# rounds back at 55 s and pulls at 55.5 and 56.5 s: two "XR: P1 kick: <gun>" lines and two Shot knocks. The box gun's
+# run also the rifle: the game has no empty rifle (at 0 rounds it gives the pistol back, full, the next frame; poking
+# the rifle's rounds to 0 does the same), so the rifle's pull that fires no round is the trigger held on after its last
+# round. Poked at 57 s with 3 rounds left (57.2 s) and the trigger held 1 s from 57.5 s: the 3 rounds' Shot and 2 Auto
+# knocks, one kick line, a 3-flash burst, then nothing (no click, no kick) while the trigger stays held. Then a pull
+# pointing at the floor at 61 s (the game's reload: "shot off screen (reload)", no kick). The windows are on the log's
+# clock, about 0.2 s behind the -At times.
+$cmKickAt = @('53.5=poke 0c155804 1 0', '54=xr right/trigger 1 150', '55=poke 0c155804 1 6', '55.5=xr right/trigger 1 150',
+	'56.5=xr right/trigger 1 150')
+function Test-CmKickRun([string]$name, [string]$config, [string]$gun, [switch]$Box) {
+	$at = @(Get-CmStartsXr) + $cmKickAt
+	if ($Box) {
+		$at += @(Get-CmRiflePoke 57) + '57.2=poke 0c155804 1 3', '57.5=xr right/trigger 1 1000', '60.5=pose right 0.18 1.3 -0.35 0 -80',
+			'61=xr right/trigger 1 150'
+	}
+	$gunRe = [regex]::Escape($gun)
+	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = $(if ($Box) { 63 } else { 58 }); XrSim = $true; Config = $config
+		At = $at; Expect = "XR: gun: $gunRe \(chosen"; Reject = 'XR: initialisation failed' }
+	if ($why) { return $why }
+	$kicks = Get-LogCount $name 'XR: P1 kick' -From 53.6 -To 55.2
+	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.012 0\.350' -From 53.6 -To 55.2
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 53.6 -To 55.2
+	Write-Host "  ${gun}, the empty pull: $kicks kicks (want 0), $clicks clicks (want 1), $shots Shot knocks (want 0)"
+	if ($kicks -ne 0 -or $clicks -ne 1 -or $shots -ne 0) { return "${gun}, the empty pull: $kicks kicks, $clicks clicks, $shots Shot knocks; want 0, 1, 0" }
+	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 55.2 -To 57.4
+	$all = Get-LogCount $name 'XR: P1 kick' -From 55.2 -To 57.4
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 55.2 -To 57.4
+	Write-Host "  ${gun}, two rounds: $kicks kicks naming it ($all in all; want 2), $shots Shot knocks (want 2)"
+	if ($kicks -ne 2 -or $all -ne 2 -or $shots -ne 2) { return "${gun}, two rounds: $kicks kicks naming it ($all in all), $shots Shot knocks; want 2, 2" }
+	if (-not $Box) { return $null }
+	$kicks = Get-LogCount $name "XR: P1 kick: $gunRe$" -From 57.2 -To 60.6
+	$all = Get-LogCount $name 'XR: P1 kick' -From 57.2 -To 60.6
+	$shots = Get-LogCount $name 'XRSIM: haptic right 0\.030 1\.000' -From 57.2 -To 60.6
+	$autos = Get-LogCount $name 'XRSIM: haptic right 0\.020 0\.600' -From 57.2 -To 60.6
+	$clicks = Get-LogCount $name 'XRSIM: haptic right 0\.012' -From 57.2 -To 60.6
+	$burst = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XR: P1 rifle burst: (\d+) flashes' -CaseSensitive)
+	$flashes = if ($burst) { [int]$burst[-1].Matches[0].Groups[1].Value } else { 0 }
+	Write-Host "  ${gun}, the rifle's last 3 rounds, held on: $kicks kick lines naming it ($all in all; want 1), $shots Shot and $autos Auto knocks (want 1, 2), $clicks clicks (want 0), $flashes flashes (want 3)"
+	if ($kicks -ne 1 -or $all -ne 1 -or $shots -ne 1 -or $autos -ne 2 -or $clicks -ne 0 -or $flashes -ne 3) {
+		return "${gun}, the rifle's last 3 rounds: $kicks kick lines ($all in all), $shots Shot and $autos Auto knocks, $clicks clicks, $flashes flashes; want 1, 1, 2, 0, 3"
+	}
+	$reloads = Get-LogCount $name 'XR: player 1 shot off screen \(reload\)' -From 60.6 -To 62.5
+	$kicks = Get-LogCount $name 'XR: P1 kick' -From 60.6 -To 62.5
+	Write-Host "  ${gun}, the reload at the floor: $reloads reload shots (want 1), $kicks kicks (want 0)"
+	if ($reloads -ne 1 -or $kicks -ne 0) { return "${gun}, the reload at the floor: $reloads reload shots, $kicks kicks; want 1, 0" }
+	return $null
+}
+function Test-CmKick {
+	if (-not (Test-Path -LiteralPath $cmPistolFile)) { return "no ${cmPistolFile}: run cm-rip-pistol first (the full list does)" }
+	$why = Invoke-OwnFolders -Fixture '--guns', '--only-box' -Bundled '--namco-zapper' {
+		foreach ($run in @(@('pistol', 'config:vr.Gun=1', 'in-game pistol'), @('arcade', 'config:vr.Gun=4,config:vr.GunFile=namco', 'Arcade gun'),
+				@('zapper', 'config:vr.Gun=4,config:vr.GunFile=zapper', 'Zapper'), @('box', 'config:vr.Gun=4,config:vr.GunFile=boxgun', 'Box gun'))) {
+			$why = Test-CmKickRun "accept-cm-kick-$($run[0])" "$cmWiden,$($run[1])" $run[2] -Box:($run[0] -eq 'box')
+			if ($why) { return $why }
+		}
+		return $null
+	}
+	if ($why) { return $why }
+	return Test-CmKickRun 'accept-cm-kick-builtin' $cmWidenArcade 'built-in gun'
+}
+
+# CM VR 1.2 Task 3 (spec section 2): the rifle picked up with a file gun, the Zapper (the bundled stand-in): the Zapper
+# stays in the hand ("rifle rounds with the Zapper", never the assault rifle's model, its muzzle line the Zapper's), and
+# fires the rifle's rounds as cm-rifle-sim's: Test-RifleBurst, one kick line per burst (the pull's Shot; the Auto
+# knocks' kicks are counted in the burst's flashes), "rifle rounds over" when the game gives the pistol back, then the
+# pull at 61 s a Shot with its kick. Player 2 as cm-rifle-p2, with the Arcade gun.
+function Test-CmRifleFile {
+	return Invoke-OwnFolders -Bundled '--namco-zapper' {
+		$name = 'accept-cm-rifle-file'
+		$params = Get-CmRifleSimParams $name 64
+		$params.Config += ',config:vr.Gun=4,config:vr.GunFile=zapper'
+		$params.Expect = @('XR: gun: Zapper \(chosen\)$', 'VR: P1 weapon pistol -> rifle', 'XR: P1 hand: rifle rounds with the Zapper$',
+			'VR: P1 weapon rifle -> pistol', 'XR: P1 hand: rifle rounds over \(the Zapper\)$')
+		$params.Reject += 'XR: P1 hand: assault rifle', 'XR: P1 kick: (?!Zapper$)'
+		$why = Invoke-VrTest $params
+		if ($why) { return $why }
+		$muzzles = @(Select-String -LiteralPath (Get-RunLog $name) -Pattern 'XR: P1 muzzle: ' -CaseSensitive)
+		$other = Get-LogCount $name 'XR: P1 muzzle: (?!Zapper at)' -From 52
+		Write-Host "  the last muzzle line: $(if ($muzzles) { ($muzzles[-1].Line -replace '^.*XR: ', '') } else { 'none' }); $other others after the pickup (want 0)"
+		if (-not $muzzles -or $muzzles[-1].Line -notmatch 'XR: P1 muzzle: Zapper at' -or $other -ne 0) { return "the muzzle isn't the Zapper's after the pickup" }
+		foreach ($burst in @(53.2, 56.3), @(57.2, 60.8)) {
+			$why = Test-RifleBurst $name 'right' 0 $burst[0] $burst[1] 18
+			if ($why) { return "the burst from $(T $burst[0]) s: $why" }
+			$kicks = Get-LogCount $name 'XR: P1 kick: Zapper$' -From $burst[0] -To $burst[1]
+			Write-Host "  the burst from $(T $burst[0]) s: $kicks kick lines (want 1, the pull's Shot)"
+			if ($kicks -ne 1) { return "the burst from $(T $burst[0]) s: $kicks kick lines, want 1" }
+		}
+		$kicks = Get-LogCount $name 'XR: P1 kick: Zapper$' -From 60.8
+		Write-Host "  after the rifle: $kicks kick lines (want 1, the pull at 61 s)"
+		if ($kicks -ne 1) { return "after the rifle: $kicks kick lines, want 1" }
+		$p2 = 'accept-cm-rifle-file-p2'
+		$params = Get-CmRifleP2Params $p2 ',config:vr.Gun=4,config:vr.GunFile=namco'
+		$params.Expect = 'XR: gun: Arcade gun \(chosen\)$', 'XR: player 2 joins: a gun in each hand', 'XR: P2 hand: rifle rounds with the Arcade gun$',
+			'XR: P2 hand: rifle rounds over \(the Arcade gun\)$'
+		$params.Reject += 'XR: P2 hand: assault rifle'
+		$why = Invoke-VrTest $params
+		if ($why) { return "player 2: $why" }
+		$why = Test-RifleBurst $p2 'left' 1 61.7 64.6 18
+		if ($why) { return "player 2: $why" }
+		$kicks = Get-LogCount $p2 'XR: P2 kick: Arcade gun$' -From 61.7 -To 64.6
+		Write-Host "  player 2's burst: $kicks kick lines (want 1)"
+		if ($kicks -ne 1) { return "player 2's burst: $kicks kick lines, want 1" }
+		return $null
+	}
 }
 
 # The merge of a gun's captures (hands_build.cpp's mergeCaptures) on synthetic captures, built and run
@@ -1846,7 +1978,7 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'
 	# cm-gun after the rip scenarios: it needs the guns' files they leave
 	'cm-gun' = 'Test-CmGun'
-	'cm-rifle-sim' = 'Test-CmRifleSim'; 'cm-rifle-p2' = 'Test-CmRifleP2'
+	'cm-rifle-sim' = 'Test-CmRifleSim'; 'cm-rifle-p2' = 'Test-CmRifleP2'; 'cm-kick' = 'Test-CmKick'; 'cm-rifle-file' = 'Test-CmRifleFile'
 	'cm-merge-unit' = 'Test-CmMergeUnit'
 	'cm-own-gun' = 'Test-CmOwnGun'; 'cm-own-gun-file' = 'Test-CmOwnGunFile'; 'cm-own-controllers' = 'Test-CmOwnControllers'
 	'own-folders' = 'Test-OwnFolders'; 'cm-bundled' = 'Test-CmBundled'

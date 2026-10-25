@@ -64,7 +64,7 @@ constexpr double StaffGiveUpAfter = 150.0;
 // later) for the same reload tutorial, and everything below counts from that Start as from 30 s.
 // Start can't come first: the demo doesn't come back in play.
 constexpr double CmStartAt = 30.0;
-constexpr double CmRun = 90.0;
+constexpr double CmRun = 76.0;		// (done at 74 s of game, CM VR 1.2 Task 2: the progress bar)
 constexpr double CmRifleRun = 316.0;	// the attract demo's part, typically (the progress bar)
 constexpr double CmStartAfter = 0.5;
 // Then the merged guns (GunTarget::merge, the agents' pistol): from CmPistolAfter after that Start

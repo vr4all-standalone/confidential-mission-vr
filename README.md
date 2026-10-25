@@ -107,8 +107,11 @@ fired with.
 
 The knock in the hand comes when the game fires, one for each shot it counts; a pull on an
 empty gun gives a light click instead, and a reload none. `vr.Haptics` sets how strong it is.
+The gun kicks and flashes only when the game fires a round too: never on a pull on an empty
+gun or a reload, and still with `vr.Haptics` off.
 With the assault rifle (shoot one a fallen enemy drops) the trigger held keeps firing: a sharp
-knock for the first bullet, then a short lighter one for each bullet after, 12 a second.
+knock for the first bullet, then a short lighter one for each bullet after, 12 a second, each
+with a small kick and its flash.
 
 **Two guns.** Press X and player 2 joins, as at the cabinet: the right hand holds player 1's
 gun (red aim), the left player 2's (blue aim), both lives and scores on screen. When player 2
@@ -174,9 +177,11 @@ Sega's NAOMI light-gun game from 2000, with its own profile:
   the guns not made by then stay out of the hand that session); nothing of the game comes with
   this app.
   Without the pistol (the first start skipped) the hand holds the Arcade gun. A choice saved by
-  1.1 (Auto, the cabinet gun or the arcade gun) now means the in-game pistol. While the game gives you the
-  assault rifle, the hand holds it (the built-in gun in olive if its model isn't made yet), and
-  the chosen gun comes back when it runs dry. Reload by shooting away from
+  1.1 (Auto, the cabinet gun or the arcade gun) now means the in-game pistol. When the game gives
+  you the assault rifle, the in-game pistol becomes the in-game rifle (the pistol stays if the
+  rifle isn't made yet); any other gun (the Arcade gun, the Zapper, one of yours) stays in your
+  hand and fires the rifle's bursts, each round with its kick, flash and knock. The chosen gun's
+  own feel comes back when the rifle runs dry. Reload by shooting away from
   the view, or with B (the cabinet's second button reloads in this game).
 - **A wider view, inside the game.** The game draws and culls a wider view itself: stage 1
   goes from about 61 by 48 degrees to 111 by 95, the story scenes from about 70 degrees across
@@ -240,8 +245,8 @@ file-name order. A file of yours with a bundled gun's name (your `guns/zapper.gl
 gun in its place, right after the Arcade gun, not among your others. The choice is kept by file name
 (`vr.Gun` 4 and `vr.GunFile` the file's name without `.glb`), so adding a file doesn't change it.
 Only the gun you choose is read and put on the GPU (its textures mipmapped). It is held
-like the in-game pistol (its size with `vr.HandScale`, the same kick); the assault rifle still
-takes over while the game gives it to you, and your gun comes back after. If the chosen gun's
+like the in-game pistol (its size with `vr.HandScale`, the same kick); with the assault rifle
+your gun stays in your hand and fires the rifle's bursts. If the chosen gun's
 file is gone, the hand takes the in-game pistol, or the Arcade gun without it (the log says
 "(chosen: <name> is not there)").
 

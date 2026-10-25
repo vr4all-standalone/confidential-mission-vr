@@ -108,6 +108,7 @@ constexpr int GameSlot = 0, Slots = 4;
 Slot slots[Slots];
 std::string gunLogged;	// chosenGun()'s line, as last logged
 bool rifleHeld[2];		// each player's hand holds the assault rifle (handGun()), as last logged
+bool rifleModel[2];		// ... and with it the rifle's model (the in-game pistol's pickup), as last logged
 // The player's own guns (xr_own.h), GunKind(OwnGuns + i): every guns/*.glb in own::guns()' order (the
 // bundled ones first, then the player's, each in file-name order; a player's file with a bundled one's
 // name takes that one's place), a skipped one too. Only the chosen one is read (chosenGun()): the
@@ -398,6 +399,7 @@ void refresh()
 		slot = Slot();
 	gunLogged.clear();
 	rifleHeld[0] = rifleHeld[1] = false;
+	rifleModel[0] = rifleModel[1] = false;
 	own::scan();	// (another game: maybe another folder)
 }
 
@@ -750,18 +752,30 @@ GunKind handGun(int player)
 {
 	if (player < 0 || player > 1 || !cmGuns())
 		return chosenGun();
+	// The in-game pistol's pickup is the in-game rifle (its model); any other gun stays in the hand and
+	// fires the rifle's rounds (CM VR 1.2 spec section 2: gunKnocks' Shot and Auto knocks, each with its
+	// kick and flash at that gun's muzzle), the pistol too without the rifle's model.
+	const GunKind held = chosenGun();
+	const bool model = held == GunKind::Pistol && handModel(GunKind::Rifle) != nullptr;
 	// (not read: the emulator stopped, the VR menu open: the hand keeps what it holds)
 	vr::GunState gun;
 	if (vr::gunState(player, gun) && gun.valid && gun.rifle != rifleHeld[player])
 	{
 		rifleHeld[player] = gun.rifle;
 		if (gun.rifle)
-			NOTICE_LOG(RENDERER, "XR: P%d hand: assault rifle (%s)", player + 1, handModel(GunKind::Rifle) != nullptr
-					? gameModelSource()->guns[(int)GunKind::Rifle - 1].file : "arcade gun, recoloured");
+		{
+			rifleModel[player] = model;
+			if (model)
+				NOTICE_LOG(RENDERER, "XR: P%d hand: assault rifle (%s)", player + 1, gameModelSource()->guns[(int)GunKind::Rifle - 1].file);
+			else
+				NOTICE_LOG(RENDERER, "XR: P%d hand: rifle rounds with the %s", player + 1, gunName(held));
+		}
+		else if (rifleModel[player])
+			NOTICE_LOG(RENDERER, "XR: P%d hand: back to the %s", player + 1, gunName(held));
 		else
-			NOTICE_LOG(RENDERER, "XR: P%d hand: back to the %s", player + 1, gunName(chosenGun()));
+			NOTICE_LOG(RENDERER, "XR: P%d hand: rifle rounds over (the %s)", player + 1, gunName(held));
 	}
-	return rifleHeld[player] ? GunKind::Rifle : chosenGun();
+	return rifleHeld[player] && model ? GunKind::Rifle : held;
 }
 
 const HandsModel *handModel(GunKind kind)
