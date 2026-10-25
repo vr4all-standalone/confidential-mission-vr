@@ -1,28 +1,99 @@
+<div align="center">
+
+<img src="hotd2-vr/assets/readme-banner.svg" alt="Confidential Mission VR" width="100%" />
+
 # Confidential Mission VR
+### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-Sega's light-gun game **Confidential Mission** (arcade, Sega NAOMI, 2000) in VR, on a **Meta
-Quest** (standalone) or a **PC VR** headset. The original game runs in an emulator, its 3D
-scenes are rebuilt around you in stereo, and your controller is the light gun.
+[![Release: v1.2.0](https://img.shields.io/badge/Release-v1.2.0_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
+[![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
-**Confidential Mission VR is built on mikermak's [hotd2-vr](https://github.com/mikermak/hotd2-vr)**:
-the VR mode, the panel the start screen grew from and the tools
-are his work, and much of this readme is too. hotd2-vr is itself a fork of the
-[Flycast](https://github.com/flyinghead/flycast) Dreamcast and NAOMI emulator. There is no remake
-here: the original game runs, and the emulator turns what it draws into a VR view.
+**[⬇️ Download the Quest APK](../../releases/latest/download/confidential-mission-vr-quest.apk)** • **[🖥️ PC VR zip](../../releases/latest/download/confidential-mission-vr-pcvr.zip)** • **[🎮 Controls](#controls)** • **[🌐 VR4ALL](https://github.com/vr4all-standalone/vr4all-standalone)**
 
-> **Unofficial fan project, not affiliated with Sega. No game is included.** You need your own
-> copy of the game. This project contains no Sega code, data, graphics or sound. Not
-> affiliated with or endorsed by Sega, Namco, Meta or the Flycast project.
+</div>
 
-Status: experimental. Checked on the PC (see [The game](#the-game) for what is not tried on a
-headset yet). Made for the Quest 3; Quest 2, Quest Pro and PC VR are not tested yet.
+---
 
-## What you need
+## 🕵️ Overview
+
+**Confidential Mission VR** puts you inside Sega's 2000 arcade light-gun game **Confidential
+Mission** (Sega NAOMI), on a **Meta Quest** with no PC, or on a **PC VR** headset. The original
+game runs in an emulator, its 3D scenes are rebuilt around you in stereo, and your controller is
+the light gun. Up to two players, a gun in each hand.
+
+It is built on mikermak's **[hotd2-vr](https://github.com/mikermak/hotd2-vr)**: the VR mode, the
+panel the start screen grew from and the tools are his work, and much of this readme is too.
+hotd2-vr is itself a fork of the [Flycast](https://github.com/flyinghead/flycast) Dreamcast and
+NAOMI emulator. There is no remake here: the original game runs, and the emulator turns what it
+draws into a VR view.
+
+> **⚖️ No game included.** An unofficial fan project, not affiliated with or endorsed by Sega,
+> Namco, Meta or the Flycast project. This repository and its releases contain no Sega code,
+> data, graphics or sound: you need your own copy of the game, the MAME set `confmiss`.
+
+Status: experimental. Made for the Quest 3 and played on it; Quest 3S, Quest 2, Quest Pro and
+PC VR headsets are not tested yet (see [The game](#the-game)).
+
+---
+
+## ✨ Key VR Features
+
+* **Inside the game, in stereo.** The game's 3D scenes stand around you at real scale, and the
+  game itself draws a wider view (stage 1 goes from about 61 by 48 degrees to 111 by 95), while
+  its HUD, subtitles and briefings sit on a panel in front of you.
+* **Three guns in your hand.** The agents' own pistol, made on the first start from your copy of
+  the game (nothing of the game comes with the app), the Arcade gun or the Nintendo Zapper. Or
+  bring your own GLB models.
+* **The assault rifle with any gun.** Pick it up and the gun in your hand fires its bursts, each
+  round with its own kick, muzzle flash and knock.
+* **Kick that matches the game.** The gun kicks, flashes and knocks only when the game fires a
+  round: a light click on an empty gun, nothing on a reload.
+* **Two players, one headset.** Press X and player 2 joins with a gun in your left hand (red aim
+  on the right, blue on the left), both lives and scores on screen.
+* **Reload your way.** Shoot away from the game's view as at the arcade, or just point away
+  (the menu's Reload row). B and Y reload too.
+* **Gun angle.** Tilt the gun in your hand from -30° to +30° in 1° steps, so it points where
+  your hand points, whatever controller you hold.
+* **Controllers in the cutscenes.** In the stage intros and story scenes your hands show their
+  controllers, and the guns come back the moment play resumes.
+* **A menu in the headset.** The left ≡ pauses the game: gun, gun angle, reload, laser, haptics,
+  world size, panel distance and a how-to-play view, each saved at once.
+* **A start screen that checks your files.** READY, or which file is missing and where it goes.
+
+---
+
+## 🎮 Quest Touch Controller Layout
+
+| Action | Quest Touch controller |
+| :--- | :--- |
+| **Shoot** | **Trigger** (right hand player 1, left hand player 2) |
+| **Start / join** | **Right `A`** player 1 · **Left `X`** player 2 joins |
+| **Reload** | **Right `B`** player 1 · **Left `Y`** player 2 · or shoot away from the view |
+| **Settings menu (pauses)** | **Left `≡` Menu** button |
+| **Recenter** | **Left thumbstick click** *or* hold the **Meta** button |
+| **Laser off / on** | **Right thumbstick click** |
+| **The game's D-pad (its menus)** | **Thumbstick** |
+| **World size** | Hold **Grip** + push the **Thumbstick up / down** |
+| **Gun size** | Hold **Grip** + push the **Thumbstick left / right** |
+
+Everything else, the PC VR controllers (Index, Vive, Windows Mixed Reality) and the menu's
+rows: [Controls](#controls) and [The menu](#the-menu).
+
+---
+
+<a id="install-on-the-quest"></a>
+## 📦 Installation (Meta Quest)
+
+For Quest 3, 3S, 2 and Pro (Quest 3S, 2 and Pro: not tested yet, tell me how it runs).
+
+<a id="what-you-need"></a>
+### What you need
 
 Your own copy of the game: the MAME set `confmiss`, three files.
 
 | File | What it is |
-|---|---|
+| :--- | :--- |
 | `confmiss.zip` | the game, with its key inside (it stays packed) |
 | `confmiss/gds-0001.chd` | the disc, in a folder named `confmiss` next to `confmiss.zip` (a `.cue` or `.gdi` of it works too) |
 | `naomi.zip` | the NAOMI BIOS, next to `confmiss.zip` (or the BIOS inside `confmiss.zip`) |
@@ -36,28 +107,42 @@ Download/
     naomi.zip
 ```
 
-## Install on the Quest
+### 1. Developer mode
 
-For Quest 3, 3S, 2 and Pro (Quest 2 and Pro: not tested yet, tell me how it runs).
+Make a (free) developer account at [developers.meta.com](https://developers.meta.com/horizon/)
+with your Meta account, then in the Meta Horizon app on your phone: Devices > your headset >
+Headset settings > Developer mode. Restart the headset.
 
-1. **Developer mode.** Make a (free) developer account at
-   [developers.meta.com](https://developers.meta.com/horizon/) with your Meta account, then in
-   the Meta Horizon app on your phone: Devices > your headset > Headset settings > Developer
-   mode. Restart the headset.
-2. **The app.** Download `confidential-mission-vr-quest.apk` from [Releases](../../releases) and
-   install it with [SideQuest](https://sidequestvr.com/setup-howto) (*Install APK file from
-   folder*), or `adb install -r confidential-mission-vr-quest.apk`.
-3. **The game.** Copy your three files to the headset's **Download** folder, as in
-   [What you need](#what-you-need). With SideQuest (*Manage files*), or connect the headset to a
-   PC with USB, allow access in the headset, and open *Quest > Internal shared storage > Download*.
-4. **Play.** Start *Confidential Mission VR* from your Library (*Unknown sources*). Its start
-   screen checks the three files: its badge says READY (in green) when all three are there,
-   MISSING FILES with a line for each one that isn't, or ALLOW ACCESS until the app may read
-   the Download folder. *Play Confidential Mission* starts the game in VR, and is greyed out
-   until then. *Where to put your files* opens the instructions and the access step (*Allow*:
-   *All files access*, the first time) and *Look again* checks once more. The first start
-   makes your guns from your own game files, once (about a minute or two; B skips it, with
-   the Arcade gun that time).
+### 2. Install the APK
+
+Download **`confidential-mission-vr-quest.apk`** from [**Releases**](../../releases) and install
+it with **[VR4ALL](https://github.com/vr4all-standalone/vr4all-standalone)** (it also copies your
+three files), **[SideQuest](https://sidequestvr.com/setup-howto)** (*Install APK file from
+folder*) or ADB:
+
+```bash
+adb install -r confidential-mission-vr-quest.apk
+adb shell appops set com.vrlightgunhub.confmiss MANAGE_EXTERNAL_STORAGE allow
+```
+
+The second line gives the app its *All files access* now, so it can read the Download folder;
+without it, the start screen asks for it the first time.
+
+### 3. Copy your game files
+
+Copy your three files to the headset's **Download** folder, as in [What you need](#what-you-need):
+with VR4ALL or SideQuest (*Manage files*), or connect the headset to a PC with USB, allow access
+in the headset, and open *Quest > Internal shared storage > Download*.
+
+### 4. Play
+
+Start *Confidential Mission VR* from your Library (*Unknown sources*). Its start screen checks
+the three files: its badge says READY (in green) when all three are there, MISSING FILES with a
+line for each one that isn't, or ALLOW ACCESS until the app may read the Download folder.
+*Play Confidential Mission* starts the game in VR, and is greyed out until then. *Where to put
+your files* opens the instructions and the access step (*Allow*: *All files access*, the first
+time) and *Look again* checks once more. The first start makes your guns from your own game
+files, once (about a minute or two; B skips it, with the Arcade gun that time).
 
 Updates install over the old version; settings and saves stay.
 
@@ -65,7 +150,9 @@ Updates install over the old version; settings and saves stay.
 (`com.vrlightgunhub.confmiss`, with fresh settings) and installs next to it: uninstall the hub
 (`com.vrlightgunhub.app`).
 
-## PC VR
+---
+
+## 🖥️ PC VR
 
 The same, on a PC with a VR headset: SteamVR, Quest Link / Air Link or Virtual Desktop
 (anything with an OpenXR runtime that does OpenGL). Not tested yet on every one of them:
@@ -86,7 +173,10 @@ turns VR on; without a headset the game plays in the window).
 If the world looks the wrong size, set `vr.WorldScale = 0.11` in `emu.cfg` (the default) and
 adjust from there.
 
-## Controls
+---
+
+<a id="controls"></a>
+## 🕹️ Controls
 
 Quest Touch:
 
@@ -156,7 +246,10 @@ Where the settings menu is a hold, a shorter press of the left menu button is pl
 when you let go. Their how-to-play labels name each controller's own buttons the same way
 ("Pad click - P1 Reload", "Menu - P2 Start (hold: Menu)").
 
-## The menu
+---
+
+<a id="the-menu"></a>
+## ⚙️ The menu
 
 The left controller's ≡ opens the settings menu. The game pauses, sound and all; its last
 picture stays around you (look around and lean as you like), and a panel stands about 1.2 m in
@@ -188,7 +281,10 @@ even with the laser off.
 
 Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
 
-## The game
+---
+
+<a id="the-game"></a>
+## 🎯 The game
 
 Sega's NAOMI light-gun game from 2000, with its own profile:
 
@@ -235,7 +331,9 @@ the wider view, while the stock focal its light-gun hit test and on-screen check
 held where the game's aim is where the gun points. All of it, with the evidence:
 `hotd2-vr/notes/confmiss-findings.md`.
 
-## Your own models
+---
+
+## 🔫 Your own models
 
 Guns and controllers of your own, as GLB files (glTF 2.0 binary), each with a small JSON file of
 the same name beside it (its sidecar). **You are responsible for the rights to the files you
@@ -350,7 +448,9 @@ log says what was read:
 - when the labels first show: `XR: labels: left x at (x, y, z) in the aim pose (from the file)` for each label, or `... in the grip pose (built in: no "x" from controllers/left.json)`
 - a bundled file as `bundled models/guns/zapper.glb`; `XR: own models from <folders> (<n> guns, controllers left right)` lists the folders read
 
-## Options
+---
+
+## 🛠️ Options
 
 Settings live in `/sdcard/Android/data/com.vrlightgunhub.confmiss/files/emu.cfg` (PC: `emu.cfg`
 next to `flycast.exe`), under `[config]`. The useful ones:
@@ -380,7 +480,9 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.XrResolution` | 1 | eye buffer size, times the recommended size |
 | `vr.Xr` | yes (PC: no) | VR; the PC VR zip's `emu.cfg` turns it on |
 
-## How it works
+---
+
+## 🔬 How it works
 
 - `core/rend/vr_reproject.*`: rebuilds eye space from the projected vertices with the
   game's live focal length (read from its projection and viewport matrices in RAM), and
@@ -405,7 +507,9 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 - `core/input/udp_lightgun.*`: the light gun can also be driven over UDP on 127.0.0.1
   (used by the finger-gun tracker and the PC test runs).
 
-## Build
+---
+
+## 🏗️ Build
 
 On Windows, with:
 
@@ -448,7 +552,9 @@ adb shell am start -n com.vrlightgunhub.confmiss/com.flycast.emulator.MainActivi
 The start screen's file check and its status have JVM tests: `gradlew.bat :flycast:testDebugUnitTest`
 in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
 
-## Releasing
+---
+
+## 🚀 Releasing
 
 1. **The release key, once.** `powershell -File hotd2-vr\make-release-key.ps1` makes
    `release.jks` (RSA 4096, alias `vrlightgunhub`, valid 10000 days) and
@@ -484,7 +590,9 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
 4. **The source.** Publish the source of the release's commit with it (the GPL asks for that):
    tag the commit and push it, so the release page carries its source archives.
 
-## Tools
+---
+
+## 🧰 Tools
 
 - `hotd2-vr/fingergun`: play on the PC with **finger guns** in front of a webcam
   (MediaPipe hand tracking). Set up once:
@@ -523,7 +631,9 @@ in `shell\android-studio` (`CmFilesTest`, `CmStartStatusTest`).
 The older scripts look for your game in a `game` folder next to the repository, or in
 `%HOTD2VR_DATA%\game`.
 
-## Problems? Ideas?
+---
+
+## 💬 Problems? Ideas?
 
 Open an [issue](../../issues) here (not on mikermak's project): the form asks for the build
 (Quest app or PC VR), the app version, the headset (and the PC VR runtime), the game's files
@@ -532,7 +642,9 @@ connected to a PC by USB, `adb logcat -d -s flycast:*` (adb comes with Android's
 platform-tools) prints the app's log, right after the problem. PC VR writes `flycast.log`
 next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or link game files.
 
-## Credits and licences
+---
+
+## 📜 Credits and licences
 
 - **[hotd2-vr](https://github.com/mikermak/hotd2-vr) (The House of the Dead 2 VR) by
   mikermak**: Confidential Mission VR is built on it, a fork of it. The VR mode, the panel the
