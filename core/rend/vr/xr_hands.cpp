@@ -637,7 +637,7 @@ const HandsModel *gunModel(GunKind kind)
 	if (!slot.tried)
 	{
 		slot.tried = true;
-		// (a kind's file is the profile's guns[kind - 1]: guns[0], the cabinet gun's, is no kind's now)
+		// (a kind's file is the profile's guns[kind - 1]: guns[0], 1.1's cabinet gun's, is none now)
 		const hands::GunTarget& gun = gameModelSource()->guns[(int)kind - 1];
 		slot.missing = true;
 		if (gun.used())

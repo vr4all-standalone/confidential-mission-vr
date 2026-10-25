@@ -504,27 +504,26 @@ static std::vector<GameProfile> makeProfiles()
 	// player 1, bit 1 player 2: set when the player starts or joins, cleared when the player goes
 	// out; Task 14's t14-play: 1 from P1's start, 0 at P1's out, 2 at P2's join).
 	p.gunRam = { 0x0C1557B8, 276, 0x4C, 0x50, 0x60, 0x48, 2, 0x0C15A494 };
-	// Its guns, from the player's own game (hands_rip.h): the red cabinet gun in the reload
-	// tutorial after the first Start (v11-research-game.md, A1 candidate 2): tex 400000 (plain,
-	// red from its vertex colours), 279 polygons when whole (both windings, so all of it), at W
-	// 43-74, one draw apart from the cabinet model beside it; the sights share the texture, flat
-	// at W 0.965-1.00003 (A2).
+	// Its guns, from the player's own game (hands_rip.h). guns[0] none: up to 1.1 the red cabinet
+	// gun of the reload tutorial (tex 400000, 279 polygons, gun-cm-cabinet.bin), which no menu
+	// offers since CM VR 1.2, so it isn't made and an old file isn't read; the slot stays so
+	// guns[kind - 1] lines up with GunKind (xr_hands.h).
 	p.model.kind = hands::Source::CmGuns;
-	p.model.guns[0] = { "cabinet gun", "gun-cm-cabinet.bin", { 0x400000 }, 279, 200, 0.27f, 0.95f, 1.005f, false };
+	p.model.guns[0] = {};
 	// The agents' pistol (Task 11; A1 candidate 1, A2): a suppressed black automatic in the stage
 	// 1 intro, never drawn whole for long (small, run off-screen, the game culls parts), so the
 	// passes it's in are merged. OP list; body (slide, frame and grip) tex 7e2800, its suppressor
 	// 6cc400, two more parts 82f800 and 76a800: 91 polygons, 78/10/2/1; the body has 30 open edges
 	// of 282 (seams, open ends) and extents 1.92 x 1.46 x 0.26. Howard's hand (tex 6ca000) on its
 	// grip is not part of it. 0.30 m along the barrel and the suppressor.
-	p.model.guns[1] = { "agents' pistol", "gun-cm-pistol.bin", { 0x7e2800, 0x6cc400, 0x82f800, 0x76a800 }, 91, 10, 0.30f, 0, 0, true,
+	p.model.guns[1] = { "agents' pistol", "gun-cm-pistol.bin", { 0x7e2800, 0x6cc400, 0x82f800, 0x76a800 }, 91, 10, 0.30f, true,
 			{ 78, 10, 2, 1 }, 30, { 1.92f, 1.46f, 0.26f }, 0.10f };
 	// The assault rifle (Task 12; findings Rifle, model: and profile:): the item an enemy drops (kind
 	// 4, model 0c32bb20), one mesh, tex 662000, 55 polygons, drawn whole whenever it's drawn. The
 	// attract demo drops one in its train-car scene at about 316 s of game with no presses from boot,
 	// so the run waits for it there first (to 340 s); in play it's watched for (nothing shows it while
 	// it's held). 0.88 m, an AK's length (the model's own scale wasn't measured).
-	p.model.guns[2] = { "assault rifle", "gun-cm-rifle.bin", { 0x662000 }, 55, 55, 0.88f, 0, 0, false, {}, 0, {}, 0, 340.f };
+	p.model.guns[2] = { "assault rifle", "gun-cm-rifle.bin", { 0x662000 }, 55, 55, 0.88f, false, {}, 0, {}, 0, 340.f };
 	list.push_back(p);
 	return list;
 }

@@ -15,13 +15,13 @@
 
 	Confidential Mission draws its guns by themselves, with no hand on them (Source::CmGuns,
 	gun-cm-*.bin, gun only): Start once at 30 s of game takes its SEGA logo to the reload
-	tutorial, where its cabinet gun is turned about on screen; the first frame with all of it
-	is the cabinet gun (given up at 120 s of game, with the fullest capture seen if there is
-	one). Then Start every 2 s for 16 s takes it to the stage 1 intro, where the agents hold
-	their pistol, never whole for long: every pass with enough of it is captured, and 20 s of
-	game after the last (or at 150 s) they're merged into the agents' pistol, flagged complete
-	when all of it came together. It runs while any of the guns' files is missing; B skips it
-	here too, and nothing more is made that session.
+	tutorial, and from 2 s later Start every 2 s for 14 s takes it on to the stage 1 intro,
+	where the agents hold their pistol, never whole for long: every pass with enough of it is
+	captured, and 10 s of game after the last (or at 150 s) they're merged into the agents'
+	pistol, flagged complete when all of it came together. (Up to 1.1 the tutorial's cabinet
+	gun was made first and the presses waited for it; since 1.2 there is no cabinet gun.) It
+	runs while the pistol's file is missing; B skips it here too, and nothing more is made that
+	session (the assault rifle's part: hands_rip.cpp).
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -43,10 +43,12 @@ struct Source
 	const char *file = "";
 	Parts pistol {};		// AgentsPistol: the textures in the game over scene
 	StaffParts staff {};	// HerosStaff: the textures in the attract demo and the story's intro
-	GunTarget guns[3] {};	// CmGuns: the guns, each its own file (the cabinet gun first; unused: no file)
-	// The file modelPath() names (CmGuns: the cabinet gun's, for the "made before" line; the
-	// headset reads each gun's own file: xr_hands.h gunModel())
-	const char *modelFile() const { return kind == CmGuns ? guns[0].file : file; }
+	// CmGuns: the guns, each its own file (unused: no file). guns[0] is none (1.1's cabinet gun's;
+	// the slot stays so guns[kind - 1] lines up with xr_hands.h GunKind), guns[1] the agents' pistol.
+	GunTarget guns[3] {};
+	// The file modelPath() names (CmGuns: the agents' pistol's, the one the run is for, for the
+	// "made before" line; the headset reads each gun's own file: xr_hands.h gunModel())
+	const char *modelFile() const { return kind == CmGuns ? guns[1].file : file; }
 	const char *name() const {
 		return kind == CmGuns ? "the guns" : kind == HerosStaff ? "the hero's staff" : "the agent's hands and pistol";
 	}

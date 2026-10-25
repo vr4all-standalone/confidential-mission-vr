@@ -168,10 +168,11 @@ Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
 Sega's NAOMI light-gun game from 2000, with its own profile:
 
 - **The guns.** The agents' own pistol in your hand (the menu's "In-game pistol", the default),
-  or the Arcade gun, or the Zapper: the menu's Gun row. The pistol (and the assault rifle) are
-  made from your own copy of the game, on the first start (a minute or two, only once: B skips
-  it, and the guns not made by then stay out of the hand that session); nothing of the game
-  comes with this app.
+  or the Arcade gun, or the Zapper: the menu's Gun row. The first start makes the in-game pistol
+  (and the assault rifle) from your own copy of the game: it plays the game's first six minutes
+  by itself, fast-forwarded behind a panel, about a minute on a PC (only once: B skips it, and
+  the guns not made by then stay out of the hand that session); nothing of the game comes with
+  this app.
   Without the pistol (the first start skipped) the hand holds the Arcade gun. A choice saved by
   1.1 (Auto, the cabinet gun or the arcade gun) now means the in-game pistol. While the game gives you the
   assault rifle, the hand holds it (the built-in gun in olive if its model isn't made yet), and

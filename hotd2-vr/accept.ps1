@@ -18,21 +18,21 @@
   and so do cm-menu and cm-menu-quit (accept-cm-menu, accept-cm-menu-quit), and cm-controllers
   and cm-controllers-rt (accept-cm-controllers, accept-cm-controllers-rt; the latter's GLB is
   build-win\vrtest\test-controller.glb, made by re\make-test-glb.py when it is missing), and cm-hands
-  and cm-hands-shot (accept-cm-hands, accept-cm-hands-shot). The gun run: cm-rip-cabinet plays
-  accept-cm-rip-cabinet (it deletes build-win\data\gun-cm-*.bin first and leaves the cabinet gun's
-  file there), cm-rip-hand accept-cm-rip-hand and -arcade (it needs that file), cm-rip-skip
-  accept-cm-rip-skip and -skip2 (it deletes the files again). A CM run that starts a game with
-  vr.GameHands on and no gun-cm-cabinet.bin makes the file while watching (the reload tutorial
-  after Start); the XR scenarios from before it pin the arcade gun ($cmWidenArcade).
-  cm-rip-pistol plays accept-cm-rip-pistol (it deletes the files, the run goes on from the cabinet
-  gun to the agents' pistol in the stage 1 intro and leaves both files there), cm-rip-pistol-one
+  and cm-hands-shot (accept-cm-hands, accept-cm-hands-shot). The gun run (CM VR 1.2: no cabinet gun):
+  cm-rip-start plays accept-cm-rip-start (it deletes build-win\data\gun-cm-*.bin first; the run goes from
+  Start to the agents' pistol in the stage 1 intro and leaves its file there) and accept-cm-rip-start-next
+  (both files there and a 1.1 gun-cm-cabinet.bin: no run, the old file left as it was), cm-rip-hand
+  accept-cm-rip-hand and -arcade (it needs the pistol's file), cm-rip-skip accept-cm-rip-skip and -skip2
+  (it deletes the files again; after the skip the hand holds the harness's bundled Arcade gun). The XR
+  scenarios from before the game's own guns pin the built-in gun ($cmWidenArcade).
+  cm-rip-pistol plays accept-cm-rip-pistol (the same run, checked as Task 11 did), cm-rip-pistol-one
   accept-cm-rip-pistol-one (the same with one capture merged; each pass draws all of it, so it's whole too).
   cm-rip-rifle plays accept-cm-rip-rifle (it deletes the files; the whole first-start run: the assault
-  rifle from the attract demo at ~316 s of game first, then the cabinet gun and the pistol) and
-  accept-cm-rip-rifle-next (the rifle's file alone missing: no run, watched for in play); it leaves all
-  three files and a copy of the rifle's, build-win\vrtest\cm-rifle-seed.bin, which cm-rip-cabinet,
+  rifle from the attract demo at ~316 s of game first, then Start and the pistol) and
+  accept-cm-rip-rifle-next (the rifle's file alone missing: no run, watched for in play); it leaves both
+  files and a copy of the rifle's, build-win\vrtest\cm-rifle-seed.bin, which cm-rip-start,
   cm-rip-pistol and cm-rip-pistol-one put in place after deleting the files (so their runs start at
-  the cabinet gun, as before); cm-rip-skip doesn't (B skips during the rifle's part). cm-rip-rifle comes
+  Start, as before); cm-rip-skip doesn't (B skips during the rifle's part). cm-rip-rifle comes
   before them in the list; run without the seed, they fail and say so. cm-rip-skip-rifle plays
   accept-cm-rip-skip-rifle: the skip with the rifle's seed in place, which goes Off (nothing watched for).
   cm-merge-unit plays nothing: it compiles re\hands_build_test.cpp with core\rend\vr\hands_build.cpp
@@ -946,20 +946,24 @@ function Test-CmHandsShot {
 }
 
 #
-# The gun run (Task 10, core/rend/vr/hands_rip.h): with no gun-cm-*.bin in build-win\data the first
-# start runs the game by itself (on the PC with vr.HandsPrep): Start at 30 s of game, the reload
-# tutorial, whose cabinet gun (tex 400000, 279 polygons) becomes gun-cm-cabinet.bin (HND1 v2, gun
-# only), within 120 s of game. Every later Confidential Mission run draws that gun instead of the
-# arcade gun (a run that starts a game without the file makes it too, at the tutorial).
+# The gun run (Task 10, core/rend/vr/hands_rip.h; CM VR 1.2 Task 2): with no gun-cm-pistol.bin in build-win\data
+# the first start runs the game by itself (on the PC with vr.HandsPrep): Start at 30 s of game, the reload tutorial,
+# and from $cmPistolAfter s after Start (hands_rip.cpp CmPistolAfter) Start every 2 s on to the stage 1 intro, where
+# the agents' pistol becomes gun-cm-pistol.bin (HND1 v2, gun only). Up to 1.1 the tutorial's cabinet gun came first
+# (gun-cm-cabinet.bin) and the presses waited for it: no 1.2 run makes or reads that file. Remove-CmGuns deletes
+# every gun-cm-*.bin, an old cabinet gun's too. The done budgets are the measured runs' game seconds + 20 (Task 2).
 #
 $cmGunData = Join-Path $repo 'build-win\data'
-$cmCabinetFile = Join-Path $cmGunData 'gun-cm-cabinet.bin'
+$cmCabinetFile = Join-Path $cmGunData 'gun-cm-cabinet.bin'	# 1.1's: checked never made
+$cmPistolAfter = 2
+$cmRipDone = 94		# a run from Start (the rifle's seed in place)
+$cmRipRifleDone = 379	# the whole first start, the rifle's part first
 function Remove-CmGuns {
 	Get-ChildItem -LiteralPath $cmGunData -Filter 'gun-cm-*.bin*' -ErrorAction SilentlyContinue | Remove-Item -Force
 }
 # Task 12: a run without the rifle's file takes it first, from the attract demo at ~316 s of game (about
 # a minute more on the PC). The scenarios about the other guns start with cm-rip-rifle's copy of it in
-# place, so their runs start at the cabinet gun as before (no knob in the app for it).
+# place, so their runs start at Start as before (no knob in the app for it).
 $cmRifleFile = Join-Path $cmGunData 'gun-cm-rifle.bin'
 $cmRifleSeed = Join-Path $repo 'build-win\vrtest\cm-rifle-seed.bin'
 function Copy-CmRifleSeed {
@@ -975,46 +979,77 @@ function Get-LogClock([string]$log, [string]$pattern) {
 	if ($hit.Line -notmatch '^(\d+):(\d+):(\d+)') { throw "no clock at the start of line $($hit.LineNumber) of $log" }
 	return [int]$Matches[1] * 60 + [int]$Matches[2] + [int]$Matches[3] / 1000.0
 }
+# The number in group 1 of the first line matching $pattern; it throws (the scenario fails) when there's no such line.
+function Get-LogNumber([string]$log, [string]$pattern) {
+	$hit = Select-String -LiteralPath $log -Pattern $pattern -CaseSensitive | Select-Object -First 1
+	if (-not $hit) { throw "no line matching $pattern in $log" }
+	return [double]::Parse($hit.Matches[0].Groups[1].Value, $inv)
+}
 
-# The run, flat: no files, a .part left by a run that died (written over); the cabinet gun saved,
-# the run done by 120 s of game; the model's checks (vrcheck hnd).
-function Test-CmRipCabinet {
-	$name = 'accept-cm-rip-cabinet'
+# The run, flat (CM VR 1.2): no files but the rifle's seed, a .part left by a run that died (written over); Start at
+# 30 s of game, the first press for the pistol $cmPistolAfter s after it (+-2 s), the agents' pistol saved complete,
+# no line about a cabinet gun and no gun-cm-cabinet.bin, the run done by $cmRipDone s of game; the pistol's checks
+# (vrcheck hnd, as cm-rip-pistol's). Then "-next", a 1.1 install: both guns' files and an old gun-cm-cabinet.bin, no
+# run ("made before": the pistol's file), and the old file never read or changed.
+function Test-CmRipStart {
+	$name = 'accept-cm-rip-start'
 	if (-not $Reuse) {
 		Remove-CmGuns
 		$why = Copy-CmRifleSeed
 		if ($why) { return $why }
-		[IO.File]::WriteAllText("$cmCabinetFile.part", 'junk from a run that died')
+		[IO.File]::WriteAllText("$cmPistolFile.part", 'junk from a run that died')
 	}
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 150; Config = 'config:vr.HandsPrep=yes'
-		Expect = 'VR hands: no model yet, taking the guns from the game',
-			'VR hands: the cabinet gun from this game, \d+ bytes to .*gun-cm-cabinet\.bin', 'VR hands: done after \d+ s of game'
-		Reject = @('VR hands: .*, but ') }
+		Expect = 'VR hands: no model yet, taking the guns from the game', 'VR hands: Start at [\d.]+ s',
+			'VR hands: on to the merged guns at [\d.]+ s', $cmPistolSaved, 'VR hands: done after \d+ s of game'
+		Reject = @('VR hands: .*, but ', 'cabinet') }
 	if ($why) { return $why }
-	$hit = Select-String -LiteralPath (Get-RunLog $name) -Pattern 'VR hands: done after (\d+) s of game' -CaseSensitive | Select-Object -First 1
-	$n = [int]$hit.Matches[0].Groups[1].Value
-	Write-Host "  done after $n s of game (want 120 or less)"
-	if ($n -gt 120) { return "the gun run took $n s of game, over 120" }
-	if (Test-Path -LiteralPath "$cmCabinetFile.part") { return "$cmCabinetFile.part is still there" }
-	if (-not (Test-Path -LiteralPath $cmCabinetFile)) { return "no $cmCabinetFile" }
-	return Invoke-VrCheck 'hnd', $cmCabinetFile, '--polys', '279', '--length', '0.27', '--gun-only'
+	$log = Get-RunLog $name
+	$start = Get-LogNumber $log 'VR hands: Start at ([\d.]+) s'
+	$press = Get-LogNumber $log 'VR hands: on to the merged guns at ([\d.]+) s'
+	$n = Get-LogNumber $log 'VR hands: done after (\d+) s of game'
+	$want = 30 + $cmPistolAfter
+	Write-Host "  Start at $start s, the first press for the pistol at $press s (want $want +-2), done after $n s of game (want $cmRipDone or less)"
+	if ([math]::Abs($press - $want) -gt 2) { return "the first press for the pistol at $press s of game, want $want +-2" }
+	if ($n -gt $cmRipDone) { return "the gun run took $n s of game, over $cmRipDone" }
+	if (Test-Path -LiteralPath "$cmPistolFile.part") { return "$cmPistolFile.part is still there" }
+	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made" }
+	if (-not (Test-Path -LiteralPath $cmPistolFile)) { return "no $cmPistolFile" }
+	$why = Invoke-VrCheck 'hnd', $cmPistolFile, '--polys', '91', '--length', '0.30', '--gun-only', '--complete'
+	if ($why) { return $why }
+	# a 1.1 install: no run, an old cabinet gun's file left alone
+	$old = [byte[]](1..64)
+	try {
+		if (-not $Reuse) { [IO.File]::WriteAllBytes($cmCabinetFile, $old) }
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = "$name-next"; Seconds = 12; Config = 'config:vr.HandsPrep=yes'
+			Expect = @('VR hands: the guns, made before: .*gun-cm-pistol\.bin')
+			Reject = @('VR hands: no model yet', 'VR hands: watching for', 'VR hands: .*, but ', 'gun-cm-cabinet') }
+		if ($why) { return "a 1.1 install: $why" }
+		if (-not $Reuse) {
+			$same = (Test-Path -LiteralPath $cmCabinetFile) -and
+				[Convert]::ToBase64String([IO.File]::ReadAllBytes($cmCabinetFile)) -ceq [Convert]::ToBase64String($old)
+			Write-Host "  a 1.1 install: the old $(Split-Path -Leaf $cmCabinetFile) $(if ($same) { 'as it was' } else { 'changed or gone' })"
+			if (-not $same) { return "a 1.1 install: $cmCabinetFile changed or gone" }
+		}
+	}
+	finally { Remove-Item -LiteralPath $cmCabinetFile -Force -ErrorAction SilentlyContinue }
+	return $null
 }
 
-# The cabinet gun in the right hand through the simulator, widened (vr.Gun 2: the cabinet gun, which
-# Task 13's Auto must keep): the hand in front of the left eye from 20 s, the first A (30 s) gives it
-# the gun, a window shot at 35 s; against the same shot with the arcade gun (vr.GameHands off) in the
-# right hand's part of the view.
+# The in-game pistol (cm-rip-start's file) in the right hand through the simulator, widened (vr.Gun 1): the hand in
+# front of the left eye from 20 s, the first A (30 s) gives it the gun, a window shot at 35 s; against the same shot
+# with the built-in gun ($cmWidenArcade) in the right hand's part of the view.
 function Get-CmRipHandParams([string]$name, [string]$config) {
 	@{ Game = 'confmiss'; Name = $name; Seconds = 37; XrSim = $true; Config = $config
 		At = @('20=pose right 0.1 1.45 -0.3 0 0') + @(Get-CmStartsXr | Where-Object { [double]($_ -split '=')[0] -lt 36 }) + '35=shot held'
 		Reject = @('XR: initialisation failed') }
 }
 function Test-CmRipHand {
-	if (-not (Test-Path -LiteralPath $cmCabinetFile)) { return "no $cmCabinetFile (cm-rip-cabinet makes it)" }
+	if (-not (Test-Path -LiteralPath $cmPistolFile)) { return "no $cmPistolFile (cm-rip-start makes it)" }
 	$name = 'accept-cm-rip-hand'
-	$params = Get-CmRipHandParams $name "$cmWiden,config:vr.Gun=2"
-	$params.Expect = @('XR: the game''s own model from .*gun-cm-cabinet\.bin')
-	$params.Reject += 'XR: no .*gun-cm-cabinet\.bin'
+	$params = Get-CmRipHandParams $name "$cmWiden,config:vr.Gun=1"
+	$params.Expect = @('XR: the game''s own model from .*gun-cm-pistol\.bin', 'XR: gun: in-game pistol \(chosen\)$')
+	$params.Reject += 'XR: no .*gun-cm-pistol\.bin'
 	$why = Invoke-VrTest $params
 	if ($why) { return $why }
 	$arcade = 'accept-cm-rip-hand-arcade'
@@ -1028,40 +1063,43 @@ function Test-CmRipHand {
 	}
 	$why = Invoke-VrCheck 'differ', (Join-Path $repo "build-win\vrtest\$name\t035-held.png"),
 		(Join-Path $repo "build-win\vrtest\$arcade\t035-held.png"), '--box', '0.5,0.5,0.8,0.95', '--min-diff', '2'
-	if ($why) { return "the cabinet gun looks like the arcade gun: $why" }
+	if ($why) { return "the in-game pistol looks like the built-in gun: $why" }
 	return $null
 }
 
 # B skips the run and the menu button does nothing during it, both keyed on the run's first line
 # (the gun comes up ~6 s in, at 30 s of game). Skipped holds for the session (S23): Start from
 # 22 s after the skip (30 s of game or more) and on through the reload tutorial, where watching
-# would make the gun: still the arcade gun, and no file. The next start runs it again. With no
-# rifle file the skip comes in the rifle's part of the run (the attract demo), and the rifle, which
-# comes in play too, is still watched for (Task 12, S23).
+# would make the pistol (1.1: the cabinet gun): no file, and the hand holds the Arcade gun (the harness's bundled
+# namco.glb, -Bundled --namco-zapper: never the user's models). The next start runs it again. With no rifle file the
+# skip comes in the rifle's part of the run (the attract demo), and the rifle, which comes in play too, is still
+# watched for (Task 12, S23).
 function Test-CmRipSkip {
 	if (-not $Reuse) { Remove-CmGuns }
-	$first = 'VR hands: no model yet, taking the guns from the game'
-	$keys = @("$first|1|xr left/menu 1 150", "$first|2|xr right/b 1 200")
-	$starts = @(22, 25, 28 | ForEach-Object { "VR hands: skipped after|$_|xr right/a 1 200" })
-	$params = @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 48; XrSim = $true; Config = "$cmWiden,config:vr.HandsPrep=yes"
-		On = @($keys + $starts)
-		Expect = $first, 'VR hands: skipped after', 'XR: menu: not while the guns are being made',
-			'VR hands: watching for the assault rifle in play'
-		# (the loader says "no ..., the arcade gun it is" at INFO, which the log leaves out)
-		Reject = @('XR: initialisation failed', 'XR: menu open', 'XR: the game''s own model from',
-			'VR hands: the cabinet gun from this game') }
-	$why = Invoke-VrTest $params
-	if ($why) { return $why }
-	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made though the run was skipped" }
-	$params.Name = 'accept-cm-rip-skip2'
-	$params.Seconds = 10
-	$params.On = $keys
-	$params.Expect = @($first)
-	$params.Reject += 'VR hands: the assault rifle from this game'
-	$why = Invoke-VrTest $params
-	if ($why) { return "the next start: $why" }
-	return $null
+	return Invoke-OwnFolders -Bundled '--namco-zapper' {
+		$first = 'VR hands: no model yet, taking the guns from the game'
+		$keys = @("$first|1|xr left/menu 1 150", "$first|2|xr right/b 1 200")
+		$starts = @(22, 25, 28 | ForEach-Object { "VR hands: skipped after|$_|xr right/a 1 200" })
+		$params = @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 48; XrSim = $true; Config = "$cmWiden,config:vr.HandsPrep=yes,config:vr.Gun=1"
+			On = @($keys + $starts)
+			Expect = $first, 'VR hands: skipped after', 'XR: menu: not while the guns are being made',
+				'VR hands: watching for the assault rifle in play', $cmSkippedGun
+			Reject = @('XR: initialisation failed', 'XR: menu open', 'XR: the game''s own model from',
+				'the cabinet gun from this game', 'VR hands: the agents'' pistol from this game') }
+		$why = Invoke-VrTest $params
+		if ($why) { return $why }
+		foreach ($file in $cmPistolFile, $cmCabinetFile) { if (Test-Path -LiteralPath $file) { return "$file made though the run was skipped" } }
+		$params.Name = 'accept-cm-rip-skip2'
+		$params.Seconds = 10
+		$params.On = $keys
+		$params.Expect = @($first, $cmSkippedGun)
+		$params.Reject += 'VR hands: the assault rifle from this game'
+		$why = Invoke-VrTest $params
+		if ($why) { return "the next start: $why" }
+		return $null
+	}
 }
+$cmSkippedGun = 'XR: gun: Arcade gun \(chosen: the in-game pistol is not made yet\)$'
 
 # The skip with the rifle's file there (cm-rip-rifle's seed): no gun from the attract demo is left to
 # watch for in play, so the run goes Off, with no watching line (Task 12, S23).
@@ -1071,27 +1109,31 @@ function Test-CmRipSkipRifle {
 		$why = Copy-CmRifleSeed
 		if ($why) { return $why }
 	}
-	$first = 'VR hands: no model yet, taking the guns from the game'
-	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip-rifle'; Seconds = 12; XrSim = $true
-		Config = "$cmWiden,config:vr.HandsPrep=yes"; On = @("$first|2|xr right/b 1 200")
-		Expect = $first, 'VR hands: skipped after'
-		Reject = @('XR: initialisation failed', 'VR hands: watching for', 'VR hands: the cabinet gun from this game') }
-	if ($why) { return $why }
-	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made though the run was skipped" }
-	return $null
+	return Invoke-OwnFolders -Bundled '--namco-zapper' {
+		$first = 'VR hands: no model yet, taking the guns from the game'
+		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip-rifle'; Seconds = 12; XrSim = $true
+			Config = "$cmWiden,config:vr.HandsPrep=yes,config:vr.Gun=1"; On = @("$first|2|xr right/b 1 200")
+			Expect = $first, 'VR hands: skipped after', $cmSkippedGun
+			Reject = @('XR: initialisation failed', 'VR hands: watching for', 'the cabinet gun from this game',
+				'VR hands: the agents'' pistol from this game') }
+		if ($why) { return $why }
+		foreach ($file in $cmPistolFile, $cmCabinetFile) { if (Test-Path -LiteralPath $file) { return "$file made though the run was skipped" } }
+		return $null
+	}
 }
 
-# Task 11: the same run goes on from the cabinet gun to the agents' pistol (body tex 7e2800, its
-# suppressor 6cc400, 82f800, 76a800; 91 polygons when whole, 78/10/2/1): Start every 2 s for 16 s
-# after the cabinet gun, the stage 1 intro, every pass with 10 or more of its polygons captured and
-# merged (hands_build.h buildGun) into gun-cm-pistol.bin, flagged complete when all of it came
-# together; the run done by 150 s of game. -one merges the first capture only
+# Task 11: the same run goes on to the agents' pistol (body tex 7e2800, its suppressor 6cc400, 82f800,
+# 76a800; 91 polygons when whole, 78/10/2/1): Start every 2 s for 14 s from $cmPistolAfter s after Start
+# (CM VR 1.2; 1.1 waited for the cabinet gun), the stage 1 intro, every pass with 10 or more of its polygons
+# captured and merged (hands_build.h buildGun) into gun-cm-pistol.bin, flagged complete when all of it came
+# together; no cabinet gun; the run done by $cmRipDone s of game. -one merges the first capture only
 # (vr.HandsCaptureLimit=1). Every pass of the intro draws all 91 (Task 11's runs), so one capture
 # is whole as well and it comes out complete; it shows the limit holds (1 capture merged) and that
 # the log's verdict and the file's flag agree (PF12: the flag 3 only with "complete", else 1 and
 # the first check that failed).
 $cmPistolFile = Join-Path $cmGunData 'gun-cm-pistol.bin'
 $cmPistolLine = 'VR hands: the agents'' pistol from this game \((complete|incomplete: [^)]*)\), \d+ bytes to .*gun-cm-pistol\.bin'
+$cmPistolSaved = 'VR hands: the agents'' pistol from this game \(complete\), \d+ bytes to .*gun-cm-pistol\.bin'
 function Invoke-CmRipPistol([string]$name, [string]$config, [string]$want) {
 	if (-not $Reuse) {
 		Remove-CmGuns
@@ -1099,20 +1141,18 @@ function Invoke-CmRipPistol([string]$name, [string]$config, [string]$want) {
 		if ($why) { return $why }
 	}
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 240; Config = $config
-		Expect = 'VR hands: no model yet, taking the guns from the game',
-			'VR hands: the cabinet gun from this game, \d+ bytes to .*gun-cm-cabinet\.bin', $want, 'VR hands: done after \d+ s of game'
-		Reject = @('VR hands: .*, but ') }
+		Expect = 'VR hands: no model yet, taking the guns from the game', $want, 'VR hands: done after \d+ s of game'
+		Reject = @('VR hands: .*, but ', 'the cabinet gun from this game') }
 	if ($why) { return $why }
-	$hit = Select-String -LiteralPath (Get-RunLog $name) -Pattern 'VR hands: done after (\d+) s of game' -CaseSensitive | Select-Object -First 1
-	$n = [int]$hit.Matches[0].Groups[1].Value
-	Write-Host "  done after $n s of game (want 150 or less)"
-	if ($n -gt 150) { return "the gun run took $n s of game, over 150" }
+	$n = Get-LogNumber (Get-RunLog $name) 'VR hands: done after (\d+) s of game'
+	Write-Host "  done after $n s of game (want $cmRipDone or less)"
+	if ($n -gt $cmRipDone) { return "the gun run took $n s of game, over $cmRipDone" }
 	if (-not (Test-Path -LiteralPath $cmPistolFile)) { return "no $cmPistolFile" }
+	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made" }
 	return $null
 }
 function Test-CmRipPistol {
-	$why = Invoke-CmRipPistol 'accept-cm-rip-pistol' 'config:vr.HandsPrep=yes' `
-		'VR hands: the agents'' pistol from this game \(complete\), \d+ bytes to .*gun-cm-pistol\.bin'
+	$why = Invoke-CmRipPistol 'accept-cm-rip-pistol' 'config:vr.HandsPrep=yes' $cmPistolSaved
 	if ($why) { return $why }
 	return Invoke-VrCheck 'hnd', $cmPistolFile, '--polys', '91', '--length', '0.30', '--gun-only', '--complete'
 }
@@ -1132,8 +1172,8 @@ function Test-CmRipPistolOne {
 # Task 12: the whole first-start run from no files. The assault rifle (tex 662000, 55 polygons, the
 # findings' Rifle) comes first: the attract demo plays with no presses (fast-forwarded) until a pass
 # draws all of it (the train-car scene's drop, ~316 s of game) or 340 s, and it becomes
-# gun-cm-rifle.bin (gun only, flagged complete); then Start, the cabinet gun and the pistol as
-# before. The clock time of the run is printed. Then (PF20) the rifle's file alone missing starts
+# gun-cm-rifle.bin (gun only, flagged complete); then Start and the pistol as before (no cabinet gun, CM VR 1.2),
+# the run done by $cmRipRifleDone s of game. The clock time of the run is printed. Then (PF20) the rifle's file alone missing starts
 # no run: it's watched for in play. The rifle's file is kept as cm-rifle-seed.bin for the others.
 $cmRifleLine = 'VR hands: the assault rifle from this game, \d+ bytes to .*gun-cm-rifle\.bin'
 function Test-CmRipRifle {
@@ -1141,23 +1181,20 @@ function Test-CmRipRifle {
 	$first = 'VR hands: no model yet, taking the guns from the game'
 	if (-not $Reuse) { Remove-CmGuns }
 	$why = Invoke-VrTest @{ Game = 'confmiss'; Name = $name; Seconds = 200; Config = 'config:vr.HandsPrep=yes'
-		Expect = $first, $cmRifleLine, 'VR hands: the cabinet gun from this game, \d+ bytes to .*gun-cm-cabinet\.bin',
-			'VR hands: the agents'' pistol from this game \(complete\), \d+ bytes to .*gun-cm-pistol\.bin',
-			'VR hands: done after \d+ s of game'
-		Reject = @('VR hands: .*, but ') }
+		Expect = $first, $cmRifleLine, $cmPistolSaved, 'VR hands: done after \d+ s of game'
+		Reject = @('VR hands: .*, but ', 'the cabinet gun from this game') }
 	if ($why) { return $why }
 	$log = Get-RunLog $name
 	$hit = Select-String -LiteralPath $log -Pattern 'VR hands: done after (\d+) s of game' -CaseSensitive | Select-Object -First 1
 	$n = [int]$hit.Matches[0].Groups[1].Value
 	$clock = (Get-LogClock $log 'VR hands: done after') - (Get-LogClock $log $first)
 	$rifleAt = (Get-LogClock $log $cmRifleLine) - (Get-LogClock $log $first)
-	Write-Host ('  done after {0} s of game (want 460 or less), {1:0.0} s on the clock (the rifle at {2:0.0} s)' -f $n, $clock, $rifleAt)
-	if ($n -gt 460) { return "the gun run took $n s of game, over 460" }
+	Write-Host ('  done after {0} s of game (want {3} or less), {1:0.0} s on the clock (the rifle at {2:0.0} s)' -f $n, $clock, $rifleAt, $cmRipRifleDone)
+	if ($n -gt $cmRipRifleDone) { return "the gun run took $n s of game, over $cmRipRifleDone" }
+	if (Test-Path -LiteralPath $cmCabinetFile) { return "$cmCabinetFile made" }
 	$why = Invoke-VrCheck 'hnd', $cmRifleFile, '--polys', '55', '--length', '0.88', '--gun-only', '--complete'
 	if ($why) { return $why }
-	# the other two as their own scenarios check them (the demo's how-to-play scene may give the cabinet gun)
-	$why = Invoke-VrCheck 'hnd', $cmCabinetFile, '--polys', '279', '--length', '0.27', '--gun-only'
-	if ($why) { return "cabinet gun: $why" }
+	# the pistol as its own scenarios check it
 	$why = Invoke-VrCheck 'hnd', $cmPistolFile, '--polys', '91', '--length', '0.30', '--gun-only', '--complete'
 	if ($why) { return "pistol: $why" }
 	Copy-Item -LiteralPath $cmRifleFile -Destination $cmRifleSeed -Force
@@ -1803,8 +1840,8 @@ $scenarios = [ordered]@{ hotd2 = 'Test-Hotd2'; mok = 'Test-Mok'; 'cm-boot' = 'Te
 	'cm-menu' = 'Test-CmMenu'; 'cm-menu-quit' = 'Test-CmMenuQuit'
 	'cm-controllers' = 'Test-CmControllers'; 'cm-controllers-rt' = 'Test-CmControllersRt'
 	'cm-hands' = 'Test-CmHands'; 'cm-hands-shot' = 'Test-CmHandsShot'
-	# cm-rip-rifle first: it leaves the rifle's seed, which the next ones need (cm-rip-hand: cm-rip-cabinet's file)
-	'cm-rip-rifle' = 'Test-CmRipRifle'; 'cm-rip-cabinet' = 'Test-CmRipCabinet'; 'cm-rip-hand' = 'Test-CmRipHand'
+	# cm-rip-rifle first: it leaves the rifle's seed, which the next ones need (cm-rip-hand: cm-rip-start's pistol file)
+	'cm-rip-rifle' = 'Test-CmRipRifle'; 'cm-rip-start' = 'Test-CmRipStart'; 'cm-rip-hand' = 'Test-CmRipHand'
 	'cm-rip-skip' = 'Test-CmRipSkip'; 'cm-rip-skip-rifle' = 'Test-CmRipSkipRifle'
 	'cm-rip-pistol' = 'Test-CmRipPistol'; 'cm-rip-pistol-one' = 'Test-CmRipPistolOne'
 	# cm-gun after the rip scenarios: it needs the guns' files they leave

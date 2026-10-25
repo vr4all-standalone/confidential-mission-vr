@@ -270,7 +270,7 @@ Task 4b's runs (`vr-test.ps1 -Config "$cmWiden,config:vr.WatchRam=..."`, the act
 - the agents' pistol (Task 11, 2026-10-23): `GunTarget` guns[1] in vr_reproject.cpp.
   - Textures: body **7e2800**, suppressor **6cc400**, **82f800**, **76a800**.
   - Whole: **91 polys**, **78/10/2/1** by texture.
-  - Where: the stage 1 intro, reached by Start every 2 s for 16 s after the cabinet gun.
+  - Where: the stage 1 intro, reached by Start every 2 s for 16 s after the cabinet gun. (CM VR 1.2: Start every 2 s from 32 to 46 s of game, with no cabinet gun: Task 2 below.)
   - accept-cm-rip-pistol captured **403 passes** with 10 or more of its polys.
     - Every one was fitted onto the fullest: **0 dropped**.
     - Worst rms: **0.26-0.53 %** of the body's length over three runs, each with 403 passes.
@@ -313,3 +313,31 @@ Task 4b's runs (`vr-test.ps1 -Config "$cmWiden,config:vr.WatchRam=..."`, the act
     - a run that hit the cap: 101.9 s, 395 s of game.
   - Tests: cm-rip-cabinet and the pistol scenarios copy a seed of the rifle file (`build-win\vrtest\cm-rifle-seed.bin`, made by cm-rip-rifle) so their runs stay as short as before. A missing rifle file alone starts no run.
   - Repeated runs (Task 12 review, a note only): say the rifle hits the 340 s cap and another gun's file also stays missing. Then every later start replays the ~340 s attract part before Start. PF20 holds to the letter, but the cost multiplies. It takes a double failure, so it stays a note.
+- CM VR 1.2's first start without the cabinet gun (Task 2, 2026-10-24).
+  - No cabinet gun: `guns[0]` is empty. `gun-cm-cabinet.bin` is never made or read, and a 1.1 one is left as it was (accept-cm-rip-start-next).
+  - The pistol's presses start `CmPistolAfter` = **2 s** after Start. In 1.1 the cabinet gun was saved **0.1 s** after Start (log clock 5.767 s against 5.747 s), and the 2 s is the next Start beat after that.
+  - The presses run from **32 to 46 s** of game (`CmPressFor` 14, not 16).
+    - 1.1 pressed from 30.1 s for 16 s. Its first press fell inside Start's own hold, so in effect its presses were 32.1 to 46.1.
+    - A first try with 16 s added a press at 48 s. The pistol never came up: cm-rip-start and cm-rip-rifle both gave up at 150 s of game. That press skips the stage 1 intro.
+  - Dropping the cabinet gun saved no time: the run was still done after **84 s** of game (370 for the whole first start), since the cabinet gun came 0.1 s after Start.
+  - Where the time goes, on the PC (accept runs, the log's clock; fast-forwarded, the game runs at about 5.4-5.7 times real time):
+
+    | phase | game s | clock s |
+    |---|---|---|
+    | the rifle's attract wait (the whole first start: no rifle file) | 0-315.5 | 53.1-55.8 (Task 12: 67-84) |
+    | boot to Start (the rifle's file there) | 0-30 | 5.5 |
+    | Start to the first press | 2 | 0.3 |
+    | the presses (32-46) and the stage 1 intro, to the last pass at 64.0 s | 32 | about 5.5 |
+    | the quiet wait (`CmQuietFor`), 20 s before, now 10 s | 20, now 10 | 3.75, now 1.9 |
+    | merging the 403 captures, building, saving | 0 | 0.07 (1 capture: 0.001) |
+    | a run from Start, first line to done | 84, now 74 | 15.2, now 13.2 |
+    | the whole first start, first line to done | 370, now 359 | 65.4, now 60.5 |
+
+    - The attract wait is about 88 % of the whole first start's clock. Its clock time varies from run to run, so the whole run's clock gain is within that noise. The game seconds are steady.
+    - The quiet wait's clock is the difference between the done times of cm-rip-pistol with 20 s and with 10 s (9.35 s and 7.47 s from the first press). The merge time comes from a temporary NOTICE at the end of the quiet wait, since removed.
+  - The cheap change: `CmQuietFor` 20 s -> **10 s**, kept.
+    - The last pass came at 64.0 s of game either way, so the merge got the same **403 captures**, all 403 merged.
+    - The result was the same: 91 polys (78/10/2/1), complete, 102780 bytes, and vrcheck's hnd readings unchanged (cm-rip-pistol, cm-rip-pistol-one, and all the rip scenarios after it).
+    - It saves 10 s of game: about 2 s on the PC, 13 % of a run from Start and 3 % of the whole first start.
+    - The headset's times aren't measured. The gain there is the same 10 s of game at the headset's own rate.
+  - Not tried (bigger, not cheap): the attract wait is nearly all of the first start. It can't be cut short: the demo drops the rifle at 315.5 s, and Start leaves the demo for good. Any gain would have to come from running the emulation faster there, for example by drawing fewer frames.

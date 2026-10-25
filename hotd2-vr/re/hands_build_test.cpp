@@ -175,7 +175,7 @@ GunTarget target(const Model& model)
 	uint16_t a = 0, b = 0;
 	for (const Quad& q : model)
 		(q.tex == TexA ? a : b)++;
-	return { "test gun", "test.bin", { TexA, TexB, 0, 0 }, (uint16_t)(a + b), 10, 0.30f, 0.f, 0.f, true,
+	return { "test gun", "test.bin", { TexA, TexB, 0, 0 }, (uint16_t)(a + b), 10, 0.30f, true,
 		{ a, b, 0, 0 }, WholeOpenEdges, { 0.f, 0.f, 0.f }, 0.f };
 }
 
@@ -368,7 +368,7 @@ Model rifleModel(int stockDivs)
 GunTarget rifleTarget(const Model& m)
 {
 	const uint16_t n = (uint16_t)m.size();
-	return { "test rifle", "rifle.bin", { TexA, 0, 0, 0 }, n, n, 0.88f, 0.f, 0.f, false, { 0, 0, 0, 0 }, 0, { 0.f, 0.f, 0.f }, 0.f };
+	return { "test rifle", "rifle.bin", { TexA, 0, 0, 0 }, n, n, 0.88f, false, { 0, 0, 0, 0 }, 0, { 0.f, 0.f, 0.f }, 0.f };
 }
 Shot rifleShot() { return { lookAt(dvec3(16, 5, 8), dvec3(0, 0, -1.5)), [](const Quad&) { return true; }, 0.0, 0.0 }; }
 

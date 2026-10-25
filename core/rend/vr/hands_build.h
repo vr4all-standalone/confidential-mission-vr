@@ -47,18 +47,17 @@ struct StaffParts
 // A whole rod: its head piece (42 polygons) and its shaft (24)
 constexpr uint32_t StaffRodPolys = 66;
 
-// A gun the game draws by itself, with no hand on it (Confidential Mission's: its cabinet gun in
-// the reload tutorial, the agents' pistol in the stage 1 intro), per game's profile
+// A gun the game draws by itself, with no hand on it (Confidential Mission's: the agents' pistol
+// in the stage 1 intro, the assault rifle in the attract demo), per game's profile
 // (vr_reproject.cpp), made into a gun-only model.
 struct GunTarget
 {
-	const char *name;			// "cabinet gun"
-	const char *file;			// "gun-cm-cabinet.bin", in the data directory
+	const char *name;			// "agents' pistol"
+	const char *file;			// "gun-cm-pistol.bin", in the data directory
 	uint32_t textures[4];		// its textures (VRAM addresses); 0: unused
 	uint16_t wholePolys;		// its polygons when all of it is there
 	uint16_t minPolys;			// a capture needs at least this many
 	float lengthM;				// the built model's length along the barrel, metres
-	float skipWMin, skipWMax;	// polygons with every corner's W in this band are not the gun (HUD sights)
 	bool merge;					// merge captures across frames, in the gun's own space (buildGun)
 	// Merged, all of it is there (and so flagged) when its polygons number wholePolys, so many
 	// of each of its textures (texturePolys, as textures[]); its body (textures[0]) has at most
@@ -80,7 +79,6 @@ struct GunTarget
 				return true;
 		return false;
 	}
-	bool skips(float w) const { return w >= skipWMin && w <= skipWMax; }
 };
 
 // What buildGun made of the captures, for the log.

@@ -57,8 +57,7 @@ constexpr double StaffRun = 33.0;
 constexpr double StaffGiveUpAfter = 150.0;
 
 // The run for Confidential Mission's guns: Start once at 30 s of game (findings startOk), its
-// SEGA logo's; the reload tutorial with the cabinet gun comes a second later (measured on the
-// PC); the cabinet gun is given up at 120 s.
+// SEGA logo's; the reload tutorial comes a second later (measured on the PC).
 // Task 12: before that, while a gun from the attract demo (GunTarget::attractBy, the assault rifle)
 // has no file, no presses from boot: the demo drops the rifle at about 316 s of game (measured on
 // the PC). Once each such gun is made, or its attractBy has come, Start leaves the demo (CmStartAfter
@@ -66,17 +65,21 @@ constexpr double StaffGiveUpAfter = 150.0;
 // Start can't come first: the demo doesn't come back in play.
 constexpr double CmStartAt = 30.0;
 constexpr double CmRun = 90.0;
-constexpr double CmGiveUpAfter = 120.0;
 constexpr double CmRifleRun = 316.0;	// the attract demo's part, typically (the progress bar)
 constexpr double CmStartAfter = 0.5;
-// Then the merged guns (GunTarget::merge, the agents' pistol): from the cabinet gun (or from 90 s
-// without it), Start every 2 s for 16 s, as v1's presses from 30 to 46 s did, through the gun
-// adjustment screen and the briefing to the stage 1 intro (about 50-66 s of game), where the
-// agents hold it; every pass with minPolys of it or more is captured, and 20 s of game after the
-// last one (or at 150 s) they're merged (buildGun). Never while watching in play.
-constexpr double CmMergedBy = 90.0;
-constexpr double CmPressFor = 16.0;
-constexpr double CmQuietFor = 20.0;
+// Then the merged guns (GunTarget::merge, the agents' pistol): from CmPistolAfter after that Start
+// (the next 2 s beat after where 1.1 made the tutorial's cabinet gun, 0.1 s after Start, measured
+// on the PC; 1.2 has no cabinet gun), Start every 2 s for CmPressFor, 32 to 46 s of game, through
+// the gun adjustment screen and the briefing to the stage 1 intro (about 50-66 s of game), where
+// the agents hold it. Those are 1.1's presses after its cabinet gun (its first, at 30.1 s, fell
+// inside Start's own hold); one more, at 48 s, skips the intro (measured: the pistol never came up).
+// Every pass with minPolys of it or more is captured, and 10 s of game after the last one (or at
+// 150 s) they're merged (buildGun). Never while watching in play. (1.1 waited 20 s; the last pass
+// comes at 64 s either way, and 10 s gave the same 403 captures and the same file: CM VR 1.2
+// Task 2, confmiss-findings.md Guns.)
+constexpr double CmPistolAfter = 2.0;
+constexpr double CmPressFor = 14.0;
+constexpr double CmQuietFor = 10.0;
 constexpr double CmLastAt = 150.0;
 constexpr size_t CmMaxCaptures = 1200;	// 20 s of passes (about 15 kB each)
 
@@ -86,12 +89,11 @@ std::atomic<bool> newModel, skipRequested;
 std::atomic<float> progress;
 std::atomic<bool> staffRun;	// the run is for the hero's staff
 std::atomic<bool> cmRun;	// ...for Confidential Mission's guns
-// Confidential Mission's guns (Source::guns): made (or not wanted), and the fullest capture
-// short of all of it so far, built, for when the run gives up (gunMutex)
+// Confidential Mission's guns (Source::guns): made (or not wanted), and the pass a try at one
+// that isn't merged failed (gunMutex)
 std::atomic<bool> gunDone[3];
 std::mutex gunMutex;
-std::vector<u8> gunBest[3];
-u32 gunBestPolys[3], gunFailedAt[3];
+u32 gunFailedAt[3];
 // the merged guns' captures, and the textures they use, decoded when captured (VRAM moves on)
 std::vector<Rip> gunCaptures[3];
 struct CachedTexture { u32 tcw, size; bool ok; Image image; };
@@ -102,7 +104,7 @@ double gunLastSeen[3];			// game seconds (run time)
 std::atomic<bool> cmCapturing;	// the merged guns' part of the run is on
 double cmMergedAt;				// ...since then (run time as if Start came at CmStartAt; < 0 not yet)
 double cmStartAt;				// the run's Start (run time; < 0: the attract demo's part is on)
-bool cmBestSaved, cmSaved;
+bool cmSaved;
 bool cmStartLogged;
 double startedAt;			// game seconds at the start
 bool fastForwardWas;
@@ -133,8 +135,9 @@ bool haveModel()
 	const Source *source = gameModelSource();
 	if (source != nullptr && source->kind == Source::CmGuns)
 	{
-		// every gun's file but those from the attract demo (the assault rifle: its file missing
-		// alone starts no run, PF20; it's watched for in play)
+		// every gun's file (the agents' pistol's) but those from the attract demo (the assault
+		// rifle: its file missing alone starts no run, PF20; it's watched for in play). An old
+		// gun-cm-cabinet.bin (1.1) is no gun's: left alone, never read.
 		for (const GunTarget& gun : source->guns)
 			if (gun.used() && gun.attractBy <= 0.f && !file_exists(gunPath(gun)))
 				return false;
@@ -217,8 +220,7 @@ void onStart()
 		{
 			const GunTarget& gun = source->guns[i];
 			gunDone[i] = !cmRun || !gun.used() || file_exists(gunPath(gun));
-			gunBest[i].clear();
-			gunBestPolys[i] = gunFailedAt[i] = 0;
+			gunFailedAt[i] = 0;
 			std::vector<Rip>().swap(gunCaptures[i]);
 			gunSeen[i] = false;
 			gunOver[i] = false;
@@ -228,7 +230,7 @@ void onStart()
 		cmCapturing = false;
 		cmMergedAt = -1.0;
 		cmStartAt = cmRun && attractGunsLeft(*source) ? -1.0 : CmStartAt;
-		cmBestSaved = cmSaved = false;
+		cmSaved = false;
 	}
 	cmStartLogged = false;
 	{
@@ -341,7 +343,7 @@ void onVBlank()
 		if (start && !cmStartLogged)
 		{
 			cmStartLogged = true;
-			INFO_LOG(RENDERER, "VR hands: Start at %.1f s", now);
+			NOTICE_LOG(RENDERER, "VR hands: Start at %.1f s", now);
 		}
 		// merged guns taken out (under gunMutex) to be built without it: the render thread takes it
 		// every pass, and a merge can take a second on the headset
@@ -349,21 +351,8 @@ void onVBlank()
 		std::vector<Merge> merges;
 		{
 			std::lock_guard<std::mutex> lock(gunMutex);
-			// at 120 s, each gun seen whole or not at all from the fullest capture of it, if any; not
-			// one from the attract demo (the assault rifle): it's saved complete only, as its file
-			// made would end the watching for it in play
-			if (t > CmGiveUpAfter && !cmBestSaved)
-			{
-				cmBestSaved = true;
-				for (int i = 0; i < 3; i++)
-					if (!source->guns[i].merge && source->guns[i].attractBy <= 0.f && !gunDone[i])
-					{
-						if (!gunBest[i].empty())
-							saveGun(source->guns[i], i, gunBest[i], gunBestPolys[i], false);
-						gunOver[i] = true;
-					}
-			}
-			// the merged ones once the others are made (or at 90 s)
+			// the merged ones CmPistolAfter after Start, the others made or given up by then (the
+			// assault rifle, the only other: made or given up in the attract demo's part)
 			bool othersDone = true, merging = false;
 			for (int i = 0; i < 3; i++)
 			{
@@ -377,11 +366,11 @@ void onVBlank()
 						othersDone = false;
 				}
 			}
-			if (cmMergedAt < 0.0 && merging && t >= CmStartAt && (othersDone || t >= CmMergedBy))
+			if (cmMergedAt < 0.0 && merging && othersDone && t >= CmStartAt + CmPistolAfter)
 			{
 				cmMergedAt = t;
 				cmCapturing = true;
-				INFO_LOG(RENDERER, "VR hands: on to the merged guns at %.1f s", now);
+				NOTICE_LOG(RENDERER, "VR hands: on to the merged guns at %.1f s", now);
 			}
 			if (cmMergedAt >= 0.0)
 			{
@@ -640,18 +629,10 @@ void addRipPoly(const rend_context& ctx, const PolyParam& pp, Rip& rip)
 	}
 }
 
-// A polygon of the gun: its texture, and not flat in the sights' band.
+// A polygon of the gun: its texture, three corners or more.
 bool gunPoly(const rend_context& ctx, const PolyParam& pp, const GunTarget& gun)
 {
-	if (!gun.has(textureOf(pp)) || pp.count < 3 || pp.first + pp.count > ctx.verts.size())
-		return false;
-	for (u32 i = pp.first; i < pp.first + pp.count; i++)
-	{
-		const float z = ctx.verts[i].z;
-		if (!(z > 0.f) || !gun.skips(1.f / z))
-			return true;
-	}
-	return false;
+	return gun.has(textureOf(pp)) && pp.count >= 3 && pp.first + pp.count <= ctx.verts.size();
 }
 
 // A merged gun in a pass (gunMutex held): all of its polygons there, if minPolys or more,
@@ -691,11 +672,10 @@ void captureMerged(const rend_context& ctx, const RenderPass& pass, const Render
 	}
 }
 
-// Confidential Mission's guns, each pass: for each gun still to get, its longest run of
-// polygons one after the other in a list (the cabinet gun is one draw; in the tutorial the
-// cabinet model beside it, the same texture, is another, with something else between them).
-// The first pass with all of it (wholePolys) makes the gun; a run short of that but of
-// minPolys or more, longer than any before, is built and kept for when the run gives up.
+// Confidential Mission's guns, each pass: a merged one is captured (captureMerged); for each
+// other still to get (the assault rifle, one draw), its longest run of polygons one after the
+// other in a list. The first pass with all of it (wholePolys) that buildGun flags complete makes
+// the gun.
 void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPass& prev, const Source& source)
 {
 	passes++;
@@ -741,8 +721,7 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 		scan(ctx.global_param_op, std::max(prev.op_count, 1u), pass.op_count);
 		scan(ctx.global_param_pt, prev.pt_count, pass.pt_count);
 		scan(ctx.global_param_tr, prev.tr_count, pass.tr_count);
-		const bool whole = runCount >= gun.wholePolys;
-		if (runCount < gun.minPolys || (!whole && runCount <= gunBestPolys[i]))
+		if (runCount < gun.wholePolys)
 			continue;
 
 		std::vector<Rip> captures { passRip(ctx) };
@@ -758,15 +737,11 @@ void observeGuns(const rend_context& ctx, const RenderPass& pass, const RenderPa
 			WARN_LOG(RENDERER, "VR hands: the %s, but %s", gun.name, error.c_str());
 			continue;
 		}
-		if (!whole || !complete)
+		if (!complete)
 		{
-			// short of all of it: kept for when the run gives up (whole by this count but not
-			// to buildGun's, so not flagged complete: not tried again for a while)
-			INFO_LOG(RENDERER, "VR hands: %u of the %s's %u polygons, kept in case", runCount, gun.name, (u32)gun.wholePolys);
-			gunBest[i] = std::move(model);
-			gunBestPolys[i] = runCount;
-			if (whole)
-				gunFailedAt[i] = passes;
+			// whole by this count but not to buildGun's: not tried again for a while
+			INFO_LOG(RENDERER, "VR hands: the %s's %u polygons, but not all of it to buildGun", gun.name, runCount);
+			gunFailedAt[i] = passes;
 			continue;
 		}
 		NOTICE_LOG(RENDERER, "VR hands: the %s's front and back: %s", gun.name, facing(r).c_str());

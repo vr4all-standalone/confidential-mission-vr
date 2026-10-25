@@ -137,8 +137,8 @@ dvec3 centre(const Rip& rip, const Polys& polys)
 // culled with (ISP cull mode 2/3), the sign settled by a vote over all of them (outwards from
 // the middle), else outwards from the middle.
 // The polygons' triangles in game eye space, all wound outwards. White, or with
-// vertexColours each the mean of its corners' colours (a gun drawn in the game's vertex
-// colours over a plain texture: Confidential Mission's cabinet gun).
+// vertexColours each the mean of its corners' colours (Confidential Mission's guns, buildGun: the
+// game shades their textures with its vertex colours).
 // byCull: by the cull mode alone, not by how each triangle faces this view (a gun's polygons may
 // come from other views, merged, and the game sends some that face away: the cull mode says
 // which side of each is its front whichever way it faces).
@@ -1768,20 +1768,17 @@ bool buildGun(const std::vector<Rip>& captures, const GunTarget& target, const T
 		*complete = false;
 	GunReport scratch;
 	GunReport& rep = report != nullptr ? *report : scratch;
-	// its polygons in each capture: its textures, in front of the camera, not the sights
+	// its polygons in each capture: its textures, in front of the camera
 	auto pick = [&](const Rip& rip) {
 		Polys polys;
 		for (const RipPoly& p : rip.polys)
 		{
 			if (p.v.size() < 3 || !target.has(p.texture()))
 				continue;
-			bool good = true, sight = true;
+			bool good = true;
 			for (const RipVertex& v : p.v)
-			{
 				good = good && std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && v.z > 0.f;
-				sight = sight && v.z > 0.f && target.skips(1.f / v.z);
-			}
-			if (good && !sight)
+			if (good)
 				polys.push_back(&p);
 		}
 		return polys;
