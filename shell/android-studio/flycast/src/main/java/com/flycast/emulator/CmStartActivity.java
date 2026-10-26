@@ -391,7 +391,8 @@ public class CmStartActivity extends Activity
         intent.putExtra(EXTRA_GAME, cm.zip.getAbsolutePath());
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
-        finish();
+        // Exclusive hybrid handoff: remove only this panel task, after VR has launched.
+        finishAndRemoveTask();
     }
 
     /** Ends the app's main process (this screen runs in one of its own), and waits for it. */

@@ -544,9 +544,14 @@ static u32 p2PromptTextures[4];	// ...and GameProfile::p2PromptTextures
 // (the headset's); valid false: not read yet.
 static std::mutex gunMutex;
 static GunState gunSnaps[2];
+// Native player slots, published at VBlank; a button press alone is never membership.
+static std::atomic<u8> confirmedPlayers { 0 };
+static std::atomic<bool> startInputReady { false };
 
 static void applyGameProfile(Event, void *)
 {
+	confirmedPlayers = 0;
+	startInputReady = false;
 	std::fill(std::begin(fovLiterals), std::end(fovLiterals), 0u);
 	std::fill(std::begin(markerTextures), std::end(markerTextures), 0u);
 	std::fill(std::begin(p2PromptTextures), std::end(p2PromptTextures), 0u);
@@ -705,6 +710,16 @@ static u32 gunBlock(const GameProfile *prof, int player)
 	return 0x8C000000u | ((prof->gunRam.base + player * prof->gunRam.stride) & 0x01FFFFFFu);
 }
 
+bool gameStartReady()
+{
+	return emu.running() && startInputReady.load();
+}
+
+bool playerInGame(int player)
+{
+	return player >= 0 && player < 2 && emu.running() && ((confirmedPlayers.load() >> player) & 1) != 0;
+}
+
 bool gunState(int player, GunState& out)
 {
 	out = GunState {};
@@ -726,6 +741,18 @@ bool gunState(int player, GunState& out)
 static void snapGuns(Event, void *)
 {
 	const GameProfile *prof = activeProfile;
+	u8 nativeMembership = 0;
+	bool nativeReady = false;
+	// Confidential Mission has a guarded native two-bit membership byte.
+	if (prof != nullptr && prof->gunRam.playing != 0 && profileCodeThere(*prof))
+	{
+		const u8 players = ReadMem8_nommu(0x8C000000u | (prof->gunRam.playing & 0x01FFFFFFu));
+		if ((players & ~3) == 0)
+		{
+			nativeMembership = players;
+			nativeReady = true;
+		}
+	}
 	for (int player = 0; player < 2; player++)
 	{
 		const u32 block = gunBlock(prof, player);
@@ -760,6 +787,8 @@ static void snapGuns(Event, void *)
 		}
 		gunSnaps[player] = now;
 	}
+	startInputReady = nativeReady;
+	confirmedPlayers = nativeMembership;
 }
 
 static struct GunSnapRegistration

@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release: v1.2.4](https://img.shields.io/badge/Release-v1.2.4_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release: v1.2.5](https://img.shields.io/badge/Release-v1.2.5_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
@@ -727,3 +727,15 @@ Unofficial fan project, not affiliated with Sega. No game is included.
 ### Player assignment regression
 
 Run `powershell -NoProfile -File cm-vr/player-assignment-test.ps1` with Windows Visual Studio C++ tools. It tests joining, hand assignment and Start ownership through settings. See [the seven-port assignment audit](cm-vr/notes/player-assignment-parity.md).
+
+## Quest Start and Service buttons
+
+Play can launch immersive VR from Quest Home in passthrough or a virtual home.
+After loading, tap and release **A** to start P1. **X** requests P2 where the game
+supports local two-player play, after P1 has started; the second gun appears only
+when the game accepts P2. In two-player mode, short Start presses follow the saved
+hand assignment. Survivor retains its native single-player controls.
+
+Hold the right controller's **A for 3 seconds** to open the arcade Service menu.
+A purple progress notice shows the hold. Releasing early acts as a normal Start;
+releasing after Service opens does not send Start. Service holds are offline only.

@@ -42,6 +42,19 @@
 
         <!-- the game in VR: started by the start screen (CmStartActivity) with the game, or by adb;
              not in the library itself. Also openable with a game file, as the regular app. -->
+        <!-- A fresh game task must not clear the 2D setup task that is launching it.
+             Quest Home can otherwise keep its passthrough panel flow in front of OpenXR. -->
+        <activity
+            android:name="com.flycast.emulator.NativeGLActivity"
+            android:taskAffinity="${applicationId}.vr">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="com.oculus.intent.category.VR" />
+                <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
+            </intent-filter>
+        </activity>
+
         <activity-alias
             android:name="com.flycast.emulator.MainActivity"
             android:targetActivity="com.flycast.emulator.NativeGLActivity"
