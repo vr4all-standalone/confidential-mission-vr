@@ -2024,6 +2024,18 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 	}
 }
 
+// Track physical Start presses even while settings/preparation consume game input.
+// A release inside the menu ends ownership; a genuinely held press keeps its player.
+void playerStartButtons(bool leftStart, bool rightStart, bool& p1Start, bool& p2Start)
+{
+	const int hand1 = p1Hand();
+	const bool starts[2] { leftStart, rightStart };
+	for (int hand : { Left, Right })
+		startOwner[hand] = !starts[hand] ? -1 : startOwner[hand] >= 0 ? startOwner[hand] : hand == hand1 ? 0 : 1;
+	p1Start = (starts[Left] && startOwner[Left] == 0) || (starts[Right] && startOwner[Right] == 0);
+	p2Start = (starts[Left] && startOwner[Left] == 1) || (starts[Right] && startOwner[Right] == 1);
+}
+
 void updateLightgun(XrTime time)
 {
 	for (Gun& g : guns)
@@ -2109,6 +2121,9 @@ void updateLightgun(XrTime time)
 		leftHoldSince = leftTapUntil = 0;
 		leftHoldMenu = false;
 	}
+	const bool rightStart = boolAction(startAction, Right) && !startSwallow;
+	bool p1Start, p2Start;
+	playerStartButtons(leftStart, rightStart, p1Start, p2Start);
 	// B (or Y; Vive wands, Windows Mixed Reality: a pad click): the game's reload, or not now for
 	// the gun run, or the VR menu closed
 	const bool skip = boolAction(skipAction);
@@ -2203,11 +2218,6 @@ void updateLightgun(XrTime time)
 	// sees a whole press) and is no Start of player 1's, though the left is player 1's from then on by
 	// default; an A held through the join stays player 1's, not player 2's. So too when player 2 is out.
 	int hand1 = p1Hand(), hand2 = 1 - hand1;
-	const bool starts[2] { leftStart, boolAction(startAction, Right) && !startSwallow };
-	for (int hand : { Left, Right })
-		startOwner[hand] = !starts[hand] ? -1 : startOwner[hand] >= 0 ? startOwner[hand] : hand == hand1 ? 0 : 1;
-	const bool p1Start = (starts[Left] && startOwner[Left] == 0) || (starts[Right] && startOwner[Right] == 0);
-	const bool p2Start = (starts[Left] && startOwner[Left] == 1) || (starts[Right] && startOwner[Right] == 1);
 	// Joining takes both controllers (with one, player 2's Start does nothing) and a game
 	// that shows when player 2 is out again (its profile knows the prompt). Not online
 	// (GGPO): player 2 is the other player there and only this side's player 1 is sent, so

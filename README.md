@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release: v1.2.3](https://img.shields.io/badge/Release-v1.2.3_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release: v1.2.4](https://img.shields.io/badge/Release-v1.2.4_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
@@ -723,3 +723,7 @@ next to `flycast.exe` with `log:LogToFile = yes` in `emu.cfg`. Never attach or l
 - Confidential Mission is Sega's game; the banner is a screenshot of it (© SEGA). Namco is a trademark of Bandai Namco, Zapper of Nintendo, Meta Quest of Meta.
 
 Unofficial fan project, not affiliated with Sega. No game is included.
+
+### Player assignment regression
+
+Run `powershell -NoProfile -File cm-vr/player-assignment-test.ps1` with Windows Visual Studio C++ tools. It tests joining, hand assignment and Start ownership through settings. See [the seven-port assignment audit](cm-vr/notes/player-assignment-parity.md).

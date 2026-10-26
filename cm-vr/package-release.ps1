@@ -29,7 +29,7 @@
   (core\deps\cgltf\LICENSE) in it; -CheckOnly checks that too.
 
   A release is built from a commit, the one its published source is: the working tree must be
-  clean (the gamesdk submodule's local change aside), and the APK's versionName (1.2.3-g<commit>),
+  clean (the gamesdk submodule's local change aside), and the APK's versionName (1.2.4-g<commit>),
   its libflycast.so and flycast.exe must all name HEAD (a -SkipBuild after a new commit fails
   that). -AllowDebugKey test builds skip both checks.
 
@@ -52,7 +52,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # src\vr\AndroidManifest.xml), its library entry, and the PC zip's start script (cm-vr\assets).
 $appId = 'com.vrlightgunhub.confmiss'
 $appLabel = 'Confidential Mission VR'
-$appVersion = '1.2.3'
+$appVersion = '1.2.4'
 $appLauncher = 'com.flycast.emulator.CmStartActivity'
 $playCmd = 'Play Confidential Mission.cmd'
 
