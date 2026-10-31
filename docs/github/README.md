@@ -43,8 +43,9 @@ draws into a VR view.
 > and neither does this repository, apart from the banner above (a screenshot of the game,
 > © SEGA): you need your own copy of the game, the MAME set `confmiss`.
 
-Status: experimental. Made for the Quest 3 and played on it; Quest 3S, Quest 2, Quest Pro and
-PC VR headsets are not tested yet (see [The game](#the-game)).
+Status: experimental. Made for and played on Quest 3. The updated zoom and controller help
+were confirmed on Quest 3S; the captured defaults were software-verified. Quest 2, Quest Pro
+and PC VR runtime testing remain pending (see [The game](#the-game)).
 
 ---
 
@@ -105,7 +106,7 @@ rows: [Controls](#controls) and [The menu](#the-menu).
 <a id="install-on-the-quest"></a>
 ## 📦 Installation (Meta Quest)
 
-For Quest 3, 3S, 2 and Pro (Quest 3S, 2 and Pro: not tested yet, tell me how it runs).
+For Quest 3, 3S, 2 and Pro. Zoom and controller help were checked on Quest 3S; Quest 2 and Pro remain untested.
 
 > **⭐ The easiest way: [VR4ALL](https://github.com/vr4all-standalone/vr4all-standalone)** installs
 > the app and copies your game files in one go ([step 2](#2-install-with-vr4all-the-best-way)).
