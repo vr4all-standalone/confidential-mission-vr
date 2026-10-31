@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release v1.2.7](https://img.shields.io/badge/Release-v1.2.7_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release v1.2.12](https://img.shields.io/badge/Release-v1.2.12_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
@@ -13,13 +13,17 @@
 
 **[🌐 VR4ALL - Standalone VR Mod Installer](https://github.com/vr4all-standalone/vr4all-standalone)**
 
+[☕ Donate to VR4ALL](https://ko-fi.com/vr4all)
+
 </div>
 
 ---
 
-## Update v1.2.7
+## Update v1.2.12
 
-Validated automatic entry, full P1 red/P2 blue Arcade body and grip with grey details preserved, and a new gun-angle zero matching the old -10 degree pose. Legacy angles reset once; later adjustments persist. [Release notes](docs/releases/v1.2.7.md).
+Tap either grip to toggle the game's camera zoom, with a brief purple confirmation and matching controller help. Zoom starts Off each launch. This update also adds reticle sizing, Wider-view HUD size and Reset to defaults.
+
+The captured starting reticle is **Custom:20% minimum /45% maximum /6.5m shrink**. Existing saved choices stay intact; choose **Reset to defaults** to apply the preset. [Release notes](docs/releases/v1.2.12.md) · [Complete source ZIP](../../releases/latest/download/confidential-mission-vr-source.zip).
 
 ## 🕵️ Overview
 
