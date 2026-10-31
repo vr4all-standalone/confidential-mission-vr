@@ -28,8 +28,8 @@ namespace
 constexpr float Distance = 1.2f, BelowEyes = 0.1f;
 constexpr int Left = 0, Right = 1;
 
-const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Two players", "Laser", "Haptics",
-		"World size", "Panel distance", "Wider view", "How to play", "Open Service Menu", "Quit" };
+const char *const Labels[Rows] { "Resume", "Recenter", "Gun", "Gun angle", "Reload", "Two players", "Laser", "Reticle", "Reticle min size", "Reticle max size", "Reticle shrink distance", "Haptics",
+		"World size", "Panel distance", "HUD size", "Wider view", "Game zoom", "How to play", "Open Service Menu", "Reset to defaults", "Quit" };
 const char *const HapticsNames[4] { "Off", "Light", "Medium", "Strong" };
 // vr.Haptics' words, saved by the Haptics row (hapticsLevel() reads them, and 1.2's numbers)
 const char *const HapticsWords[4] { "off", "light", "medium", "strong" };
@@ -86,18 +86,18 @@ int gunAt(const std::vector<GunChoice>& choices)
 }
 
 bool stepper(int row) {
-	return row == Gun || row == GunAngle || row == Reload || row == Haptics || row == WorldSize || row == PanelDistance;
+	return row == Gun || row == GunAngle || row == Reload || row == Reticle || row == ReticleMinSize || row == ReticleMaxSize || row == ReticleShrinkDistance || row == Haptics || row == WorldSize || row == PanelDistance || row == HudSize;
 }
 // The rows a stick held left or right steps again and again (Input::repeat)
 bool repeats(int row) {
-	return row == GunAngle || row == WorldSize || row == PanelDistance;
+	return row == GunAngle || row == ReticleMinSize || row == ReticleMaxSize || row == ReticleShrinkDistance || row == WorldSize || row == PanelDistance || row == HudSize;
 }
 int gunAngle() {
 	return std::clamp((int)config::VrGunAngle, -GunAngleMax, GunAngleMax);
 }
 // (Two players too: either way, its other value)
 bool onOff(int row) {
-	return row == TwoPlayers || row == Laser || row == WiderView || row == HowToPlay;
+	return row == TwoPlayers || row == Laser || row == WiderView || row == GameZoom || row == HowToPlay;
 }
 
 std::string value(int row)
@@ -123,6 +123,14 @@ std::string value(int row)
 		return HandsNames[twoPlayerP1Hand()];
 	case Laser:
 		return config::VrLaser ? "On" : "Off";
+	case Reticle:
+        return vr::reticle::modeLabel(config::VrReticleMode);
+    case ReticleMinSize:
+        std::snprintf(s,sizeof(s),"%.0f%%",vr::reticle::minimum(config::VrReticleMinSize)*100.f);return s;
+    case ReticleMaxSize:
+        std::snprintf(s,sizeof(s),"%.0f%%",vr::reticle::maximum(config::VrReticleMaxSize)*100.f);return s;
+    case ReticleShrinkDistance:
+        std::snprintf(s,sizeof(s),"%.1f m",vr::reticle::distance(config::VrReticleShrinkDistance));return s;
 	case Haptics:
 		return HapticsNames[hapticsLevel()];
 	case WorldSize:
@@ -131,8 +139,12 @@ std::string value(int row)
 	case PanelDistance:
 		std::snprintf(s, sizeof(s), "%.0f", (float)config::VrHudDepth);
 		return s;
+	case HudSize:
+        std::snprintf(s,sizeof(s),"%.0f%%",vr::hud::size(config::VrHudSize)*100.f);return s;
 	case WiderView:
 		return std::string(config::VrWiden ? "On" : "Off") + (config::VrWiden != widenAtStart ? " (next start)" : "");
+	case GameZoom:
+		return gameZoomOn()?"On":"Off";
 	case HowToPlay:
 		return howToPlayOn() ? "On" : "Off";
 	case ServiceMenu:
@@ -165,7 +177,7 @@ RowsPanel panel()
 		p.rows.push_back(r);
 	}
 	// (the font has no menu button sign)
-	p.footer = "Point and pull the trigger, or stick and A.   Menu or B: back to the game";
+	p.footer = selected == GameZoom || selected == HowToPlay || howToPlayOn() ? "During gameplay: tap either grip to toggle zoom. Starts Off." : selected == HudSize ? "HUD size: Wider gameplay only. Original view stays at 100%." : "Point and pull the trigger, or stick and A.   Menu or B: back to the game";
 	return p;
 }
 
@@ -234,6 +246,24 @@ void change(int row, int dir, int hand)
 		config::VrLaser.set(!config::VrLaser);
 		config::saveBool("config", "vr.Laser", config::VrLaser);
 		break;
+	case Reticle:
+        config::VrReticleMode.set(vr::reticle::nextMode(config::VrReticleMode,dir));
+        config::saveInt("config","vr.ReticleMode",config::VrReticleMode);break;
+    case ReticleMinSize:
+    {
+        const float value=std::clamp(std::round(vr::reticle::minimum(config::VrReticleMinSize)*100.f)+dir,5.f,100.f)/100.f;
+        config::VrReticleMinSize.set(value);config::saveFloat("config","vr.ReticleMinSize",value);break;
+    }
+    case ReticleMaxSize:
+    {
+        const float value=std::clamp(std::round(vr::reticle::maximum(config::VrReticleMaxSize)*100.f)+dir*5.f,25.f,300.f)/100.f;
+        config::VrReticleMaxSize.set(value);config::saveFloat("config","vr.ReticleMaxSize",value);break;
+    }
+    case ReticleShrinkDistance:
+    {
+        const float value=std::clamp(std::round(vr::reticle::distance(config::VrReticleShrinkDistance)*10.f)+dir,2.f,200.f)/10.f;
+        config::VrReticleShrinkDistance.set(value);config::saveFloat("config","vr.ReticleShrinkDistance",value);break;
+    }
 	case Haptics:
 	{
 		const int was = hapticsLevel();
@@ -266,9 +296,17 @@ void change(int row, int dir, int hand)
 		config::saveFloat("config", "vr.HudDepth", depth);
 		break;
 	}
+	case HudSize:
+    {
+        const float size=vr::hud::step(config::VrHudSize,dir);
+        config::VrHudSize.set(size);config::saveFloat("config","vr.HudSize",size);break;
+    }
 	case WiderView:
 		config::VrWiden.set(!config::VrWiden);
 		config::saveBool("config", "vr.Widen", config::VrWiden);
+		break;
+	case GameZoom:
+		setGameZoom(!gameZoomOn());
 		break;
 	case HowToPlay:
 		// on or off, the menu staying open (closing it turns it off: xr_host.h). The next frame the
@@ -284,6 +322,44 @@ void change(int row, int dir, int hand)
 	NOTICE_LOG(INPUT, "XR: menu %s -> %s", Labels[row], value(row).c_str());
 	if (row == Gun)
 		chosenGun();	// (its "XR: gun: ..." line at once)
+}
+
+void resetMenuSettings()
+{
+	setGameZoom(false);
+    // Only VR menu settings are reset. Game data and native operator settings remain intact.
+    config::setAutoSave(false);
+    config::VrGun.reset();
+    config::saveInt("config", "vr.Gun", config::VrGun.get());
+    config::VrGunFile.reset();
+    config::saveStr("config", "vr.GunFile", config::VrGunFile.get());
+    config::VrGunAngle.reset();
+    config::saveInt("config", "vr.GunAngle", config::VrGunAngle.get());
+    config::VrReload.reset();
+    config::saveInt("config", "vr.Reload", config::VrReload.get());
+    config::VrTwoPlayerP1Hand.reset();
+    config::saveStr("config", "vr.TwoPlayerP1Hand", config::VrTwoPlayerP1Hand.get());
+    config::VrLaser.reset();
+    config::saveBool("config", "vr.Laser", config::VrLaser.get());
+    config::VrReticleMode.reset();
+    config::saveInt("config", "vr.ReticleMode", config::VrReticleMode.get());
+    config::VrReticleMinSize.reset();
+    config::saveFloat("config", "vr.ReticleMinSize", config::VrReticleMinSize.get());
+    config::VrReticleMaxSize.reset();
+    config::saveFloat("config", "vr.ReticleMaxSize", config::VrReticleMaxSize.get());
+    config::VrReticleShrinkDistance.reset();
+    config::saveFloat("config", "vr.ReticleShrinkDistance", config::VrReticleShrinkDistance.get());
+    config::VrHaptics.reset();
+    config::saveStr("config", "vr.Haptics", config::VrHaptics.get());
+    config::VrWorldScale.reset();
+    config::saveFloat("config", "vr.WorldScale", config::VrWorldScale.get());
+    config::VrHudDepth.reset();
+    config::saveFloat("config", "vr.HudDepth", config::VrHudDepth.get());
+    config::VrHudSize.reset();
+    config::saveFloat("config", "vr.HudSize", config::VrHudSize.get());
+    config::VrWiden.reset();
+    config::saveBool("config", "vr.Widen", config::VrWiden.get());
+    config::setAutoSave(true);
 }
 
 // A row chosen (A, or a click away from a value row's halves): its action, or + on a value row.
@@ -306,6 +382,15 @@ void choose(int row, int hand)
             close();
         }
         break;
+	case ResetDefaults:
+		resetMenuSettings();
+		setHowToPlay(false, "reset to defaults");
+		chosenGun();
+		quitting = quitArmed = false;
+		gunsTurned = true;
+		fresh = true;
+		NOTICE_LOG(INPUT, "XR: menu Reset to defaults");
+		break;
 	case Quit:
 		if (quitArmed && seconds() - quitArmedAt <= QuitConfirmSeconds)
 		{

@@ -28,10 +28,11 @@ if(-not $focusBlock.Contains('resetStartGestures();')){throw 'Focus loss must re
 $syncBegin=$hostSource.IndexOf('if (!XR_SUCCEEDED(XR(xrSyncActions)', $update)
 $syncEnd=$hostSource.IndexOf('if (!boolAction(startAction, Right))', $syncBegin)
 if(-not $hostSource.Substring($syncBegin,$syncEnd-$syncBegin).Contains('resetStartGestures();')){throw 'Action sync failure must reset pending Start/service gestures'}
+$resetBlock=$resetBlock.Replace('zoomSession.reset();frameWorldZoom=1.f;','')
 $code+='void resetForNewGame(){'+$resetBlock+'}'
 $chooseBegin=$menuSource.IndexOf('void choose(')
 $serviceBegin=$menuSource.IndexOf('case ServiceMenu:', $chooseBegin)
-$serviceEnd=$menuSource.IndexOf('case Quit:', $serviceBegin)
+$serviceEnd=$menuSource.IndexOf('case ResetDefaults:', $serviceBegin)
 if($serviceBegin -lt 0 -or $serviceEnd -le $serviceBegin){throw 'Missing Service menu action'}
 $serviceCase=$menuSource.Substring($serviceBegin+'case ServiceMenu:'.Length,$serviceEnd-$serviceBegin-'case ServiceMenu:'.Length)
 $code+='void chooseServiceRow(){switch(0){case 0:'+$serviceCase+'}}'
@@ -46,7 +47,7 @@ $menuBegin=$hostSource.IndexOf('if (menuOpen)',$update)
 $sampleAt=$hostSource.IndexOf('sampleStartButtons(time, leftStart, rightStart,',$update)
 $prepAt=$hostSource.IndexOf('if (preparing)',$update)
 if($sampleAt -lt 0 -or $sampleAt -gt $menuBegin -or $sampleAt -gt $prepAt){throw 'Physical Start ownership must sample before menu/preparation returns'}
-$menuBlock=ProductionBlock $hostSource.Substring($update) 'if (menuOpen)'
+$menuBlock=(ProductionBlock $hostSource.Substring($update) 'if (menuOpen)').Replace('zoomSession.suspend(false);','')
 $code+='void menuFrame(bool leftStart,bool rightStart){XrTime time=0;bool menuEdge=false,skip=false,skipEdge=false;bool p1Start,p2Start;playerStartButtons(leftStart,rightStart,p1Start,p2Start);'+$menuBlock+'}'
 $code+='void frameCode(XrTime time, const bool tracked[2], float pulls[2], bool leftStart, bool skip, u32 dpad=0){bool p1Start,p2Start;playerStartButtons(leftStart,boolAction(startAction,Right)&&!startSwallow,p1Start,p2Start);'+$hostSource.Substring($begin,$end-$begin)+'lastP1=p1;if(dualWield)lastP2=p2;}'
 $code+=[regex]::Match($menuSource,'const char \*const HandsNames\[2\] \{[^;]+;').Value

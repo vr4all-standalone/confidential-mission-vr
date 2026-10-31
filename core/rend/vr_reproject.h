@@ -20,6 +20,7 @@
 
 struct rend_context;
 struct RenderPass;
+struct PolyParam;
 class MD5Sum;
 
 namespace vr
@@ -37,12 +38,16 @@ struct ReprojectParams
 	// Comfort zone in the headset (see comfortScale): metres per game unit, distance the
 	// pull-back starts at, closest distance (metres). All 0 when off.
 	glm::vec3 comfort { 0.f };
+	float worldZoom = 1.f; // world XY only; the frame's shared render/aim factor
+	float hudSize = 1.f; // only native gameplay overlay XY, never depth or UV
 };
 
 // The game's own field of view is widened (its code patched, see vr_reproject.cpp): it
 // then draws and culls with the wide view. (Its light gun hit test still uses the stock
 // view: see aimAtScene in vr/xr_host.cpp.)
 bool widensGameFov();
+// Preserve identified native sights/shot effects while scaling UI polygons.
+float hudScaleForPolygon(const PolyParam& polygon,float scale,bool tileClipped);
 // Online (GGPO): hashes what the VR mod writes into the game's memory (the profile, the
 // widened field of view, code patches and pokes), for the two sides to check they match.
 void netplayDigest(MD5Sum& md5);
@@ -93,8 +98,11 @@ struct GameCamera
 	float overlayW;
 	// tan of the half field of view the game's light-gun hit test uses (its stock view)
 	glm::vec2 stockTan;
+	float worldZoom = 1.f;
 };
 GameCamera gameCamera(const rend_context& ctx);
+// Guarded CM camera snapshot; neutral for unsupported/loading/native invalid data.
+float nativeCameraZoom();
 
 // What the game being played makes its own model from (hands_rip.h: the agent's hands and
 // pistol, the hero's staff), or nullptr when its profile has none.

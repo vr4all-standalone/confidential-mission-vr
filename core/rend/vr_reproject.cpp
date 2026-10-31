@@ -1,3 +1,4 @@
+#include "vr/game_zoom.h"
 /*
 	VR reprojection prototype (hotd2-vr). See vr_reproject.h.
 
@@ -64,17 +65,19 @@ static bool plausible(float v, float lo, float hi) {
 }
 
 // The game's focal length in DC pixels, per axis: viewport scale times projection scale.
+static bool readCameraFocal(glm::vec2& focal)
+{
+    if(config::VrProjAddr<=0 || config::VrViewportAddr<=0)return false;
+    focal=glm::vec2(
+        std::abs(readFloat(config::VrViewportAddr+ScaleX)*readFloat(config::VrProjAddr+ScaleX)),
+        std::abs(readFloat(config::VrViewportAddr+ScaleY)*readFloat(config::VrProjAddr+ScaleY)));
+    return plausible(focal.x,10.f,20000.f)&&plausible(focal.y,10.f,20000.f);
+}
+
 static glm::vec2 readGameFocal()
 {
-	if (config::VrProjAddr > 0 && config::VrViewportAddr > 0)
-	{
-		const glm::vec2 focal(
-				std::abs(readFloat(config::VrViewportAddr + ScaleX) * readFloat(config::VrProjAddr + ScaleX)),
-				std::abs(readFloat(config::VrViewportAddr + ScaleY) * readFloat(config::VrProjAddr + ScaleY)));
-		if (plausible(focal.x, 10.f, 20000.f) && plausible(focal.y, 10.f, 20000.f))
-			return focal;
-	}
-	return glm::vec2(config::VrFocal);
+    glm::vec2 focal;
+    return readCameraFocal(focal)?focal:glm::vec2(config::VrFocal);
 }
 
 //
@@ -548,8 +551,11 @@ static GunState gunSnaps[2];
 static std::atomic<u8> confirmedPlayers { 0 };
 static std::atomic<bool> startInputReady { false };
 
+static bool activeLargeView = false; // captured only when the actual game view starts
+
 static void applyGameProfile(Event, void *)
 {
+	activeLargeView = false;
 	confirmedPlayers = 0;
 	startInputReady = false;
 	std::fill(std::begin(fovLiterals), std::end(fovLiterals), 0u);
@@ -618,6 +624,7 @@ static void applyGameProfile(Event, void *)
 		}
 		NOTICE_LOG(RENDERER, "VR: camera profile for %s", prof.gameId);
 	}
+	activeLargeView = activeProfile != nullptr && config::VrFovScale > 1.f;
 }
 
 static struct GameProfileRegistration
@@ -1030,6 +1037,19 @@ static glm::vec2 shotDrawnAt(glm::vec2 gun, int fbWidth, int fbHeight)
 	return centre + (gun - centre) * readGameFocal() / stockFocal();
 }
 
+float nativeCameraZoom()
+{
+	const GameProfile *prof=activeProfile;
+	if(!prof || strcmp(prof->gameId," CONFIDENTIAL MISSION ---------")!=0 || !profileCodeThere(*prof))return 1.f;
+	const float inverse=readFloat(prof->stockFocalAddr);
+	const float hit=inverse>0.f?1.f/inverse:0.f;
+	glm::vec2 drawn;
+	if(!readCameraFocal(drawn))return 1.f;
+	const float reference=zoom::nativeReferenceFocal([](uint32_t offset){return ReadMem32_nommu(0x8C000000u+offset);});
+	return zoom::nativeFactor(reference,hit,drawn.x,
+		activeLargeView&&widensByCode()&&ReadMem16_nommu(0x8C000000u+prof->fovPatch[0].offset)==prof->fovPatch[0].patched);
+}
+
 GameCamera gameCamera(const rend_context& ctx)
 {
 	int dcWidth, dcHeight;
@@ -1039,6 +1059,7 @@ GameCamera gameCamera(const rend_context& ctx)
 	cam.tanHalf = cam.dcSize * 0.5f / readGameFocal();
 	cam.stockTan = cam.dcSize * 0.5f / stockFocal();
 	cam.overlayW = config::VrHudW;
+	cam.worldZoom = xr::gameZoomFactor();
 	return cam;
 }
 
@@ -2319,6 +2340,18 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 	}
 }
 
+float hudScaleForPolygon(const PolyParam& polygon,float scale,bool tileClipped)
+{
+    // Existing native tile clips are expressed in eye raster space. Preserve these
+    // polygons at100 rather than enlarge into an unmoved clip rectangle.
+    if(tileClipped)return 1.f;
+    if(activeProfile==nullptr||!polygon.pcw.Texture)return scale;
+    const u32 tex=polygon.tcw.TexAddr<<3;
+    for(u32 sight:activeProfile->sightTextures)if(sight!=0&&sight==tex)return 1.f;
+    for(u32 marker:markerTextures)if(marker!=0&&marker==tex)return 1.f;
+    return scale;
+}
+
 const ReprojectParams& update(const rend_context& ctx)
 {
 	int dcWidth, dcHeight;
@@ -2326,6 +2359,8 @@ const ReprojectParams& update(const rend_context& ctx)
 	const glm::vec2 halfSize(dcWidth * 0.5f, dcHeight * 0.5f);
 	const bool active = config::VrReproject && !ctx.isRTT;
 	params.comfort = glm::vec3(0.f);
+	params.worldZoom = 1.f; // RTT, flat and non-XR never inherit world zoom
+	params.hudSize = 1.f; // reset every pass and eye, including RTT and inactive views
 
 	const float zMax = ctx.fZ_max > 0.f && std::isfinite(ctx.fZ_max) ? ctx.fZ_max : 1.f;
 	const float zNear = NearFraction / zMax;
@@ -2340,6 +2375,9 @@ const ReprojectParams& update(const rend_context& ctx)
 
 	// The game may run with a widened view: rebuild with its live focal length, but
 	// present with the stock one so the framing and HUD size stay as designed.
+	params.hudSize = hud::effective(config::VrHudSize,activeLargeView,
+        playerInGame(0)||playerInGame(1),xr::serviceMenuActive(),
+        hud::native3DFrame(ctx,(float)config::VrHudW));
 	const glm::vec2 gameFocal = readGameFocal();
 	const glm::vec2 stockTan = halfSize / (float)config::VrFocal;
 	params.tanHalf = halfSize / gameFocal;
@@ -2353,6 +2391,7 @@ const ReprojectParams& update(const rend_context& ctx)
 	{
 		// In the headset: game camera at the player's head, viewed through this eye.
 		params.viewProj = eye->viewProj;
+		params.worldZoom = xr::gameZoomFactor();
 		params.comfort = comfortParams();
 		return params;
 	}

@@ -53,6 +53,8 @@ void requestPause(bool on);
 bool serviceMenuAvailable();
 bool openServiceMenu();
 bool serviceMenuExitAvailable();
+// Explicit Service state, including a pending entry before its native screen appears.
+bool serviceMenuActive();
 // Emulator-thread notification for native main-game boot or modal operator-menu return.
 void notifyServiceGameBoot();
 // Emulator::render, render thread, first thing: stops or starts the emulator as requestPause asked.
@@ -83,6 +85,10 @@ int twoPlayerP1Hand();
 // off and the hands get back what they held. Logs "XR: how to play on" / "... off (<why>)". Render thread.
 void setHowToPlay(bool on, const char *why);
 bool howToPlayOn();
+// Render-thread, session-only. Off on a new game/launch; never written to emu.cfg.
+bool gameZoomOn();
+void setGameZoom(bool enabled);
+float gameZoomFactor();
 // A shot's knock in a hand, at vr.Haptics' strength as it is now: the menu's sample of it.
 void sampleKnock(int hand);
 // vr.Haptics (the menu's Haptics) as a level: 0 off, 1 light, 2 medium (the default), 3 strong. 1.2's saved
@@ -99,6 +105,7 @@ inline void requestPause(bool) {}
 inline bool serviceMenuAvailable() { return false; }
 inline bool openServiceMenu() { return false; }
 inline bool serviceMenuExitAvailable() { return false; }
+inline bool serviceMenuActive() { return false; }
 inline void notifyServiceGameBoot() {}
 inline void applyPause() {}
 inline void recenter() {}
@@ -108,6 +115,9 @@ inline int p1Hand() { return 1; }
 inline int twoPlayerP1Hand() { return 0; }
 inline void setHowToPlay(bool, const char *) {}
 inline bool howToPlayOn() { return false; }
+inline bool gameZoomOn() { return false; }
+inline void setGameZoom(bool) {}
+inline float gameZoomFactor() { return 1.f; }
 inline void sampleKnock(int) {}
 inline int hapticsLevel() { return 2; }
 #endif

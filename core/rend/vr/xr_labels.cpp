@@ -47,22 +47,22 @@ struct Words
 const Words Kinds[] {
 	{ "/interaction_profiles/oculus/touch_controller", {
 		{ { controllers::Y, "Y - P2 Reload" }, { controllers::X, "X - P2 Start" }, { controllers::Menu, "Menu" },
-			{ controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/valve/index_controller", {
 		{ { controllers::Y, "B - P2 Reload" }, { controllers::X, "A - P2 Start" }, { controllers::Menu, "Pad squeeze - Menu" },
-			{ controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/htc/vive_controller", {
 		{ { controllers::Y, "Pad click - P2 Reload" }, { controllers::X, "Menu - P2 Start (hold: Menu)" },
-			{ controllers::Trigger, "Trigger - P2 Shoot" } },
-		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" } } } },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" } },
+		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" } } } },
 	{ "/interaction_profiles/microsoft/motion_controller", {
 		{ { controllers::Y, "Pad click - P2 Reload" }, { controllers::X, "Menu - P2 Start (hold: Menu)" },
-			{ controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 };
 // Two players in, vr.TwoPlayerP1Hand left: each hand's buttons its own player's, P1 on the left and P2 on the right (the same
@@ -70,22 +70,22 @@ const Words Kinds[] {
 const Words KindsP1Left[] {
 	{ "/interaction_profiles/oculus/touch_controller", {
 		{ { controllers::Y, "Y - P1 Reload" }, { controllers::X, "X - P1 Start" }, { controllers::Menu, "Menu" },
-			{ controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/valve/index_controller", {
 		{ { controllers::Y, "B - P1 Reload" }, { controllers::X, "A - P1 Start" }, { controllers::Menu, "Pad squeeze - Menu" },
-			{ controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/htc/vive_controller", {
 		{ { controllers::Y, "Pad click - P1 Reload" }, { controllers::X, "Menu - P1 Start (hold: Menu)" },
-			{ controllers::Trigger, "Trigger - P1 Shoot" } },
-		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" } } } },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" } },
+		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" } } } },
 	{ "/interaction_profiles/microsoft/motion_controller", {
 		{ { controllers::Y, "Pad click - P1 Reload" }, { controllers::X, "Menu - P1 Start (hold: Menu)" },
-			{ controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Trigger, "Trigger - P2 Shoot" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 };
 static_assert(std::size(KindsP1Left) == std::size(Kinds), "a P1-left set for each controller kind");
@@ -136,9 +136,9 @@ Layout layouts[2];
 struct Logged
 {
 	controllers::Button button;
-	bool ownModel, fromFile;
+	bool ownModel, fromFile, fromBundled;
 	glm::vec3 local;
-	bool operator==(const Logged& o) const { return button == o.button && ownModel == o.ownModel && fromFile == o.fromFile && local == o.local; }
+	bool operator==(const Logged& o) const { return button == o.button && ownModel == o.ownModel && fromFile == o.fromFile && fromBundled == o.fromBundled && local == o.local; }
 };
 std::vector<Logged> logged[2];
 // Each hand's set as last logged (once a session, unless the controller kind changes)
@@ -216,7 +216,7 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 	std::vector<float> ys;
 	float buttonsY = 0.f;
 	for (size_t i = 0; i < list.size(); i++)
-		if (list[i].button != controllers::Stick && !(stacked && list[i].button == controllers::Trigger))
+		if (list[i].button != controllers::Grip && list[i].button != controllers::Stick && !(stacked && list[i].button == controllers::Trigger))
 		{
 			float y = planeY(at[i]);
 			buttonsY += y;
@@ -246,6 +246,10 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 	};
 	for (size_t k = 0; k < column.size(); k++)
 		place(column[k], columnX, ys[k], side, room(columnX, ys[k]));
+	for(size_t i=0;i<list.size();i++)if(list[i].button==controllers::Grip){
+		const float x=planeX(at[i])-side*Gap;
+		place(i,x,planeY(at[i])-Pitch,-side,room(x,planeY(at[i])-Pitch));
+	}
 	float stickX = 0.f, stickY = 0.f;
 	for (size_t i = 0; i < list.size(); i++)
 		if (list[i].button == controllers::Stick)
@@ -315,19 +319,20 @@ void draw(const glm::mat4& viewProj, int hand, const glm::mat4& grip, const glm:
 	// the log: where each line ends on the controller, when that changes (not with the pose)
 	bool same = logged[hand].size() == count;
 	for (size_t i = 0; i < count && same; i++)
-		same = logged[hand][i] == Logged { list[i].button, points[i].ownModel, points[i].fromFile, points[i].local };
+		same = logged[hand][i] == Logged { list[i].button, points[i].ownModel, points[i].fromFile, points[i].fromBundled, points[i].local };
 	if (!same)
 	{
 		logged[hand].clear();
 		for (size_t i = 0; i < count; i++)
 		{
 			const controllers::LabelPoint& p = points[i];
-			logged[hand].push_back({ list[i].button, p.ownModel, p.fromFile, p.local });
+			logged[hand].push_back({ list[i].button, p.ownModel, p.fromFile, p.fromBundled, p.local });
 			const char *name = own::ButtonNames[list[i].button];
 			const std::string why = p.fromFile ? "from the file"
+					: p.fromBundled ? "bundled squeeze surface"
 					: p.ownModel ? std::string("built in: no \"") + name + "\" from " + controllers::ownSidecar(hand) : "built in";
 			NOTICE_LOG(RENDERER, "XR: labels: %s %s at (%.4f, %.4f, %.4f) in the %s pose (%s)", HandName[hand], name,
-					p.local.x, p.local.y, p.local.z, p.fromFile ? "aim" : "grip", why.c_str());
+					p.local.x, p.local.y, p.local.z, p.fromFile || p.fromBundled ? "aim" : "grip", why.c_str());
 		}
 	}
 	// the lines and their dots first, the labels over them

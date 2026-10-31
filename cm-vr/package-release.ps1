@@ -1,5 +1,5 @@
 <#
-  Builds Confidential Mission VR for the Quest and the PC and puts what goes on the Releases page
+  Builds Confidential Mission - VR4ALL for the Quest and the PC and puts what goes on the Releases page
   in dist\:
 
     confidential-mission-vr-quest.apk   the Quest app (Quest 3, 3S, 2, Pro)
@@ -11,7 +11,7 @@
   is made on the spot. Both are checked for that (the names in their file lists: discs, keys,
   rips, frame grabs, models made from a game), and the APK for its signer: signed with the public
   debug key (no release key, see make-release-key.ps1) it is refused, since anyone could sign an
-  "update" of the app with that key. The APK is also checked for being Confidential Mission VR
+  "update" of the app with that key. The APK is also checked for being Confidential Mission - VR4ALL
   (its package, version and label, and its start screen the only entry in the headset's library),
   and the zip for holding exactly its files, with a README.txt that names no other game.
 
@@ -29,7 +29,7 @@
   (core\deps\cgltf\LICENSE) in it; -CheckOnly checks that too.
 
   A release is built from a commit, the one its published source is: the working tree must be
-  clean (the gamesdk submodule's local change aside), and the APK's versionName (1.2.7-g<commit>),
+  clean (the gamesdk submodule's local change aside), and the APK's versionName (1.2.12-g<commit>),
   its libflycast.so and flycast.exe must all name HEAD (a -SkipBuild after a new commit fails
   that). -AllowDebugKey test builds skip both checks.
 
@@ -51,8 +51,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # The app: its application ID, label and version (shell\android-studio\flycast\build.gradle.kts and
 # src\vr\AndroidManifest.xml), its library entry, and the PC zip's start script (cm-vr\assets).
 $appId = 'com.vrlightgunhub.confmiss'
-$appLabel = 'Confidential Mission VR'
-$appVersion = '1.2.7'
+$appLabel = 'Confidential Mission - VR4ALL'
+$appVersion = '1.2.12'
 $appLauncher = 'com.flycast.emulator.CmStartActivity'
 $playCmd = 'Play Confidential Mission.cmd'
 
@@ -291,7 +291,7 @@ if ($digests -contains $debugDigest) {
 	}
 	Write-Host 'Signed with the public debug key: a test build, do not publish it.' -ForegroundColor Yellow
 }
-# the app it is: Confidential Mission VR's package, version and label, with its start screen the
+# the app it is: Confidential Mission - VR4ALL's package, version and label, with its start screen the
 # only entry in the headset's library (the VR activity is started from it) and no hub panel left
 $short = Invoke-Git rev-parse --short HEAD
 $wantVersion = [regex]::Escape("$appVersion-g") + $(if ($AllowDebugKey) { '[0-9a-f]+' } else { [regex]::Escape("$short") })
@@ -377,7 +377,7 @@ rend.NativeDepthInterpolation = yes
 vr.Xr = yes
 '@
 $readme = @'
-Confidential Mission VR, PC version
+Confidential Mission - VR4ALL, PC version
 
 Sega's light-gun game Confidential Mission (arcade, Sega NAOMI, 2000) in VR. The original game
 runs in the Flycast emulator; its 3D scenes are rebuilt around you and your controller is the
@@ -398,7 +398,9 @@ Y its reload) and player 2's in the right (A, B), as the game shows them; the me
 turns that round. Playing alone, either trigger takes the gun.
 Shooting away from the game's view reloads too. The left menu button opens the settings menu;
 a click on the left thumbstick recenters, one on the right thumbstick turns the laser off or
-on. The project's readme has the other controllers and the rest. Without a headset the game
+on. Tap and release either grip to toggle Game zoom; it starts Off on each launch.
+The menu has the same Game zoom toggle. Grip+stick size changes and slide reload do not toggle
+zoom. A purple message confirms the change. The project's readme has the other controllers and the rest. Without a headset the game
 plays in the window. Settings are in emu.cfg (vr.Xr = yes is VR).
 
 No game is included: you need your own copy. Unofficial fan project, not affiliated with

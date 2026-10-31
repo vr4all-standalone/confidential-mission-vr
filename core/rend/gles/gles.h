@@ -63,6 +63,8 @@ struct PipelineShader
 	GLint vrTan;
 	GLint vrOverlay;
 	GLint vrComfort;
+	GLint vrHudSize;
+	GLint vrWorldZoom;
 	GLint palette_index;
 	GLint ditherDivisor;
 	GLint texSize;
@@ -268,6 +270,8 @@ struct gl_ctx
 		GLint vrTan;
 		GLint vrOverlay;
 		GLint vrComfort;
+	GLint vrHudSize;
+	GLint vrWorldZoom;
 	} modvol_shader;
 
 	struct
@@ -452,6 +456,8 @@ extern struct ShaderUniforms_t
 	glm::mat4 vrMat;
 	glm::vec2 vrTan;
 	glm::vec4 vrOverlay;
+	float vrWorldZoom = 1.f;
+	float vrHudSize = 1.f;
 	glm::vec3 vrComfort;	// world scale, comfort start, comfort minimum (metres); 0: off
 	struct {
 		bool enabled;
@@ -493,6 +499,10 @@ extern struct ShaderUniforms_t
 			glUniform2fv(s->vrTan, 1, &vrTan[0]);
 		if (s->vrOverlay != -1)
 			glUniform4fv(s->vrOverlay, 1, &vrOverlay[0]);
+		if (s->vrWorldZoom != -1)
+			glUniform1f(s->vrWorldZoom,vrWorldZoom);
+		if (s->vrHudSize != -1)
+            glUniform1f(s->vrHudSize,1.f); // each polygon explicitly chooses UI scaling below
 		if (s->vrComfort != -1)
 			glUniform3fv(s->vrComfort, 1, &vrComfort[0]);
 

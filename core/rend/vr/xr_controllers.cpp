@@ -671,10 +671,24 @@ LabelPoint labelPoint(int hand, Button button, const glm::mat4& grip, const glm:
 		// the model draw() drew: room <- aim * ownToAim <- GLB
 		p.ownModel = true;
 		const int b = ownHasButton[hand][button] ? button : ownHasButton[hand][Twin[button]] ? Twin[button] : -1;
-		if (b >= 0)
+		const glm::vec3 *point = b >= 0 ? &ownButton[hand][b] : nullptr;
+		// The bundled Touch models predate the grip help label. Keep its endpoint on
+		// their actual squeeze surface even with an older/missing buttons.grip entry.
+		// Raw vertex 2149: (+/-0.014388, -0.024331, 0.029244); the GLB's +90X
+		// node is baked by loadGlb, so this point must be in that same scene space.
+		static const glm::vec3 BundledGrip[2] {
+			{ -0.014388f, -0.029244f, -0.024331f }, { 0.014388f, -0.029244f, -0.024331f }
+		};
+		if (point == nullptr && button == Grip
+				&& ownSidecarShown[hand] == std::string("bundled models/controllers/") + HandName[hand] + ".json")
 		{
-			p.fromFile = true;
-			p.local = glm::vec3(ownToAim[hand] * glm::vec4(ownButton[hand][b], 1.f));
+			point = &BundledGrip[hand];
+			p.fromBundled = true;
+		}
+		if (point != nullptr)
+		{
+			p.fromFile = b >= 0;
+			p.local = glm::vec3(ownToAim[hand] * glm::vec4(*point, 1.f));
 			p.room = glm::vec3(aim * glm::vec4(p.local, 1.f));
 			return p;
 		}

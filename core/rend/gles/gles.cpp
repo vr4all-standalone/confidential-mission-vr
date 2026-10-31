@@ -94,6 +94,8 @@ uniform highp mat4 vrMat;
 uniform highp vec2 vrTan;
 uniform highp vec4 vrOverlay;
 uniform highp vec3 vrComfort;
+uniform highp float vrHudSize;
+uniform highp float vrWorldZoom;
 #endif
 
 /* Vertex input */
@@ -141,7 +143,7 @@ void main()
 			// vr::dropShotMarker at TA parse time.)
 			{
 				highp vec2 ndc = vpos.xy / vpos.w;
-				vpos = vrMat * vec4(ndc * vrOverlay.xy * vrOverlay.z, -vrOverlay.z, 1.0);
+				vpos = vrMat * vec4(ndc * vrOverlay.xy * vrOverlay.z * vrHudSize, -vrOverlay.z, 1.0);
 			}
 		}
 		else
@@ -161,6 +163,7 @@ void main()
 				highp float ahead = smoothstep(0.55, 0.85, -p.z / len);
 				p *= mix(1.0, pull, ahead);
 			}
+			p.xy *= vrWorldZoom; // after comfort; native HUD and physical gun passes unchanged
 			vpos = vrMat * vec4(p, 1.0);
 		}
 	#endif
@@ -908,6 +911,8 @@ bool CompilePipelineShader(PipelineShader* s)
 	s->vrTan = glGetUniformLocation(s->program, "vrTan");
 	s->vrOverlay = glGetUniformLocation(s->program, "vrOverlay");
 	s->vrComfort = glGetUniformLocation(s->program, "vrComfort");
+	s->vrHudSize = glGetUniformLocation(s->program, "vrHudSize");
+	s->vrWorldZoom = glGetUniformLocation(s->program, "vrWorldZoom");
 	s->ditherDivisor = glGetUniformLocation(s->program, "ditherDivisor");
 	s->texSize = glGetUniformLocation(s->program, "texSize");
 
@@ -938,6 +943,8 @@ static void create_modvol_shader()
 	gl.modvol_shader.vrTan = glGetUniformLocation(gl.modvol_shader.program, "vrTan");
 	gl.modvol_shader.vrOverlay = glGetUniformLocation(gl.modvol_shader.program, "vrOverlay");
 	gl.modvol_shader.vrComfort = glGetUniformLocation(gl.modvol_shader.program, "vrComfort");
+	gl.modvol_shader.vrHudSize = glGetUniformLocation(gl.modvol_shader.program, "vrHudSize");
+	gl.modvol_shader.vrWorldZoom = glGetUniformLocation(gl.modvol_shader.program, "vrWorldZoom");
 	gl.modvol_shader.sp_ShaderColor = glGetUniformLocation(gl.modvol_shader.program, "sp_ShaderColor");
 	gl.modvol_shader.depth_scale = glGetUniformLocation(gl.modvol_shader.program, "depth_scale");
 
@@ -1216,6 +1223,8 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 		ShaderUniforms.vrTan = vrParams.tanHalf;
 		ShaderUniforms.vrOverlay = vrParams.overlay;
 		ShaderUniforms.vrComfort = vrParams.comfort;
+		ShaderUniforms.vrHudSize = vrParams.hudSize;
+		ShaderUniforms.vrWorldZoom = vrParams.worldZoom;
 	}
 
 	ShaderUniforms.depth_coefs[0] = 2.f / vtx_max_fZ;
@@ -1246,6 +1255,10 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 			glUniform2fv(gl.modvol_shader.vrTan, 1, &ShaderUniforms.vrTan[0]);
 		if (gl.modvol_shader.vrOverlay != -1)
 			glUniform4fv(gl.modvol_shader.vrOverlay, 1, &ShaderUniforms.vrOverlay[0]);
+		if (gl.modvol_shader.vrWorldZoom != -1)
+			glUniform1f(gl.modvol_shader.vrWorldZoom,ShaderUniforms.vrWorldZoom);
+		if (gl.modvol_shader.vrHudSize != -1)
+            glUniform1f(gl.modvol_shader.vrHudSize,1.f);
 		if (gl.modvol_shader.vrComfort != -1)
 			glUniform3fv(gl.modvol_shader.vrComfort, 1, &ShaderUniforms.vrComfort[0]);
 		glUniform1f(gl.modvol_shader.sp_ShaderColor, 1 - FPU_SHAD_SCALE.scale_factor / 256.f);

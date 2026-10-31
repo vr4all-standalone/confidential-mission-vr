@@ -20,6 +20,7 @@
 #include "xr_hands.h"
 #include "xr_labels.h"
 #include "xr_menu.h"
+#include "game_zoom.h"
 #include "xr_panel.h"
 #include "vr4all_splash.h"
 #include "service_controls.h"
@@ -194,6 +195,11 @@ bool p2StartWas, recenterWas, laserWas, menuWas;
 bool p2JoinPending; // input request only: the second gun waits for native player state
 StartReleaseGate startRelease;
 ServiceControls serviceControls;
+zoom::Session zoomSession;
+float frameWorldZoom=1.f;
+bool zoomInputAvailable=true;
+void setZoomInputAvailable(bool available){zoomInputAvailable=available;if(!available)zoomSession.suspend();}
+double zoomSeconds(){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
 std::atomic<uint64_t> serviceGameBootGeneration { 0 };
 // The VR menu (the settings menu, xr_menu.h). Open, the emulator is held stopped: frame() draws
 // the last game frame again for each new head pose, with the guns, the menu and its pointers, and
@@ -407,7 +413,7 @@ bool initActions()
 			|| !createAction(laserAction, "laser", "Laser on/off", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(hapticAction, "recoil", "Recoil", XR_ACTION_TYPE_VIBRATION_OUTPUT, true)
 			|| !createAction(stickAction, "stick", "Menus (D-pad), world size", XR_ACTION_TYPE_VECTOR2F_INPUT)
-			|| !createAction(gripAction, "grip", "Rack the slide; hold for world size", XR_ACTION_TYPE_FLOAT_INPUT, true))
+			|| !createAction(gripAction, "grip", "Tap: game zoom; hold: size or slide", XR_ACTION_TYPE_FLOAT_INPUT, true))
 		return false;
 	// Either trigger fires; shooting away from the screen reloads. A: player 1's Start. X: the
 	// left Start, which lets player 2 join (vr.DualWield) and is then player 2's Start. B and Y:
@@ -887,6 +893,7 @@ void pollEvents()
 				recenterRequested = true;
 			if (focused && !nowFocused)
 				focusLost = std::chrono::steady_clock::now();
+			if(!nowFocused)setZoomInputAvailable(false);
 			focused = nowFocused;
 			if (nowFocused)
 			{
@@ -1094,6 +1101,8 @@ bool aimAtScene(const rend_context& ctx, const glm::vec3& o, const glm::vec3& d,
 			// sight from the game camera, so the screen position stays the same)
 			const glm::vec3 p(ndc.x * w * cam.tanHalf.x, ndc.y * w * cam.tanHalf.y, -w);
 			pos[i] = p * comfortScale(p, comfort);
+			const auto xy=zoom::worldXY(pos[i].x,pos[i].y,cam.worldZoom);
+			pos[i].x=xy[0];pos[i].y=xy[1];
 			kind[i] = Scene;
 		}
 		// else: a vertex the game clamped to its near plane (W 0.001, huge x/y). Its
@@ -1193,7 +1202,9 @@ bool aimAtScene(const rend_context& ctx, const glm::vec3& o, const glm::vec3& d,
 	aimHow = nearest < 1e30f ? "3D" : "far";
 	constexpr float Far = 10000.f;
 	dist = nearest < Far ? nearest : Far;
-	const glm::vec3 hit = o + d * dist;
+	glm::vec3 hit = o + d * dist;
+	const auto nativeXY=zoom::worldXY(hit.x,hit.y,1.f/cam.worldZoom);
+	hit.x=nativeXY[0];hit.y=nativeXY[1];
 	if (hit.z > -1e-3f)
 		return false;
 	// The game tests gun hits with its stock view, not the widened one it draws with. With
@@ -1418,6 +1429,7 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 			const float reach = glm::distance(grabAt, handAt);
 			if (reach < GrabReach)
 			{
+				zoomSession.consume(hand); // a slide grab consumes this grip gesture
 				slide.held = true;
 				slide.racked = false;
 				slide.from = inGun.z - slide.back;
@@ -1433,6 +1445,7 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 		}
 		if (slide.held)
 		{
+			zoomSession.consume(hand);
 			slide.back = std::clamp(inGun.z - slide.from, 0.f, model->travel);
 			if (!slide.racked && slide.back > model->travel * 0.85f)
 			{
@@ -1676,8 +1689,11 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		view.shot = g.shotCount;
 		view.player = g.player;
 		view.menuPointer = false;
+		view.servicePointer = serviceControls.active;
+		view.reticleHead = headPose();
+		view.reticlePanelDistance = (float)config::VrHudDepth * s;
 		view.aimLine = config::VrLaser;
-		view.aimDot = config::VrLaser && (onScreen || aimOutside);
+		view.aimDot = (!serviceControls.active || config::VrLaser) && (onScreen || aimOutside);
 		view.aimOutside = aimOutside && !onScreen;
 		view.aimPoint = o + d * (dist > 0.f ? dist * s : 5.f);
 		// (a hand that holds its controller shows that instead: before play, the menu's How to play)
@@ -2098,6 +2114,7 @@ void drawServiceControls(const glm::mat4& viewProj)
 
 void updateLightgun(XrTime time)
 {
+	frameWorldZoom=gameZoomOn()&&!serviceMenuActive()?nativeCameraZoom():1.f;
 	for (Gun& g : guns)
 		g.visible = false;
 	pointerShown[Left] = pointerShown[Right] = false;
@@ -2107,6 +2124,7 @@ void updateLightgun(XrTime time)
 			lightgunSet(1, OffScreen, OffScreen, 0);
 		dualWield = p2JoinPending = false;
 		startRelease.reset();
+		zoomSession.reset();frameWorldZoom=1.f;
 		serviceControls.reset();
 		lightgunService(false);
 		guns[1] = Gun { 1, Left };
@@ -2136,6 +2154,7 @@ void updateLightgun(XrTime time)
 	const bool preparing = hands::preparing();
 	if (!focused)
 	{
+		zoomSession.suspend();
 		resetStartGestures();
 		// headset menu or app in the background: let go of everything
 		if (config::VrXrGun && !preparing && !menuOpen)
@@ -2157,6 +2176,7 @@ void updateLightgun(XrTime time)
 	if (!XR_SUCCEEDED(XR(xrSyncActions)(session, &sync)))
 	{
 		resetStartGestures();
+		zoomSession.suspend();
 		return;
 	}
 	if (!boolAction(startAction, Right))
@@ -2198,6 +2218,7 @@ void updateLightgun(XrTime time)
 	if (!skip) skipSwallow = false;
 	if (preparing)
 	{
+		zoomSession.suspend();
 		// B (or Y): not now, the arcade gun this time (the menu button does nothing now)
 		if (skip)
 			hands::skipPrep();
@@ -2224,13 +2245,17 @@ void updateLightgun(XrTime time)
 		NOTICE_LOG(INPUT, "XR: menu button");
 	if (menuOpen)
 	{
+		zoomSession.suspend(false);
 		updateMenu(time, menuEdge, skip, skipEdge);
 		return;
 	}
 	if (menuEdge)
+	{
+		zoomSession.suspend();
 		menu::open(headPose());
+	}
 	if (!config::VrXrGun)
-		return;
+	{zoomSession.suspend();return;}
 	// the left thumbstick click: recenter
 	const bool recenterButton = boolAction(recenterAction);
 	if (recenterButton && !recenterWas)
@@ -2271,6 +2296,7 @@ void updateLightgun(XrTime time)
 	XrSpaceLocation locations[2];
 	bool tracked[2];
 	locateHands(time, locations, tracked);
+
 	float pulls[2];
 	for (int hand : { Left, Right })
 		pulls[hand] = tracked[hand] ? floatAction(triggerAction, hand) : 0.f;
@@ -2409,6 +2435,18 @@ void updateLightgun(XrTime time)
 		noteHolds("start");
 	}
 	p1StartWas = p1Start;
+
+	if(slide.held)zoomSession.consume(1-guns[0].hand);
+	std::array<zoom::Hand,2> zoomHands{};
+	for(int hand:{Left,Right}){
+		const auto axis=stick; // size control already aggregates either stick
+		zoomHands[hand]={tracked[hand],floatAction(gripAction,hand)>.7f,
+			boolAction(hand==Left?recenterAction:laserAction)||boolAction(skipAction,hand),axis.x,axis.y};
+	}
+	const int zoomLayout=(dualWield?4:0)+guns[0].hand+2*twoPlayerP1Hand();
+	if(zoomSession.update(zoomHands,zoomInputAvailable&&!menuOpen&&!menuEdge&&!serviceMenuActive(),zoomLayout,zoomSeconds()))
+		NOTICE_LOG(INPUT,"XR: game zoom %s",gameZoomOn()?"on":"off");
+	frameWorldZoom=gameZoomOn()&&!serviceMenuActive()?nativeCameraZoom():1.f;
 
 	updateGun(guns[0], time, locations, tracked, pulls, p1, !dualWield);
 	if (dualWield)
@@ -2771,6 +2809,11 @@ bool serviceMenuAvailable()
     return config::VrXrGun && !config::GGPOEnable && gameStartLoaded();
 }
 
+bool serviceMenuActive()
+{
+    return serviceControls.active || serviceControls.pending;
+}
+
 bool serviceMenuExitAvailable()
 {
     return serviceControls.active && serviceStyle(settings.content.gameId)!=ServiceStyle::Naomi;
@@ -2907,6 +2950,10 @@ void setHowToPlay(bool on, const char *why)
 	noteHolds(on ? "how to play" : why);
 }
 
+bool gameZoomOn(){return zoomSession.enabled();}
+void setGameZoom(bool enabled){zoomSession.set(enabled,zoomSeconds());frameWorldZoom=enabled&&!serviceMenuActive()?nativeCameraZoom():1.f;}
+float gameZoomFactor(){return serviceMenuActive()?1.f:frameWorldZoom;}
+
 bool howToPlayOn()
 {
 	return menuHowToPlay;
@@ -2998,6 +3045,7 @@ void term()
 	guns[1] = Gun { 1, Left };
 	startRelease.reset();
 	serviceControls.reset();
+	zoomSession.reset();frameWorldZoom=1.f;
 	lightgunService(false);
 	dualWield = p2JoinPending = p2StartWas = recenterWas = laserWas = menuWas = p1StartWas = false;
 	startOwner[Left] = startOwner[Right] = -1;
@@ -3217,6 +3265,7 @@ bool frame()
 				views[1].fov.angleLeft * deg, views[1].fov.angleRight * deg, views[1].fov.angleUp * deg, views[1].fov.angleDown * deg,
 				chains[0].width, chains[0].height, worldScale(), (float)config::ExtraDepthScale);
 	}
+	setZoomInputAvailable(focused&&located&&frameState.shouldRender&&!splashVisible);
 	if (!splashVisible)
 		updateLightgun(frameState.predictedDisplayTime);
 	retryControllerModels();
@@ -3338,6 +3387,13 @@ bool frame()
 				for (int hand : { Left, Right })
 					if (controllerShown[hand] && holds(hand) == Holds::Controller)
 						labels::draw(viewProj, hand, controllerGrip[hand], controllerAim[hand], profiles[hand].c_str());
+		}
+		if(focused&&!darkRoom&&!serviceMenuActive()&&zoomSession.notice(zoomSeconds())){
+			int w=0,h=0;
+			const auto tex=textTexture(gameZoomOn()?"Zoom enabled":"Zoom disabled",40,theme::Accent,w,h);
+			if(tex&&h>0){const float d=1.8f,hy=d*.0225f;
+				auto model=headPose()*glm::translate(glm::mat4(1),glm::vec3(0,-.27f*d,-d));
+				drawTexture(eyeProjection(views[i].fov)*view,model,tex,hy*w/h,hy);}
 		}
         if (focused && !menuOpen && config::VrXrGun && serviceControls.active)
         {

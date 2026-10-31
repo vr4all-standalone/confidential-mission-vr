@@ -56,14 +56,16 @@ glm::vec3 anchor(int hand, Button button);
 // Where that button's label line ends on the controller that hand draws (render thread, after its
 // draw()): on the player's own model (controllers/<hand>.glb, xr_own.h) with a "buttons" point for it
 // in its sidecar (its own name, else its twin's: a and x, b and y), that point placed as the model is
-// (room <- aim * scale * inverse(aim node) <- GLB; local: in the aim pose); else (the built-in shape,
-// the runtime's model, or no point) grip * anchor() (local: anchor(), in the grip pose).
+// (room <- aim * scale * inverse(aim node) <- GLB; local: in the aim pose). The bundled Touch models
+// also have a squeeze-surface Grip fallback when that sidecar point is absent. Else (the built-in
+// shape, the runtime's model, or no point) grip * anchor() (local: anchor(), in the grip pose).
 struct LabelPoint
 {
 	glm::vec3 room { 0.f };
 	glm::vec3 local { 0.f };
 	bool ownModel = false;	// the hand draws the player's own model
 	bool fromFile = false;	// the point is its sidecar's
+	bool fromBundled = false;	// the bundled model's squeeze-surface fallback
 };
 LabelPoint labelPoint(int hand, Button button, const glm::mat4& grip, const glm::mat4& aim);
 // The sidecar of the hand's own model as the log names it (controllers/left.json), "" without one.
