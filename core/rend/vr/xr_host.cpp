@@ -422,7 +422,7 @@ bool initActions()
 			|| !createAction(skipAction, "skip", "Reload (the gun's B)", XR_ACTION_TYPE_BOOLEAN_INPUT, true)
 			|| !createAction(menuAction, "menu", "Settings menu", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(recenterAction, "recenter", "Recenter", XR_ACTION_TYPE_BOOLEAN_INPUT)
-			|| !createAction(laserAction, "laser", "Laser on/off", XR_ACTION_TYPE_BOOLEAN_INPUT)
+			|| !createAction(laserAction, "laser", "Laser and reticle on/off", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(hapticAction, "recoil", "Recoil", XR_ACTION_TYPE_VIBRATION_OUTPUT, true)
 			|| !createAction(stickAction, "stick", "Menus (D-pad), world size", XR_ACTION_TYPE_VECTOR2F_INPUT)
 			|| !createAction(gripAction, "grip", "Tap: game zoom; hold: size or slide", XR_ACTION_TYPE_FLOAT_INPUT, true))
@@ -432,7 +432,7 @@ bool initActions()
 	// the gun's B (the cabinet's second button, Confidential Mission's reload), B player 1's,
 	// Y player 2's once player 2 is in (before that, either is player 1's). The menu button on
 	// the left: the settings menu. The left thumbstick click recenters (held: the frame ring),
-	// the right one turns the laser off or on (kept). Thumbstick: the gun's D-pad (menus); with
+	// the right one toggles laser and reticle together (kept). Thumbstick: the gun's D-pad (menus); with
 	// a grip held, up/down sizes the world. The other hand's grip racks the game pistol's slide.
 	// With two players in and vr.TwoPlayerP1Hand left (the menu's Two players, the default) the players go the
 	// other way round, not the bindings: X player 1's Start, Y player 1's B, A player 2's Start, B player 2's
@@ -2299,15 +2299,20 @@ void updateLightgun(XrTime time)
 			haptic(Left, 0.08f, 0.8f);
 		}
 	}
-	// the right thumbstick click: the laser line and dot off or on, kept in emu.cfg (the line
-	// going or coming back says it; a tick in the hand too)
+	// The right thumbstick click switches both aiming aids off/on together. Keep
+	// their width/size tuning and save the paired choice in one INI write.
 	const bool laser = boolAction(laserAction);
 	if (laser && !laserWas)
 	{
-		config::VrLaser.set(!config::VrLaser);
+		const bool enabled = !(config::VrLaser || config::VrReticleMode != 2);
+		config::VrLaser.set(enabled);
+		config::VrReticleMode.set(enabled ? 1 : 2);
+		config::setAutoSave(false);
 		config::saveBool("config", "vr.Laser", config::VrLaser);
+		config::saveInt("config", "vr.ReticleMode", config::VrReticleMode);
+		config::setAutoSave(true);
 		haptic(Right, 0.03f, 0.4f);
-		NOTICE_LOG(INPUT, "XR: laser %s", config::VrLaser ? "on" : "off");
+		NOTICE_LOG(INPUT, "XR: laser and reticle %s", config::VrLaser ? "on" : "off");
 	}
 	laserWas = laser;
 	const glm::vec2 stick = stickAction2();

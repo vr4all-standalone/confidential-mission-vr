@@ -42,12 +42,12 @@ const Words Kinds[] {
 		{ { controllers::Y, "Y - Reload" }, { controllers::X, "X - Start" }, { controllers::Menu, "Menu" },
 			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" }, { controllers::Stick, "Stick - Recenter" } },
 		{ { controllers::B, "B - Reload" }, { controllers::A, "A - Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" },
-			{ controllers::Stick, "Stick - Laser" } } } },
+			{ controllers::Stick, "Stick - Laser/reticle" } } } },
 	{ "/interaction_profiles/valve/index_controller", {
 		{ { controllers::Y, "B - Reload" }, { controllers::X, "A - Start" }, { controllers::Menu, "Pad squeeze - Menu" },
 			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" }, { controllers::Stick, "Stick - Recenter" } },
 		{ { controllers::B, "B - Reload" }, { controllers::A, "A - Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" },
-			{ controllers::Stick, "Stick - Laser" } } } },
+			{ controllers::Stick, "Stick - Laser/reticle" } } } },
 	{ "/interaction_profiles/htc/vive_controller", {
 		{ { controllers::Y, "Pad click - Reload" }, { controllers::X, "Menu - Start (hold: Menu)" },
 			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" } },
@@ -56,7 +56,7 @@ const Words Kinds[] {
 		{ { controllers::Y, "Pad click - Reload" }, { controllers::X, "Menu - Start (hold: Menu)" },
 			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" }, { controllers::Stick, "Stick - Recenter" } },
 		{ { controllers::B, "Pad click - Reload" }, { controllers::A, "Menu - Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" },
-			{ controllers::Stick, "Stick - Laser" } } } },
+			{ controllers::Stick, "Stick - Laser/reticle" } } } },
 };
 // The log's order, the README's: Start, the reload, the shot, the stick, the menu (by Button: A, B, X, Y, Menu, Stick,
 // Trigger, Grip)
