@@ -20,6 +20,7 @@
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
 #include "udp_lightgun.h"
+#include "rend/vr/native_release.h"
 #include "types.h"
 #include "cfg/option.h"
 #include "emulator.h"
@@ -224,3 +225,8 @@ struct Registration
 } registration;
 
 }
+
+namespace { vr::xr::NativeReleaseGate nativeReleaseGate; }
+u64 lightgunRequireRelease(int player){return nativeReleaseGate.request(player);}
+bool lightgunReleaseObserved(int player,u64 ticket){return nativeReleaseGate.observed(player,ticket);}
+void lightgunAcknowledgeRelease(int player,bool released){nativeReleaseGate.consume(player,released);}

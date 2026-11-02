@@ -38,7 +38,7 @@ focused=false;draw();CHECK(draws==3);focused=true;service=true;draw();CHECK(draw
 now=4;choose();zoomSession.suspend(false);draw();CHECK(draws==4);zoomSession.suspend();draw();CHECK(draws==4);
 std::cout<<checks<<" actual menu and feedback drawing-policy checks PASS\\n";}
 '''
-assert labels.count('controllers::Grip, "Grip - Toggle zoom"')==16
+assert labels.count('controllers::Grip, "Grip - Toggle zoom"')==8
 assert 'list[i].button != controllers::Grip' in labels and 'planeX(at[i])-side*Gap' in labels
 assert 'setGameZoom(false);' in block(m,'void resetMenuSettings()')
 assert 'vr.GameZoom' not in m and 'vr.GameZoom' not in (r/'core/cfg/option.cpp').read_text()

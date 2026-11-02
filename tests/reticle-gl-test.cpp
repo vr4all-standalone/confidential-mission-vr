@@ -15,7 +15,7 @@ static void check(bool ok,const char* message){++checks;if(!ok){std::cerr<<"FAIL
 namespace config {
 // The rendering fixture drives the same numeric storage contract as Option/INI.
 int VrReticleMode=1;float VrReticleMinSize=.25f,VrReticleMaxSize=1.f,VrReticleShrinkDistance=6.f,VrHudDepth=40.f,VrWorldScale=.1f;
-bool VrLaser=true;
+bool VrLaser=true;int VrLaserWidth=1;
 }
 #include "policy.inc"
 enum class GunKind {Arcade,Staff};
@@ -85,5 +85,16 @@ int main(){
 #if MOK_EFFECTS
  gun.menuPointer=false;gun.aimDot=false;gun.kind=GunKind::Staff;gun.shot=1;gun.sinceShot=.04f;gun.restMuzzle={0,0,-1};gun.now=1;check(lit(render(2))>8,"None preserves native MOK staff pulse and golden motes");
 #endif
+ GunView beam;beam.aimLine=true;beam.aimDot=false;beam.restMuzzle={0,-.1f,-1};beam.aimPoint={.2f,.1f,-10};
+ for(bool menu:{false,true})for(int w=1;w<=4;++w){
+  config::VrLaserWidth=w;beam.menuPointer=menu;upload.clear();drawGunGlow(vp,{},beam,false);
+  check(upload.size()==6*sizeof(GlowVertex),"beam uploads exact original quad topology");
+  GlowVertex v[6];std::memcpy(v,upload.data(),sizeof(v));
+  check(std::abs(glm::length(v[1].pos-v[0].pos)*.5f-vr::laser::halfWidth(w))<2e-8f,"actual gameplay and menu laser vertices use selected width");
+  check(v[0].color.a==.55f&&v[1].color.a==.55f&&v[2].color.a==0.f&&v[5].color.a==0.f,"all widths preserve original .55-to-zero alpha");
+  check(std::abs(glm::length((v[2].pos+v[5].pos)*.5f-beam.restMuzzle)-3.f)<1e-6f,"all widths preserve original3m cap and aim endpoint direction");
+  check(v[0].color.r==(menu?theme::Accent.r:1.f),"menu beam previews width in purple and gameplay retains player red");
+ }
+ config::VrLaserWidth=1;
  std::cout<<checks<<" production OpenGL reticle checks passed\n";
 }

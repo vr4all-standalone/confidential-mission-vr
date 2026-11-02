@@ -41,7 +41,7 @@ def main():
   choose='void chooseReticle(int row,int dir){switch(row){'+menu[start:end]+'default:break;}}\n'
   start=menu.index('case Reticle:',menu.index('std::string value('));end=menu.index('case Haptics:',start)
   choose+='std::string reticleValue(int row){char s[32];switch(row){'+menu[start:end]+'default:return "";}}\n'
-  choose+=block(menu,'bool stepper(')+'\n'+block(menu,'bool repeats(')
+  choose+=(block(menu,'bool nativeRow(')+'\n' if 'bool nativeRow(' in menu else '')+block(menu,'bool stepper(')+'\n'+block(menu,'bool repeats(')
  policy=('#include "world_scale_settings.h"\n' if (ROOT/'core/rend/vr/world_scale_settings.h').exists() else '')+('#include "reticle_settings.h"\n' if has else '')
  (OUT/'under_test.inc').write_text('\n'.join((trim,ini_header,ini,'#include "cfg/cfg.h"',cfg,policy,code,enum,labels,choose)))
  env=dict(os.environ);env['PATH']='D:/msys64/mingw64/bin;'+env.get('PATH','')

@@ -23,3 +23,8 @@ void lightgunService(bool pressed, bool next=false, bool select=false);
 bool lightgunServiceActive();
 bool lightgunServiceNextActive();
 bool lightgunServiceSelectActive();
+
+// Original JVS digital polling acknowledges release; XR never guesses from elapsed frames.
+u64 lightgunRequireRelease(int player);
+bool lightgunReleaseObserved(int player,u64 ticket);
+void lightgunAcknowledgeRelease(int player,bool released);

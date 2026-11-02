@@ -24,6 +24,8 @@
 #include "xr_panel.h"
 #include "vr4all_splash.h"
 #include "service_controls.h"
+#include "player_ownership.h"
+#include "cm_game_options.h"
 #include "xr_sim.h"
 #include "xr_own.h"
 #include "hands_rip.h"
@@ -155,6 +157,7 @@ struct Gun
 	bool pullOutside;
 	XrTime lastShot;
 	unsigned shotCount;
+    u64 nativeReleaseTicket=0;
 	// The last flash was a round of the rifle's burst after the pull (a smaller kick); the flashes
 	// since the trigger was pulled (with the rifle logged once it's let go).
 	bool autoKick;
@@ -189,6 +192,17 @@ struct Gun
 	bool offArmed = false;
 };
 Gun guns[2] { { 0 }, { 1, Left } };
+PlayerOwnership playerOwnership;
+Gun& primaryGun(){return guns[playerOwnership.soloPlayer()];}
+void releaseGunInput(Gun& g){
+    lightgunSet(g.player,OffScreen,OffScreen,0);
+    g.triggerWas=g.triggerWait=true;g.pullOutside=false;
+    g.pullAt=g.heldAt=g.reloadAt=g.knockEnds=0;
+    g.shotsDue=g.autosDue=g.clicksDue=0;
+    g.freshPull=g.gunKnown=g.pointedDown=g.offArmed=false;
+    g.nativeReleaseTicket=0;
+}
+
 bool dualWield;
 XrTime dualSince;
 bool p2StartWas, recenterWas, laserWas, menuWas;
@@ -210,6 +224,7 @@ std::atomic<uint64_t> serviceGameBootGeneration { 0 };
 std::atomic<bool> menuOpen;		// (read by the app's resume on Android's main thread)
 int pauseRequest = -1;
 bool menuFresh, redrawLogged;
+bool nativeOptionsWasBusy=false;
 bool skipWas, skipSwallow, startSwallow;
 #ifndef __ANDROID__
 bool quitPending;
@@ -991,7 +1006,7 @@ void updateOrigin(bool tracked)
 		menu::place(headPose());
 }
 
-// Möller-Trumbore; returns the distance along the ray, or a negative value for a miss.
+// MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¶ller-Trumbore; returns the distance along the ray, or a negative value for a miss.
 float rayTriangle(const glm::vec3& o, const glm::vec3& d, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c)
 {
 	const glm::vec3 e1 = b - a, e2 = c - a;
@@ -1306,6 +1321,17 @@ glm::vec2 stickAction2()
 	return glm::vec2(stick.currentState.x, stick.currentState.y);
 }
 
+glm::vec2 stickActionHand(int hand)
+{
+	XrActionStateGetInfo info { XR_TYPE_ACTION_STATE_GET_INFO };
+	info.action = stickAction;
+	info.subactionPath = handPaths[hand];
+	XrActionStateVector2f stick { XR_TYPE_ACTION_STATE_VECTOR2F };
+	if (!XR_SUCCEEDED(XR(xrGetActionStateVector2f)(session, &info, &stick)) || !stick.isActive)
+		return glm::vec2(0.f);
+	return glm::vec2(stick.currentState.x, stick.currentState.y);
+}
+
 // The light gun's D-pad from a thumbstick, with some hysteresis: pushed past 60%,
 // let go below 40%. Returns the lightgunSet bits (up 8, down 16, left 32, right 64).
 u32 dpadFromStick(const glm::vec2& stick)
@@ -1360,7 +1386,7 @@ bool adjustWorldSize(XrTime time, const glm::vec2& stick)
 		NOTICE_LOG(RENDERER, "XR: world size %.4f m per game unit", (float)config::VrWorldScale);
 	}
 	// the size of whichever pistol is drawn (player 1's)
-	const bool game = gameGun(handGun(guns[0].player));
+	const bool game = gameGun(handGun(primaryGun().player));
 	config::Option<float>& gunSize = game ? config::VrHandScale : config::VrGunScale;
 	const char *gunKey = game ? "vr.HandScale" : "vr.GunScale";
 	if (!vertical && std::abs(s.x) > 0.5f)
@@ -1404,7 +1430,7 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 	const HandsModel *model = handsModel();
 	const float dt = slide.time != 0 ? std::clamp((time - slide.time) * 1e-9f, 0.f, 0.1f) : 0.f;
 	slide.time = time;
-	GunView& gunView = guns[0].view;
+	GunView& gunView = primaryGun().view;
 	gunView.otherHand = false;
 	if (!tracked || model == nullptr)
 		slide.held = false;
@@ -1450,9 +1476,9 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 			if (!slide.racked && slide.back > model->travel * 0.85f)
 			{
 				slide.racked = true;
-				guns[0].reloadAt = time;
+				primaryGun().reloadAt = time;
 				haptic(hand, 0.025f, 0.8f);
-				haptic(guns[0].hand, 0.025f, 0.6f);
+				haptic(primaryGun().hand, 0.025f, 0.6f);
 				NOTICE_LOG(INPUT, "XR: slide racked (reload)");
 			}
 		}
@@ -1468,7 +1494,7 @@ void updateOtherHand(XrTime time, int hand, bool tracked, const XrSpaceLocation&
 		// home it goes, fast
 		slide.back = std::max(0.f, slide.back - dt * 1.5f);
 		if (slide.back == 0.f && slide.clack)
-			haptic(guns[0].hand, 0.02f, 0.7f);
+			haptic(primaryGun().hand, 0.02f, 0.7f);
 	}
 	if (slide.back == 0.f)
 		slide.clack = false;
@@ -1732,6 +1758,7 @@ void updateGun(Gun& g, XrTime time, const XrSpaceLocation *locations, const bool
 		g.triggerWait = true;
 		g.pullAt = 0;
 		g.shotsDue = g.autosDue = g.clicksDue = 0;
+        g.heldAt=g.knockEnds=0;g.gunKnown=g.freshPull=false;
 		g.offArmed = false;		// (the menu, or closing it pointing away, reloads nothing)
 		return;
 	}
@@ -1848,8 +1875,8 @@ void locateHands(XrTime time, XrSpaceLocation *locations, bool *tracked)
 // The gun in a hand, drawn this frame (nullptr: none)
 Gun *gunInHand(int hand)
 {
-	for (int i = 0; i < (dualWield ? 2 : 1); i++)
-		if (guns[i].visible && guns[i].hand == hand)
+	for (int i = 0; i < 2; i++)
+		if ((dualWield || i == playerOwnership.soloPlayer()) && guns[i].visible && guns[i].hand == hand)
 			return &guns[i];
 	return nullptr;
 }
@@ -1945,83 +1972,63 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 	if (config::VrXrGun)
 	{
 		const float none[2] {};
-		updateGun(guns[0], time, locations, tracked, none, 0, false, false);
-		if (dualWield)
-			updateGun(guns[1], time, locations, tracked, none, 0, false, false);
+		for(Gun& g:guns)if(dualWield||g.player==playerOwnership.soloPlayer())
+			updateGun(g,time,locations,tracked,none,0,false,false);
 	}
-	static bool aWas, pullWas[2];
-	static int stickWas;	// 0 at rest, 1 up, 2 down, 3 left, 4 right: pushed past 60%, let go below 40%
-	static XrTime repeatAt;	// held left or right: when it steps again (menu::Input::repeat)
-	menu::Input input {};
-	const bool a = boolAction(startAction, Right);
-	input.select = a && !aWas;
-	aWas = a;
-	const glm::vec2 stick = stickAction2();
-	int push = 0;
-	if (stickWas != 0 && glm::length(stick) >= 0.4f)
-		push = stickWas;
-	else if (std::abs(stick.y) >= std::abs(stick.x))
-		push = stick.y > 0.6f ? 1 : stick.y < -0.6f ? 2 : 0;
-	else
-		push = stick.x > 0.6f ? 4 : stick.x < -0.6f ? 3 : 0;
-	if (push != stickWas)
-	{
-		input.up = push == 1;
-		input.down = push == 2;
-		input.left = push == 3;
-		input.right = push == 4;
-		repeatAt = time + 400000000LL;
-	}
-	else if ((push == 3 || push == 4) && time >= repeatAt)
-	{
-		// held on the same push: again after 0.4 s, then every 0.1 s
-		input.left = push == 3;
-		input.right = push == 4;
-		input.repeat = true;
-		repeatAt = time + 100000000LL;
-	}
-	stickWas = push;
-	input.toggle = menuEdge;
-	input.back = skipEdge;
-	for (int hand : { Left, Right })
-	{
-		const float pull = tracked[hand] ? floatAction(triggerAction, hand) : 0.f;
-		const bool pulled = pullWas[hand] ? pull > 0.35f : pull > 0.6f;
-		menu::Input::Ray& ray = input.ray[hand];
-		ray.click = pulled && !pullWas[hand];
-		pullWas[hand] = pulled;
-		if (!originSet || !tracked[hand])
-			continue;
-		ray.valid = true;
-		if (const Gun *gun = gunInHand(hand))
-		{
-			ray.origin = gun->view.restMuzzle;
-			ray.dir = gun->view.restForward;
-		}
-		else
-		{
-			ray.origin = relativePosition(locations[hand].pose.position);
-			ray.dir = relativeRotation(locations[hand].pose.orientation) * glm::vec3(0.f, 0.f, -1.f);
-		}
-	}
+    static bool aWas[2]{},pullWas[2]{};
+    static int stickWas[2]{};
+    static XrTime repeatAt[2]{};
+    menu::Input input{}; input.perHand=true;
+    input.toggle=menuEdge;input.back=skipEdge;
+    for(int hand:{Left,Right}){
+        auto& buttons=input.hand[hand];
+        const bool a=tracked[hand]&&boolAction(startAction,hand);
+        buttons.select=a&&!aWas[hand];aWas[hand]=a;
+        const auto stick=tracked[hand]?stickActionHand(hand):glm::vec2(0.f);
+        int push=0;
+        if(stickWas[hand]!=0&&glm::length(stick)>=.4f)push=stickWas[hand];
+        else if(std::abs(stick.y)>=std::abs(stick.x))push=stick.y>.6f?1:stick.y<-.6f?2:0;
+        else push=stick.x>.6f?4:stick.x<-.6f?3:0;
+        if(push!=stickWas[hand]){
+            buttons.up=push==1;buttons.down=push==2;buttons.left=push==3;buttons.right=push==4;
+            repeatAt[hand]=time+400000000LL;
+        }else if((push==3||push==4)&&time>=repeatAt[hand]){
+            buttons.left=push==3;buttons.right=push==4;buttons.repeat=true;
+            repeatAt[hand]=time+100000000LL;
+        }
+        stickWas[hand]=push;
+        const float pull=tracked[hand]?floatAction(triggerAction,hand):0.f;
+        const bool pulled=pullWas[hand]?pull>.35f:pull>.6f;
+        auto& ray=input.ray[hand];ray.click=pulled&&!pullWas[hand];pullWas[hand]=pulled;
+        if(!originSet||!tracked[hand])continue;
+        ray.valid=true;
+        if(const Gun* gun=gunInHand(hand)){
+            ray.origin=gun->view.restMuzzle;ray.dir=gun->view.restForward;
+        }else{
+            ray.origin=relativePosition(locations[hand].pose.position);
+            ray.dir=relativeRotation(locations[hand].pose.orientation)*glm::vec3(0,0,-1);
+        }
+    }
 	if (menuFresh)
 	{
 		menuFresh = false;
 		input.toggle = input.back = input.select = input.up = input.down = input.left = input.right = input.repeat = false;
 		input.ray[Left].click = input.ray[Right].click = false;
+        input.hand[Left]={};input.hand[Right]={};
 	}
 	// B or A pressed in the menu goes no further than the menu: not to the game once it goes on
 	if (input.back)
 		skipSwallow = skip;
-	if (input.select)
+	if (input.hand[Left].select||input.hand[Right].select)
 		startSwallow = true;
 	menu::update(input);
 
 	for (int hand : { Left, Right })
 	{
 		const menu::Input::Ray& ray = input.ray[hand];
-		if (!ray.valid)
-			continue;
+		if(Gun* gun=gunInHand(hand)){gun->view.aimLine=gun->view.aimDot=false;}
+        if (!ray.valid || hand!=menu::pointerHand())
+            continue;
 		glm::vec3 at;
 		const bool onPanel = menu::pointer(hand, at);
 		Gun *gun = gunInHand(hand);
@@ -2034,8 +2041,8 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 			view.restMuzzle = ray.origin;
 			view.restForward = ray.dir;
 			view.now = time * 1e-9;
-			view.shot = guns[0].view.shot;	// (no new shot: no smoke)
-			view.player = guns[0].player;
+			view.shot = primaryGun().view.shot;	// (no new shot: no smoke)
+			view.player = primaryGun().player;
 			pointerShown[hand] = true;
 		}
 		view.menuPointer = true;
@@ -2050,23 +2057,14 @@ void updateMenu(XrTime time, bool menuEdge, bool skip, bool skipEdge)
 // A release inside the menu ends ownership; a genuinely held press keeps its player.
 int startButtonOwner(int hand)
 {
-	return startOwner[hand];
-}
-
-void playerStartButtons(bool leftStart, bool rightStart, bool& p1Start, bool& p2Start)
-{
-	const int hand1 = p1Hand();
-	const bool starts[2] { leftStart, rightStart };
-	for (int hand : { Left, Right })
-		startOwner[hand] = !starts[hand] ? -1 : startOwner[hand] >= 0 ? startOwner[hand] : hand == hand1 ? 0 : 1;
-	p1Start = (starts[Left] && startOwner[Left] == 0) || (starts[Right] && startOwner[Right] == 0);
-	p2Start = (starts[Left] && startOwner[Left] == 1) || (starts[Right] && startOwner[Right] == 1);
+    return playerOwnership.startOwner(hand);
 }
 
 // Sample raw buttons first so loading holds cannot become taps when ready changes.
 void resetStartGestures()
 {
     startRelease.reset();
+    playerOwnership.suspend();
     serviceControls.cancel();
     lightgunService(false);
 }
@@ -2082,7 +2080,22 @@ void sampleStartButtons(XrTime time, bool leftDown, bool rightDown, bool ready,
     if (!config::VrXrGun || config::GGPOEnable) serviceControls.reset();
     const bool left = startRelease.sample(Left, leftDown, ready && allowed);
     const bool right = startRelease.sample(Right, rightDown, ready && allowed);
-    playerStartButtons(left, right, p1Start, p2Start);
+    XrSpaceLocation ownerLocations[2]; bool ownerTracked[2];
+    locateHands(time, ownerLocations, ownerTracked);
+    PlayerOwnership::Input ownerInput;
+    ownerInput.start[Left]=left; ownerInput.start[Right]=right;
+    for(int hand:{Left,Right}){
+        ownerInput.tracked[hand]=ownerTracked[hand];
+        ownerInput.pull[hand]=ownerTracked[hand]?floatAction(triggerAction,hand):0.f;
+    }
+    ownerInput.known=player2PromptKnown()&&ready&&allowed&&emu.running();
+    ownerInput.roster=(playerInGame(0)?1u:0u)|(playerInGame(1)?2u:0u);
+    ownerInput.allowed=ready&&allowed&&!serviceControls.active;
+    ownerInput.canJoin=config::VrDualWield&&!config::GGPOEnable&&!serviceControls.active;
+    ownerInput.layout=twoPlayerP1Hand(); ownerInput.now=static_cast<uint64_t>(time);
+    const auto owned=playerOwnership.update(ownerInput);
+    p1Start=owned.start[0];p2Start=owned.start[1];
+    for(int hand:{Left,Right})startOwner[hand]=playerOwnership.startOwner(hand);
     const bool wasPending = serviceControls.pending;
     const bool wasHeld[2]{serviceControls.held[Left], serviceControls.held[Right]};
     serviceControls.update(time, leftDown, rightDown, allowed);
@@ -2123,12 +2136,15 @@ void updateLightgun(XrTime time)
 		if (dualWield || p2JoinPending)
 			lightgunSet(1, OffScreen, OffScreen, 0);
 		dualWield = p2JoinPending = false;
+		playerOwnership.reset();
 		startRelease.reset();
 		zoomSession.reset();frameWorldZoom=1.f;
 		serviceControls.reset();
 		lightgunService(false);
+		guns[0] = Gun { 0, Right };
 		guns[1] = Gun { 1, Left };
-		guns[0].triggerWas = true;
+		guns[0].triggerWas = guns[0].triggerWait = true;
+        guns[1].triggerWas = guns[1].triggerWait = true;
 		slide.held = false;
 		p2StartWas = true;	// a Start of player 2's still held doesn't join at once
 		// controllers in both hands again, with the labels (a How to play left on ends, with its line)
@@ -2154,17 +2170,12 @@ void updateLightgun(XrTime time)
 	const bool preparing = hands::preparing();
 	if (!focused)
 	{
-		zoomSession.suspend();
-		resetStartGestures();
-		// headset menu or app in the background: let go of everything
-		if (config::VrXrGun && !preparing && !menuOpen)
-			for (const Gun& g : guns)
-				lightgunSet(g.player, OffScreen, OffScreen, 0);
-		for (Gun& g : guns)
-		{
-			g.triggerWas = false;
-			g.pullAt = 0;	// (no click for a pull just before, on the first focused frame)
-		}
+        zoomSession.suspend();
+        menuFresh=true;
+        if(menuOpen){menu::Input empty{};empty.perHand=true;menu::update(empty);}
+        resetStartGestures();
+        // Do not replay a pre-focus burst or a held native trigger on return.
+        if(config::VrXrGun)for(Gun& g:guns)releaseGunInput(g);
 		leftHoldSince = leftTapUntil = 0;
 		leftHoldMenu = false;
 		return;
@@ -2175,11 +2186,14 @@ void updateLightgun(XrTime time)
 	sync.activeActionSets = &active;
 	if (!XR_SUCCEEDED(XR(xrSyncActions)(session, &sync)))
 	{
-		resetStartGestures();
-		zoomSession.suspend();
-		return;
+        resetStartGestures();
+        if(config::VrXrGun)for(Gun& g:guns)releaseGunInput(g);
+        menuFresh=true;
+        if(menuOpen){menu::Input empty{};empty.perHand=true;menu::update(empty);}
+        zoomSession.suspend();
+        return;
 	}
-	if (!boolAction(startAction, Right))
+	if (!boolAction(startAction, Left) && !boolAction(startAction, Right))
 		startSwallow = false;
 	// The left Start, and the settings menu just asked for (menuEdge). Where the menu is the left
 	// Start held 0.8 s (menuByHold), that hold is the menu, and a shorter press acts as the left
@@ -2298,159 +2312,83 @@ void updateLightgun(XrTime time)
 	locateHands(time, locations, tracked);
 
 	float pulls[2];
-	for (int hand : { Left, Right })
-		pulls[hand] = tracked[hand] ? floatAction(triggerAction, hand) : 0.f;
-	// Player 1's controller (p1Hand()): playing alone the right, its A player 1's Start and the left's X
-	// player 2's (it lets player 2 join); with two players in, the menu's Two players (vr.TwoPlayerP1Hand:
-	// the left by default). Each controller's Start and B are its own player's. The left Start's hold for
-	// the menu (menuByHold) stays the left's. A held from closing the VR menu is no Start until let go
-	// (startSwallow): the right's. A Start press stays the player's whose button it was when it was pressed,
-	// until it's let go (startOwner): the X that lets player 2 join goes on as player 2's Start (the game
-	// sees a whole press) and is no Start of player 1's, though the left is player 1's from then on by
-	// default; an A held through the join stays player 1's, not player 2's. So too when player 2 is out.
-	int hand1 = p1Hand(), hand2 = 1 - hand1;
-	// Joining takes both controllers (with one, player 2's Start does nothing) and a game
-	// that shows when player 2 is out again (its profile knows the prompt). Not online
-	// (GGPO): player 2 is the other player there and only this side's player 1 is sent, so
-	// there player 2's Start does nothing. P1 must already be in the native game.
-	const bool canJoin = config::VrDualWield && !config::GGPOEnable && !serviceControls.active && player2PromptKnown();
-	// X during boot is consumed, not queued. A fresh press after P1 starts sends
-	// only P2 Start; no gun or hand swap until the game acknowledges that player.
-	if (canJoin && playerInGame(0) && tracked[Left] && tracked[Right]
-			&& p2Start && !p2StartWas && !dualWield)
-	{
-		p2JoinPending = true;
-		dualSince = time;
-	}
-	if (p2JoinPending && (!canJoin || (time - dualSince > 4'000'000'000LL && !playerInGame(1))))
-	{
-		p2JoinPending = false;
-		lightgunSet(1, OffScreen, OffScreen, 0);
-	}
-	if (canJoin && p2JoinPending && playerInGame(1) && !dualWield)
-	{
-		p2JoinPending = false;
-		// the guns where the menu's Two players puts them: player 1's in the left by default (moving there
-		// from the right), player 2's in the other hand, which feels the join
-		const int pair1 = twoPlayerP1Hand();
-		dualWield = true;
-		dualSince = time;
-		if (guns[0].hand != pair1)
-		{
-			// (a trigger held through the move waits to be let go)
-			guns[0].hand = pair1;
-			guns[0].triggerWas = guns[0].triggerWait = true;
-			guns[0].pullAt = 0;
-			guns[0].pointedDown = guns[0].offArmed = false;
-		}
-		guns[1] = Gun { 1, 1 - pair1 };
-		// a trigger already held doesn't fire: it waits to be let go
-		guns[1].triggerWas = true;
-		guns[1].triggerWait = true;
-		slide.held = false;
-		haptic(1 - pair1, 0.05f, 0.6f);
-		NOTICE_LOG(INPUT, "XR: player 2 joins: a gun in each hand (player 1's in the %s)", pair1 == Right ? "right" : "left");
-		noteHolds("player 2 joins");
-	}
-	p2StartWas = p2Start;
-	if (dualWield && (!config::VrDualWield || config::GGPOEnable || !playerInGame(1)))
-	{
-		dualWield = false;
-		lightgunSet(1, OffScreen, OffScreen, 0);
-		NOTICE_LOG(INPUT, "XR: player 2 is out: one gun again");
-		noteHolds("player 2 out");
-	}
-	// player 1's controller as it is now, with player 2 in or out
-	hand1 = p1Hand();
-	hand2 = 1 - hand1;
-	// Two players changed in the menu with both players in (the menu has closed by now): the guns swap hands,
-	// each player keeping theirs and their game; a trigger held through it waits to be let go. (Changed
-	// playing alone, nothing moves: it's for the next join, above.)
-	if (dualWield && guns[0].hand != hand1)
-	{
-		for (Gun& g : guns)
-		{
-			g.hand = 1 - g.hand;
-			g.triggerWas = g.triggerWait = true;
-			g.pullAt = 0;
-			g.pointedDown = g.offArmed = false;
-		}
-		NOTICE_LOG(INPUT, "XR: the guns swap hands: player 1's in the %s", hand1 == Right ? "right" : "left");
-	}
-	// Player 2 joins as at the cabinet: with player 2's Start (vr.DualWield; the left controller's X), and
-	// the guns go where the menu's Two players says (above). Out again once the game asks for player 2 in its
-	// native player slot becomes inactive; the one gun stays in
-	// player 1's hand until a pull of the other's moves it.
-	Gun& gun = guns[0];
-	if (!dualWield)
-	{
-		// One gun: in the hand whose trigger is pulled while the gun hand's isn't, or the
-		// other one when the gun hand's controller is gone (asleep, battery).
-		const int otherHand = 1 - gun.hand;
-		if (!gun.triggerWas && ((tracked[otherHand] && !tracked[gun.hand]) || (pulls[otherHand] > 0.6f && pulls[gun.hand] < 0.35f)))
-		{
-			gun.hand = otherHand;
-			NOTICE_LOG(INPUT, "XR: the gun is in the %s hand", gun.hand == Right ? "right" : "left");
-			noteHolds("gun moves");
-		}
-	}
-
-	// The buttons that aren't the trigger. One gun: player 1's Start (player 2's only lets player 2
-	// join, above), either B too (the gun's B, bit 128: the cabinet's second button, which reloads in
-	// Confidential Mission). Two guns: each hand's are its player's. The D-pad (menus) is player 1's.
-	// (B held from closing the VR menu: not yet.)
-	u32 p1 = dpad, p2 = 0;
-	if (dualWield)
-	{
-		p1 |= (p1Start ? 4 : 0) | (!skipSwallow && boolAction(skipAction, hand1) ? 128 : 0);
-		p2 |= (p2Start ? 4 : 0) | (!skipSwallow && boolAction(skipAction, hand2) ? 128 : 0);
-	}
-	else
-		p1 |= (p1Start ? 4 : 0) | (skip && !skipSwallow ? 128 : 0);
-
-	if (p2JoinPending)
-		lightgunSet(1, OffScreen, OffScreen, p2Start ? 4 : 0);
+    for (int hand : { Left, Right })
+        pulls[hand] = tracked[hand]&&playerOwnership.triggerAllowed(hand)?floatAction(triggerAction,hand):0.f;
+    // Native player slots remain canonical; physical ownership follows fresh input.
+    const auto& ownership=playerOwnership.output();
+    const bool wasDual=dualWield;
+    dualWield=playerOwnership.dual();
+    p2JoinPending=playerOwnership.pendingPlayer()==1;
+    const int hand1=playerOwnership.hand(0),hand2=playerOwnership.hand(1);
+    for(Gun& g:guns){
+        const int wanted=playerOwnership.hand(g.player);
+        if(g.hand!=wanted||ownership.release[g.player]){
+            if(ownership.transfer[g.player])g.nativeReleaseTicket=lightgunRequireRelease(g.player);
+            g.hand=wanted;g.triggerWas=g.triggerWait=true;
+            g.pullAt=g.heldAt=g.reloadAt=0;
+            g.pointedDown=g.offArmed=g.pullOutside=false;
+            g.shotsDue=g.autosDue=g.clicksDue=0;g.freshPull=false;g.gunKnown=false;
+            lightgunSet(g.player,OffScreen,OffScreen,0);
+            slide.held=false;
+        }
+    }
+    if(wasDual!=dualWield)noteHolds(dualWield?"native dual acknowledged":"native solo");
+    u32 p1=p1Start?4u:0u,p2=p2Start?4u:0u;
+    const int solo=playerOwnership.soloPlayer();
+    if(dualWield){
+        p1|=dpad|(!skipSwallow&&boolAction(skipAction,hand1)?128u:0u);
+        p2|=!skipSwallow&&boolAction(skipAction,hand2)?128u:0u;
+    } else {
+        (solo==0?p1:p2)|=dpad|(skip&&!skipSwallow?128u:0u);
+        // A missing player's Start is sent without inventing a visible second gun.
+        lightgunSet(1-solo,OffScreen,OffScreen,solo==0?p2:p1);
+    }
 
 	// The game's first Start of player 1's or trigger pull: player 1 takes the gun (in the pull's hand,
 	// moved there above) and the controllers and labels go. (The menu's How to play is over by now: it
 	// ends with the menu, whose pulls are its own.) Before the guns' update: the gun is drawn, and the
 	// pull fires, in this very frame.
-	const bool pulled = (!guns[0].triggerWas && triggerHeld(guns[0], pulls[guns[0].hand]))
+	const bool pulled = (!primaryGun().triggerWas && triggerHeld(primaryGun(), pulls[primaryGun().hand]))
 			|| (dualWield && !guns[1].triggerWas && triggerHeld(guns[1], pulls[guns[1].hand]));
 	if (pulled && !p1Armed)
 	{
 		p1Armed = true;
 		noteHolds("shot");
 	}
-	else if (p1Start && !p1StartWas && !p1Armed)
-	{
-		// player 1's Start (A) puts the gun in player 1's hand (the right, playing alone), though the single
-		// gun went to the other one above (player 1's controller untracked then, the other tracked)
-		if (!dualWield && tracked[hand1] && guns[0].hand != hand1)
-		{
-			guns[0].hand = hand1;
-			NOTICE_LOG(INPUT, "XR: the gun is in the %s hand", hand1 == Right ? "right" : "left");
-		}
-		p1Armed = true;
-		noteHolds("start");
-	}
-	p1StartWas = p1Start;
+    else if ((p1Start||p2Start) && !p1StartWas && !p1Armed)
+    {
+        p1Armed=true;noteHolds("start");
+    }
+	p1StartWas = p1Start||p2Start;
 
-	if(slide.held)zoomSession.consume(1-guns[0].hand);
+	if(slide.held)zoomSession.consume(1-primaryGun().hand);
 	std::array<zoom::Hand,2> zoomHands{};
 	for(int hand:{Left,Right}){
 		const auto axis=stick; // size control already aggregates either stick
 		zoomHands[hand]={tracked[hand],floatAction(gripAction,hand)>.7f,
 			boolAction(hand==Left?recenterAction:laserAction)||boolAction(skipAction,hand),axis.x,axis.y};
 	}
-	const int zoomLayout=(dualWield?4:0)+guns[0].hand+2*twoPlayerP1Hand();
+	const int zoomLayout=(dualWield?4:0)+primaryGun().hand+2*twoPlayerP1Hand();
 	if(zoomSession.update(zoomHands,zoomInputAvailable&&!menuOpen&&!menuEdge&&!serviceMenuActive(),zoomLayout,zoomSeconds()))
 		NOTICE_LOG(INPUT,"XR: game zoom %s",gameZoomOn()?"on":"off");
 	frameWorldZoom=gameZoomOn()&&!serviceMenuActive()?nativeCameraZoom():1.f;
 
-	updateGun(guns[0], time, locations, tracked, pulls, p1, !dualWield);
-	if (dualWield)
-		updateGun(guns[1], time, locations, tracked, pulls, p2, false);
+    for(Gun& g:guns){
+        if(!dualWield&&g.player!=solo)continue;
+        const u32 extra=g.player==0?p1:p2;
+        const bool releasePending=g.nativeReleaseTicket&&!lightgunReleaseObserved(g.player,g.nativeReleaseTicket);
+        if(ownership.release[g.player]||releasePending){
+            const float none[2]{};
+            updateGun(g,time,locations,tracked,none,0,false,false);
+            lightgunSet(g.player,OffScreen,OffScreen,extra&4u);
+            // Keep neutral until an original JVS read consumed the release.
+            // Layout/focus/roster changes still require the physical trigger released.
+            if(g.nativeReleaseTicket)g.triggerWas=g.triggerWait=false;
+        }else {
+            g.nativeReleaseTicket=0;
+            updateGun(g,time,locations,tracked,pulls,extra,!dualWield);
+        }
+    }
 }
 
 // Left-eye image, every `step`th pixel, to a PPM file. Buffers are kept and the file goes
@@ -2858,9 +2796,35 @@ void applyPause()
 		return;
 	}
 #endif
-	if (menuOpen && emu.running())
-	{
-		// started again from elsewhere (a new game): the menu holds nothing any more, and a
+    // Keep the progress card visible while the original engine saves/reboots.
+    // Its own boot/loading phase must not revoke an already-running request.
+    const bool nativeBusy=cm::options::busy();
+    cm::options::context((gameStartLoaded()||nativeBusy)&&config::VrXrGun&&!config::GGPOEnable&&!hands::preparing(),
+        focused,serviceMenuActive());
+    const auto nativeOptions=cm::options::snapshot();
+    if(nativeOptions.busy){
+        nativeOptionsWasBusy=true;pauseRequest=-1;
+        if(!emu.running())emu.start();
+        return;
+    }
+    if(nativeOptionsWasBusy){
+        nativeOptionsWasBusy=false;pauseRequest=-1;
+        startRelease.reset();playerOwnership.suspend();startSwallow=skipSwallow=true;
+        for(Gun& g:guns)releaseGunInput(g);
+        if(nativeOptions.status==cm::options::Status::Complete){
+            menuOpen=false;menu::reset();newGame=true;
+        }else{
+            if(nativeOptions.serviceRecovery){
+                serviceControls.reset();serviceControls.active=true;
+                serviceControls.bootGeneration=serviceGameBootGeneration.load();
+            }
+            if(menuOpen&&emu.running())emu.stop();
+            menuFresh=true;
+        }
+    }
+    if (menuOpen && emu.running())
+    {
+        // started again from elsewhere (a new game): the menu holds nothing any more, and a
 		// Quit chosen in it (Android: on the way to the start screen) is over
 		menuOpen = false;
 		menu::reset();
@@ -2963,7 +2927,7 @@ Holds holds(int hand)
 {
 	if (menuHowToPlay || (hand != Left && hand != Right))
 		return Holds::Controller;
-	const bool gun = (dualWield && hand == guns[1].hand) || (p1Armed && hand == guns[0].hand);
+	const bool gun = dualWield ? (hand==guns[0].hand||hand==guns[1].hand) : (p1Armed&&hand==primaryGun().hand);
 	if (!gun)
 		return Holds::Controller;
 	// the game's cutscenes: the gun put away and nothing in its place, until play resumes
@@ -2979,7 +2943,7 @@ int twoPlayerP1Hand()
 
 int p1Hand()
 {
-	return dualWield ? twoPlayerP1Hand() : Right;
+	return playerOwnership.hand(0);
 }
 
 int hapticsLevel()
@@ -3039,10 +3003,12 @@ void term()
 	requestRefreshRate = nullptr;
 	setPerformanceLevel = nullptr;
 	sessionRunning = focused = drawingEye = viewsLogged = false;
+    nativeOptionsWasBusy=false;
 	sessionLost = exiting = false;
 	originSet = recenterRequested = false;
 	guns[0] = Gun { 0 };
 	guns[1] = Gun { 1, Left };
+	playerOwnership.reset();
 	startRelease.reset();
 	serviceControls.reset();
 	zoomSession.reset();frameWorldZoom=1.f;
@@ -3084,7 +3050,7 @@ bool frame()
 	// Not shown (yet): keep the emulator's frames moving without spinning. Paused by the VR menu
 	// there are none: what it queued before it stopped waits for it to go on again.
 	auto idle = [] {
-		if (menuOpen)
+		if (menuOpen && !cm::options::busy())
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		else
 			rend_vr_drain(10);
@@ -3121,7 +3087,7 @@ bool frame()
 	// for the hero's staff, it goes as fast as it can: it waits for each of its frames to be
 	// taken, so keep taking them for most of the headset's frame.
 	const bool preparing = hands::preparing();
-	if (menuOpen)
+	if (menuOpen && !cm::options::busy())
 	{
 		// Paused by the VR menu: the last frame shown is drawn again, from where the head is now.
 		if (!redrawLogged)
@@ -3388,6 +3354,7 @@ bool frame()
 					if (controllerShown[hand] && holds(hand) == Holds::Controller)
 						labels::draw(viewProj, hand, controllerGrip[hand], controllerAim[hand], profiles[hand].c_str());
 		}
+        if(menuOpen&&focused)menu::drawContact(eyeProjection(views[i].fov)*view);
 		if(focused&&!darkRoom&&!serviceMenuActive()&&zoomSession.notice(zoomSeconds())){
 			int w=0,h=0;
 			const auto tex=textTexture(gameZoomOn()?"Zoom enabled":"Zoom disabled",40,theme::Accent,w,h);

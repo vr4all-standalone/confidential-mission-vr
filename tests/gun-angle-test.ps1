@@ -46,7 +46,7 @@ $pose="struct TestView{glm::mat4 pose;glm::vec3 restMuzzle,restForward,aimPoint;
 $pose+=$update.Substring($tiltBegin,$tiltEnd-$tiltBegin)
 foreach($pattern in @('const glm::vec3 o =[^;]+;','const glm::vec3 d =[^;]+;','view\.pose =[^;]+;','view\.restMuzzle =[^;]+;','view\.restForward =[^;]+;','view\.aimPoint =[^;]+;')){$statement=[regex]::Match($update,$pattern).Value;if(-not $statement){throw "Missing pose statement $pattern"};$pose+="`n"+$statement}
 $menuRay=(Block $hostSource 'void updateMenu(')
-foreach($pattern in @('ray\.origin = gun->view\.restMuzzle;','ray\.dir = gun->view\.restForward;')){$pose+="`n"+[regex]::Match($menuRay,$pattern).Value}
+foreach($pattern in @('ray\.origin\s*=\s*gun->view\.restMuzzle;' ,'ray\.dir\s*=\s*gun->view\.restForward;' )){$pose+="`n"+[regex]::Match($menuRay,$pattern).Value}
 $pose+="`nreturn {tilt,view,ray};}"
 $underTest=@($trim,$iniHeader,$ini,$cfgHeader,$cfg,$policy,$configCode,$angleMenu,$pose)-join "`n"
 [IO.File]::WriteAllText((Join-Path $out 'under_test.inc'),$underTest,[Text.UTF8Encoding]::new($false))

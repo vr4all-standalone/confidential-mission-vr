@@ -1284,7 +1284,9 @@ if(NOT LIBRETRO)
 			core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h core/rend/vr/xr_own.cpp core/rend/vr/xr_own.h
 			core/rend/vr/xr_hands.cpp core/rend/vr/xr_hands.h
 			core/rend/vr/xr_labels.cpp core/rend/vr/xr_labels.h
-			core/rend/vr/xr_menu.cpp core/rend/vr/xr_menu.h
+			core/rend/vr/xr_menu.cpp
+		core/rend/vr/cm_game_options.cpp core/rend/vr/cm_game_options.h
+		core/rend/vr/xr_menu.h
 			core/rend/vr/xr_panel.cpp core/rend/vr/xr_panel.h
 			core/rend/vr/xr_sim.cpp core/rend/vr/xr_sim.h)
 		endif()
@@ -1483,7 +1485,9 @@ if(NOT LIBRETRO)
 				core/rend/vr/glb_mesh.cpp core/rend/vr/glb_mesh.h core/deps/cgltf/cgltf.h core/rend/vr/xr_own.cpp core/rend/vr/xr_own.h
 				core/rend/vr/xr_hands.cpp core/rend/vr/xr_hands.h
 				core/rend/vr/xr_labels.cpp core/rend/vr/xr_labels.h
-				core/rend/vr/xr_menu.cpp core/rend/vr/xr_menu.h
+				core/rend/vr/xr_menu.cpp
+		core/rend/vr/cm_game_options.cpp core/rend/vr/cm_game_options.h
+		core/rend/vr/xr_menu.h
 				core/rend/vr/xr_panel.cpp core/rend/vr/xr_panel.h
 				core/rend/vr/xr_sim.cpp core/rend/vr/xr_sim.h)
 		endif()

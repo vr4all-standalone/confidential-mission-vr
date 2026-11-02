@@ -29,6 +29,9 @@
 #include "input/haptic.h"
 #include "input/udp_lightgun.h"
 #include "rend/vr/service_controls.h"
+#ifdef USE_OPENXR
+#include "rend/vr/cm_game_options.h"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -1907,12 +1910,30 @@ void MIEImpl::handle_86_subcommand()
 				FILE* f = nowide::fopen(eeprom_file.c_str(), "wb");
 				if (f)
 				{
-					std::fwrite(eeprom, 1, sizeof(eeprom), f);
-					std::fclose(f);
-					INFO_LOG(MAPLE, "Saved EEPROM to %s", eeprom_file.c_str());
+                    const size_t written=std::fwrite(eeprom,1,sizeof(eeprom),f);
+                    bool saved=std::fclose(f)==0 && written==sizeof(eeprom);
+#ifdef USE_OPENXR
+                    if(saved&&vr::xr::cm::options::busy()) {
+                        // Verify the canonical original native file after close, never an alternate VR settings file.
+                        FILE* check=nowide::fopen(eeprom_file.c_str(),"rb");
+                        if(check) {
+                            std::array<u8,128> disk{};
+                            const size_t read=std::fread(disk.data(),1,disk.size(),check);
+                            const bool end=std::fgetc(check)==EOF;
+                            const bool closed=std::fclose(check)==0;
+                            saved=read==disk.size()&&end&&closed&&!std::memcmp(disk.data(),eeprom,disk.size());
+                        } else saved=false;
+                    }
+                    vr::xr::cm::options::notifyNativeSave(saved);
+#endif
+                    if(saved)INFO_LOG(MAPLE,"Saved EEPROM to %s",eeprom_file.c_str());
+                    else WARN_LOG(MAPLE,"EEPROM SAVE/READBACK FAILED to %s",eeprom_file.c_str());
 				}
 				else {
 					WARN_LOG(MAPLE, "EEPROM SAVE FAILED to %s", eeprom_file.c_str());
+#ifdef USE_OPENXR
+                    vr::xr::cm::options::notifyNativeSave(false);
+#endif
 				}
 			}
 
@@ -1931,6 +1952,9 @@ void MIEImpl::handle_86_subcommand()
 			reply(MDRS_JVSReply, sizeof(eeprom) / 4);
 			int size = sizeof(eeprom) - address;
 			memcpy(dma_buffer_out, eeprom + address, size);
+#ifdef USE_OPENXR
+            if(address<=44)vr::xr::cm::options::notifyNativeRead();
+#endif
 			dma_buffer_out += size;
 			*dma_count_out += size;
 		}
@@ -2249,6 +2273,15 @@ u32 jvs_io_board::handle_jvs_message(const u8 *buffer_in, u32 length_in, u8 *buf
                     player==0 && lightgunServiceActive(), NAOMI_TEST_KEY,
                     player==0 && lightgunServiceNextActive(), namco ? NAOMI_DOWN_KEY : NAOMI_SERVICE_KEY,
                     player==0 && lightgunServiceSelectActive(), enter);
+#ifdef USE_OPENXR
+            // Native settings own all cabinet inputs until original save/restart finishes.
+            // The VR menu remains visible, while the engine consumes only measured Test/Service pulses.
+            if (vr::xr::cm::options::busy()) {
+                std::fill(std::begin(buttons), std::end(buttons), 0);
+                const u32 native=vr::xr::cm::options::nativeButtons();
+                buttons[0]=(native&1u?NAOMI_TEST_KEY:0u)|(native&2u?NAOMI_SERVICE_KEY:0u);
+            }
+#endif
 			for (u32& button : buttons)
 			{
 				if ((button & (NAOMI_UP_KEY | NAOMI_DOWN_KEY)) == (NAOMI_UP_KEY | NAOMI_DOWN_KEY))
@@ -2268,6 +2301,13 @@ u32 jvs_io_board::handle_jvs_message(const u8 *buffer_in, u32 length_in, u8 *buf
 
 						u32 inputs[4];
 						read_digital_in(buttons, inputs);
+#ifdef USE_OPENXR
+                        vr::xr::cm::options::acknowledgeNativeButtons((buttons[0]&NAOMI_TEST_KEY?1u:0u)|(buttons[0]&NAOMI_SERVICE_KEY?2u:0u));
+#endif
+                    // A release counts only after this digital-input command consumed the snapshot.
+                    for (int player=0;player<2;++player)
+                        lightgunAcknowledgeRelease(player,(buttons[player]&(NAOMI_BTN0_KEY|NAOMI_RELOAD_KEY))==0);
+
 						JVS_OUT((inputs[0] & NAOMI_TEST_KEY) ? 0x80 : 0x00); // test, tilt1, tilt2, tilt3, unused, unused, unused, unused
 						LOGJVS("btns ");
 						for (int player = 0; player < buffer_in[cmdi + 1]; player++)

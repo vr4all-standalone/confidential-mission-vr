@@ -50,15 +50,25 @@ ram[100]=436.4f/320;ram[120]=0;CHECK(nativeCameraZoom()==1);ram[120]=436.4f/240;
 codeThere=false;CHECK(nativeCameraZoom()==1);codeThere=true;activeProfile=nullptr;CHECK(nativeCameraZoom()==1);
 std::cout<<checks<<" actual native camera boundary checks PASS\\n";}
 '''
-start=h.index('void updateLightgun(');a=h.index('\tGun& gun = guns[0];',start);b=h.index("\n\t// The buttons that aren't",a);movement=h[a:b]
+start=h.index('void updateLightgun(')
 p=h.index('\tconst int zoomLayout=',start);e=h.index('\n\tframeWorldZoom=',p);policy=h[p:e]
-ordered=movement+'\n'+policy if a<p else policy+'\n'+movement
-transitions='''constexpr int Left=0,Right=1;struct Gun{int hand=1;bool triggerWas=false;}guns[1];
-zoom::Session zoomSession;std::array<zoom::Hand,2> zoomHands;bool zoomInputAvailable=true,dualWield=false,menuOpen=false,menuEdge=false;
-bool tracked[2]{true,true};float pulls[2]{};
-bool serviceMenuActive(){return false;}int twoPlayerP1Hand(){return 0;}double zoomSeconds(){return 2.;}bool gameZoomOn(){return zoomSession.enabled();}void noteHolds(const char*){}
-void frame(){'''+ordered+'''}
-int main(){for(auto& hand:zoomHands)hand.tracked=true;frame();zoomHands[0].grip=true;frame();zoomHands[0].grip=false;pulls[0]=1;frame();CHECK(guns[0].hand==0);CHECK(!zoomSession.enabled());std::cout<<checks<<" coincident grip-release / actual gun-handoff checks PASS\\n";}
+# Use the real current physical ownership adapter and primary-gun selector. The
+# world zoom layout must consume an interrupted grip when ownership changes.
+a=h.index('    // Native player slots remain canonical;',start)
+b=h.index("\n\t// The game's first Start",a)
+movement=h[a:b]
+transitions='''#include "player_ownership.h"
+using XrTime=long long;using u32=unsigned;
+constexpr int Left=0,Right=1,OffScreen=-10000,skipAction=1;
+struct Gun{int player=0,hand=1;uint64_t nativeReleaseTicket=0;bool triggerWas=false,triggerWait=false,pullOutside=false,pointedDown=false,offArmed=false,freshPull=false,gunKnown=false;XrTime pullAt=0,heldAt=0,reloadAt=0;int shotsDue=0,autosDue=0,clicksDue=0;}guns[2]{{0,1},{1,0}};
+vr::xr::PlayerOwnership playerOwnership;uint64_t lightgunRequireRelease(int){return 1;}
+'''+block(h,'Gun& primaryGun()')+'''
+zoom::Session zoomSession;std::array<zoom::Hand,2> zoomHands;bool zoomInputAvailable=true,dualWield=false,menuOpen=false,menuEdge=false,p2JoinPending=false,p1Start=false,p2Start=false,skipSwallow=false,skip=false;
+struct{bool held=false;}slide;u32 dpad=0;
+bool boolAction(int,int){return false;}void lightgunSet(int,int,int,u32){}void noteHolds(const char*){}
+bool serviceMenuActive(){return false;}int twoPlayerP1Hand(){return 0;}double zoomSeconds(){return 2.;}bool gameZoomOn(){return zoomSession.enabled();}
+void frame(){'''+movement+'\n'+policy+'''}
+int main(){vr::xr::PlayerOwnership::Input in;in.allowed=in.known=true;in.tracked[0]=in.tracked[1]=true;playerOwnership.update(in);for(auto& hand:zoomHands)hand.tracked=true;frame();zoomHands[0].grip=true;frame();zoomHands[0].grip=false;in.pull[0]=1;playerOwnership.update(in);frame();CHECK(primaryGun().hand==0);CHECK(!zoomSession.enabled());std::cout<<checks<<" coincident grip-release / actual gun-handoff checks PASS\\n";}
 '''
 sampleStart=h.index('for(int hand:{Left,Right})',h.index('std::array<zoom::Hand,2> zoomHands{};',start))
 sample=h[sampleStart:h.index('\n\tconst int zoomLayout=',sampleStart)]

@@ -2361,6 +2361,7 @@ const ReprojectParams& update(const rend_context& ctx)
 	params.comfort = glm::vec3(0.f);
 	params.worldZoom = 1.f; // RTT, flat and non-XR never inherit world zoom
 	params.hudSize = 1.f; // reset every pass and eye, including RTT and inactive views
+	params.nativeRaster = glm::vec3(1.f, 1.f, 0.f); // no leak into RTT, flat or Service
 
 	const float zMax = ctx.fZ_max > 0.f && std::isfinite(ctx.fZ_max) ? ctx.fZ_max : 1.f;
 	const float zNear = NearFraction / zMax;
@@ -2393,6 +2394,25 @@ const ReprojectParams& update(const rend_context& ctx)
 		params.viewProj = eye->viewProj;
 		params.worldZoom = xr::gameZoomFactor();
 		params.comfort = comfortParams();
+		// Use CM's measured authored raster, not headset UV or the already-widened
+		// 640x480 raster. In cinematics both live focal terms include the lens
+		// patch, unlike gameplay; nativeFocal undoes that verified factor2 path.
+		if (activeProfile != nullptr
+			&& strcmp(activeProfile->gameId," CONFIDENTIAL MISSION ---------")==0
+			&& profileCodeThere(*activeProfile)
+			&& view::fadeActive(config::VrWidenMode,activeLargeView,xr::serviceMenuActive(),
+				hud::native3DFrame(ctx,(float)config::VrHudW)))
+		{
+			const float inverse = readFloat(activeProfile->stockFocalAddr);
+			const bool patched = widensByCode() && ReadMem16_nommu(0x8C000000u+activeProfile->fovPatch[0].offset)==activeProfile->fovPatch[0].patched;
+			// readGameFocal intentionally falls back for general rendering. That
+			// fallback cannot prove a native lens or original-raster Fade boundary.
+			glm::vec2 drawnFocal;
+			const float focal = readCameraFocal(drawnFocal)
+				? view::nativeFocal(inverse>0.f?1.f/inverse:0.f,drawnFocal.x,patched) : 0.f;
+			if (patched && focal>0.f)
+				params.nativeRaster = glm::vec3(halfSize/focal,1.f);
+		}
 		return params;
 	}
 

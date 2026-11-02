@@ -27,6 +27,7 @@
 #include "rend/vr/gun_angle_settings.h"
 #include "rend/vr/reticle_settings.h"
 #include "rend/vr/hud_size_settings.h"
+#include "rend/vr/view_settings.h"
 #include "hw/maple/maple_cfg.h"
 #ifdef LIBRETRO
 #include <libretro.h>
@@ -482,11 +483,15 @@ extern Option<std::string> VrWatchTex;
 #endif
 extern Option<bool> VrXrGun;
 extern Option<bool> VrWiden;
+using WidenModeOption = vr::view::ModeSetting<Option<int, false>, Option<bool>>;
+extern WidenModeOption VrWidenMode;
 extern Option<float> VrWorldScale;
 extern Option<float> VrXrResolution;
 extern Option<int> VrMsaa;
 extern Option<int> VrXrRefreshRate;
 extern Option<bool> VrLaser;
+using LaserWidthOption = vr::laser::WidthSetting<Option<int, false>>;
+extern LaserWidthOption VrLaserWidth;
 using ReticleModeOption = vr::reticle::ModeSetting<Option<int, false>>;
 using ReticleMinSizeOption = vr::reticle::MinimumSetting<Option<float, false>>;
 using ReticleMaxSizeOption = vr::reticle::MaximumSetting<Option<float, false>>;

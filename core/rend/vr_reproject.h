@@ -40,6 +40,8 @@ struct ReprojectParams
 	glm::vec3 comfort { 0.f };
 	float worldZoom = 1.f; // world XY only; the frame's shared render/aim factor
 	float hudSize = 1.f; // only native gameplay overlay XY, never depth or UV
+	// Original authored camera half-tangents; z enables scenery-only Fade.
+	glm::vec3 nativeRaster { 1.f, 1.f, 0.f };
 };
 
 // The game's own field of view is widened (its code patched, see vr_reproject.cpp): it

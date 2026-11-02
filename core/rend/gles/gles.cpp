@@ -96,6 +96,7 @@ uniform highp vec4 vrOverlay;
 uniform highp vec3 vrComfort;
 uniform highp float vrHudSize;
 uniform highp float vrWorldZoom;
+uniform highp vec3 vrNativeRaster;
 #endif
 
 /* Vertex input */
@@ -107,10 +108,16 @@ in highp vec2 in_uv;
 INTERPOLATION out highp vec4 vtx_base;
 INTERPOLATION out highp vec4 vtx_offs;
 out highp vec3 vtx_uv;
+#if VR_REPROJECT == 1 && DIV_POS_Z == 1
+out highp vec4 vtx_nativeRaster;
+#endif
 
 void main()
 {
 	highp vec4 vpos = ndcMat * in_pos;
+#if VR_REPROJECT == 1 && DIV_POS_Z == 1
+	vtx_nativeRaster = vec4(0.0); // HUD/known sights remain exempt
+#endif
 	vtx_base = in_base;
 	vtx_offs = in_offs;
 #if TARGET_GL == GLES2
@@ -148,6 +155,9 @@ void main()
 		}
 		else
 		{
+			// Perspective-correct native camera coordinates, before comfort and
+			// Game zoom. The original raster is [-1,1] in both axes.
+			vtx_nativeRaster = vec4(vpos.xy * vrTan / max(vrNativeRaster.xy,vec2(0.00001)),vpos.w,1.0);
 			highp vec3 p = vec3(vpos.xy * vrTan, -vpos.w);
 			// Comfort: what comes closer than vrComfort.y metres in front of you (a zombie in
 			// your face) is pulled back along the line of sight, smoothly, to no closer than
@@ -200,6 +210,10 @@ uniform lowp vec4 ditherDivisor;
 INTERPOLATION in highp vec4 vtx_base;
 INTERPOLATION in highp vec4 vtx_offs;
 in highp vec3 vtx_uv;
+#if VR_REPROJECT == 1 && DIV_POS_Z == 1
+uniform highp vec3 vrNativeRaster;
+in highp vec4 vtx_nativeRaster;
+#endif
 
 lowp float fog_mode2(highp float w)
 {
@@ -415,6 +429,18 @@ void main()
 	mediump vec4 dv = vec4(r, r, r, 1.) / ditherDivisor;
 	color = clamp(floor(color * 255. + dv) / 255., 0., 1.);
 #endif
+#endif
+#if VR_REPROJECT == 1 && DIV_POS_Z == 1
+	if (vrNativeRaster.z > 0.5 && vtx_nativeRaster.w > 0.5)
+	{
+		// Whole native interior is byte-identical. Outside only, a quarter of
+		// the full authored raster fades to black with rounded corners.
+		highp vec2 ndc = vtx_nativeRaster.xy / max(vtx_nativeRaster.z,0.00001);
+		highp vec2 outside = max(abs(ndc)-vec2(1.0),vec2(0.0))*0.5;
+		highp float visibility = 1.0-smoothstep(0.0,0.25,length(outside));
+		if (vtx_nativeRaster.z <= 0.0) visibility = 0.0;
+		color.rgb *= visibility; // preserve native alpha, depth, UV and blending
+	}
 #endif
 	gl_FragColor = color;
 }
@@ -838,6 +864,7 @@ public:
 		addConstant("pp_TriLinear", s->trilinear);
 		addConstant("pp_Palette", s->palette);
 		addConstant("DIV_POS_Z", s->divPosZ);
+		addConstant("VR_REPROJECT", s->divPosZ && config::VrReproject && !s->naomi2);
 		addConstant("DITHERING", s->dithering);
 
 		addSource(PixelCompatShader);
@@ -913,6 +940,7 @@ bool CompilePipelineShader(PipelineShader* s)
 	s->vrComfort = glGetUniformLocation(s->program, "vrComfort");
 	s->vrHudSize = glGetUniformLocation(s->program, "vrHudSize");
 	s->vrWorldZoom = glGetUniformLocation(s->program, "vrWorldZoom");
+	s->vrNativeRaster = glGetUniformLocation(s->program, "vrNativeRaster");
 	s->ditherDivisor = glGetUniformLocation(s->program, "ditherDivisor");
 	s->texSize = glGetUniformLocation(s->program, "texSize");
 
@@ -1225,6 +1253,7 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 		ShaderUniforms.vrComfort = vrParams.comfort;
 		ShaderUniforms.vrHudSize = vrParams.hudSize;
 		ShaderUniforms.vrWorldZoom = vrParams.worldZoom;
+		ShaderUniforms.vrNativeRaster = vrParams.nativeRaster;
 	}
 
 	ShaderUniforms.depth_coefs[0] = 2.f / vtx_max_fZ;

@@ -30,15 +30,8 @@ struct Label
 	const char *text;
 };
 
-// Each controller kind's labels by its interaction profile, each hand's from the top of its column
-// down, the stick's (above them) last: "<button> - <what it does>", the user's words (1.2) on Quest
-// Touch, the same jobs under each PC controller's own button names. The built-in shape is a Quest
-// controller's, so a PC controller's button points at the place doing the same job: Start at A (X
-// on the left), the reload at B (Y), the menu at the menu button. Before player 2 joins, the left
-// trigger shoots for player 1 (the one gun goes to the hand that pulls); the label still says P2,
-// the user's text. With two players in and vr.TwoPlayerP1Hand left (the menu's Two players, the default) the
-// same buttons name the other player (KindsP1Left): player 1's on the left, player 2's on the right. Roboto Bold, the panels' font, has no triple bar (U+2261): Touch's menu button
-// says "Menu".
+// Physical button names and generic jobs stay accurate through solo hand transfer.
+// Native player assignments are shown only in the explicit Two players setting.
 struct Words
 {
 	const char *profile;
@@ -46,49 +39,25 @@ struct Words
 };
 const Words Kinds[] {
 	{ "/interaction_profiles/oculus/touch_controller", {
-		{ { controllers::Y, "Y - P2 Reload" }, { controllers::X, "X - P2 Start" }, { controllers::Menu, "Menu" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+		{ { controllers::Y, "Y - Reload" }, { controllers::X, "X - Start" }, { controllers::Menu, "Menu" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - Reload" }, { controllers::A, "A - Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/valve/index_controller", {
-		{ { controllers::Y, "B - P2 Reload" }, { controllers::X, "A - P2 Start" }, { controllers::Menu, "Pad squeeze - Menu" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P1 Reload" }, { controllers::A, "A - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+		{ { controllers::Y, "B - Reload" }, { controllers::X, "A - Start" }, { controllers::Menu, "Pad squeeze - Menu" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "B - Reload" }, { controllers::A, "A - Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 	{ "/interaction_profiles/htc/vive_controller", {
-		{ { controllers::Y, "Pad click - P2 Reload" }, { controllers::X, "Menu - P2 Start (hold: Menu)" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" } },
-		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" } } } },
+		{ { controllers::Y, "Pad click - Reload" }, { controllers::X, "Menu - Start (hold: Menu)" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" } },
+		{ { controllers::B, "Pad click - Reload" }, { controllers::A, "Menu - Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" } } } },
 	{ "/interaction_profiles/microsoft/motion_controller", {
-		{ { controllers::Y, "Pad click - P2 Reload" }, { controllers::X, "Menu - P2 Start (hold: Menu)" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "Pad click - P1 Reload" }, { controllers::A, "Menu - P1 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" },
+		{ { controllers::Y, "Pad click - Reload" }, { controllers::X, "Menu - Start (hold: Menu)" },
+			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" }, { controllers::Stick, "Stick - Recenter" } },
+		{ { controllers::B, "Pad click - Reload" }, { controllers::A, "Menu - Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - Fire" },
 			{ controllers::Stick, "Stick - Laser" } } } },
 };
-// Two players in, vr.TwoPlayerP1Hand left: each hand's buttons its own player's, P1 on the left and P2 on the right (the same
-// buttons and order as Kinds)
-const Words KindsP1Left[] {
-	{ "/interaction_profiles/oculus/touch_controller", {
-		{ { controllers::Y, "Y - P1 Reload" }, { controllers::X, "X - P1 Start" }, { controllers::Menu, "Menu" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" },
-			{ controllers::Stick, "Stick - Laser" } } } },
-	{ "/interaction_profiles/valve/index_controller", {
-		{ { controllers::Y, "B - P1 Reload" }, { controllers::X, "A - P1 Start" }, { controllers::Menu, "Pad squeeze - Menu" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "B - P2 Reload" }, { controllers::A, "A - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" },
-			{ controllers::Stick, "Stick - Laser" } } } },
-	{ "/interaction_profiles/htc/vive_controller", {
-		{ { controllers::Y, "Pad click - P1 Reload" }, { controllers::X, "Menu - P1 Start (hold: Menu)" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" } },
-		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" } } } },
-	{ "/interaction_profiles/microsoft/motion_controller", {
-		{ { controllers::Y, "Pad click - P1 Reload" }, { controllers::X, "Menu - P1 Start (hold: Menu)" },
-			{ controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P1 Shoot" }, { controllers::Stick, "Stick - Recenter" } },
-		{ { controllers::B, "Pad click - P2 Reload" }, { controllers::A, "Menu - P2 Start" }, { controllers::Grip, "Grip - Toggle zoom" }, { controllers::Trigger, "Trigger - P2 Shoot" },
-			{ controllers::Stick, "Stick - Laser" } } } },
-};
-static_assert(std::size(KindsP1Left) == std::size(Kinds), "a P1-left set for each controller kind");
 // The log's order, the README's: Start, the reload, the shot, the stick, the menu (by Button: A, B, X, Y, Menu, Stick,
 // Trigger, Grip)
 constexpr int ReadingOrder[controllers::Buttons] { 0, 1, 0, 1, 4, 3, 2, 5 };
@@ -102,6 +71,7 @@ constexpr float Height = 0.016f;
 constexpr float Gap = 0.025f;
 constexpr float Pitch = 0.021f;
 constexpr float StickRise = 0.026f;
+constexpr float TriggerGap = 0.037f;
 constexpr float LineWidth = 0.0012f, Dot = 0.0024f;
 const glm::vec3 TextColour(0.96f);
 const glm::vec4 LineColour(0.92f, 0.92f, 0.92f, 0.85f);
@@ -145,11 +115,10 @@ std::vector<Logged> logged[2];
 const Words *setLogged[2] {};
 const char *const HandName[2] { "left", "right" };
 
-// The words for a profile, by player 1's controller now (p1Hand(), 0 left: the right playing alone and before
-// the game starts, the menu's Two players with two players in)
+// Generic physical-button help for each bound controller profile.
 const Words& wordsFor(const char *profile)
 {
-	const Words (&kinds)[std::size(Kinds)] = p1Hand() == 0 ? KindsP1Left : Kinds;
+	const auto& kinds = Kinds;
 	for (const Words& words : kinds)
 		if (profile != nullptr && !strcmp(profile, words.profile))
 			return words;
@@ -187,8 +156,8 @@ void facing(const glm::vec3& at, const glm::vec3& eye, const glm::vec3& fallback
 // Where one hand's labels go, seen from `eye`: a column beside the hand's outermost button (the
 // right hand's to its right as seen, the left's to its left), in the list's order, Pitch apart at
 // least and centred on their buttons' height; the stick's above the column's top, over the stick, and
-// the trigger's right on top of the stick's (1.2 round 2, the user's ask: not under A or X), its line to
-// its outer end, past the stick's. A list without a stick (the Vive wand's) keeps the trigger's in the column.
+// Trigger extends inward from its own anchor, opposite the outside button labels.
+// The accepted Stick, face-button and Grip layout remains unchanged.
 void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words, const glm::vec3& eye)
 {
 	layout.placed.clear();
@@ -206,9 +175,11 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 	auto planeY = [&](const glm::vec3& p) { return glm::dot(p - middle, up); };
 	auto room = [&](float x, float y) { return middle + across * x + up * y; };
 	const float side = hand == 1 ? 1.f : -1.f;
-	float outer = 0.f;
-	for (const glm::vec3& p : at)
+	float outer = 0.f, inner = 0.f;
+	for (const glm::vec3& p : at) {
 		outer = std::max(outer, side * planeX(p));
+        inner = std::max(inner, -side * planeX(p));
+    }
 	const float columnX = side * (outer + Gap);
 
 	const bool stacked = std::any_of(list.begin(), list.end(), [](const Label& l) { return l.button == controllers::Stick; });
@@ -245,7 +216,8 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 				toOuter ? room(x + alignX * hx + side * hx, y) : to });
 	};
 	for (size_t k = 0; k < column.size(); k++)
-		place(column[k], columnX, ys[k], side, room(columnX, ys[k]));
+		if(list[column[k]].button!=controllers::Trigger)
+            place(column[k], columnX, ys[k], side, room(columnX, ys[k]));
 	for(size_t i=0;i<list.size();i++)if(list[i].button==controllers::Grip){
 		const float x=planeX(at[i])-side*Gap;
 		place(i,x,planeY(at[i])-Pitch,-side,room(x,planeY(at[i])-Pitch));
@@ -260,10 +232,21 @@ void layOut(Layout& layout, int hand, const glm::mat4& grip, const Words& words,
 			stickX = x;
 			stickY = y;
 		}
-	if (stacked)
-		for (size_t i = 0; i < list.size(); i++)
-			if (list[i].button == controllers::Trigger)
-				place(i, stickX, stickY + Pitch, 0.f, glm::vec3(0.f), true);
+    // Opposite the outer face-button column, beside the real trigger anchor.
+    for(size_t i=0;i<list.size();i++)if(list[i].button==controllers::Trigger){
+        const float x=-side*(inner+TriggerGap);
+        float y=planeY(at[i]);
+        int w=0,h=0;textTexture(list[i].text,Px,TextColour,w,h);
+        const float hx=h?Height*.5f*w/h:0.f,centreX=x-side*hx;
+        // The accepted Grip legend also extends inward. Leave its geometry intact
+        // and lift Trigger just enough to keep the two plates distinct.
+        for(const auto& other:layout.placed){
+            const float ox=planeX(other.centre),oy=planeY(other.centre);
+            if(std::abs(centreX-ox)<hx+other.hx+.001f && std::abs(y-oy)<Height+.003f)
+                y=oy+Pitch;
+        }
+        place(i,x,y,-side,room(x,y));
+    }
 }
 
 // A quad facing `eye` at `centre`, its top towards the room's up.

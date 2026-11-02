@@ -26,7 +26,7 @@ def main():
  host=source('core/rend/vr/xr_host.cpp');start=host.index('view.player = g.player;');end=host.index(';',host.index('view.aimPoint =',start))+1
  (OUT/'endpoint.inc').write_text('void updateEndpoint(GunView& view,int player,bool onScreen,bool aimOutside,float dist,float s,glm::vec3 o,glm::vec3 d){struct {int player;}g{player};'+host[start:end]+'}\n')
  includes=''
- for name in ('reticle_settings.h','custom_reticle.h'):
+ for name in ('reticle_settings.h','custom_reticle.h','view_settings.h'):
   if (ROOT/'core/rend/vr'/name).exists(): includes+='#include "'+name+'"\n'
  (OUT/'policy.inc').write_text(includes+'\n#define MOK_EFFECTS '+str(int('static void addStaffMagic(' in g))+'\n#define NINJA_UNIT_POLICY '+str(int(ROOT.name=='ninja-assault-vr'))+'\n')
  env=dict(os.environ); env['PATH']='D:/msys64/mingw64/bin;'+env.get('PATH','')
