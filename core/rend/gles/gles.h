@@ -440,6 +440,8 @@ void gles_vr_present();
 bool gles_vr_showing_framebuffer();
 void gles_vr_draw_eye(int width, int height);
 const rend_context *gles_vr_frame();
+// Native scene generation; repeated eyes/XR/menu frames and RTT do not advance it.
+u64 gles_vr_frame_number();
 
 bool CompilePipelineShader(PipelineShader* s);
 extern const char* GouraudSource;

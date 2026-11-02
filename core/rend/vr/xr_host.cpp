@@ -206,6 +206,11 @@ float frameWorldZoom=1.f;
 bool zoomInputAvailable=true;
 void setZoomInputAvailable(bool available){zoomInputAvailable=available;if(!available)zoomSession.suspend();}
 double zoomSeconds(){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
+void refreshGameZoom(){
+    if(const rend_context* ctx=gles_vr_frame())
+        zoomSession.observeFrame(gles_vr_frame_number(),zoomCutsceneFrame(*ctx));
+    frameWorldZoom=gameZoomOn()&&!zoomSession.paused()&&!serviceMenuActive()?nativeCameraZoom():1.f;
+}
 std::atomic<uint64_t> serviceGameBootGeneration { 0 };
 // The VR menu (the settings menu, xr_menu.h). Open, the emulator is held stopped: frame() draws
 // the last game frame again for each new head pose, with the guns, the menu and its pointers, and
@@ -2128,7 +2133,7 @@ void drawServiceControls(const glm::mat4& viewProj)
 
 void updateLightgun(XrTime time)
 {
-	frameWorldZoom=gameZoomOn()&&!serviceMenuActive()?nativeCameraZoom():1.f;
+	refreshGameZoom();
 	for (Gun& g : guns)
 		g.visible = false;
 	pointerShown[Left] = pointerShown[Right] = false;
@@ -2372,7 +2377,7 @@ void updateLightgun(XrTime time)
 	const int zoomLayout=(dualWield?4:0)+primaryGun().hand+2*twoPlayerP1Hand();
 	if(zoomSession.update(zoomHands,zoomInputAvailable&&!menuOpen&&!menuEdge&&!serviceMenuActive(),zoomLayout,zoomSeconds()))
 		NOTICE_LOG(INPUT,"XR: game zoom %s",gameZoomOn()?"on":"off");
-	frameWorldZoom=gameZoomOn()&&!serviceMenuActive()?nativeCameraZoom():1.f;
+	refreshGameZoom();
 
     for(Gun& g:guns){
         if(!dualWield&&g.player!=solo)continue;
@@ -2916,7 +2921,8 @@ void setHowToPlay(bool on, const char *why)
 }
 
 bool gameZoomOn(){return zoomSession.enabled();}
-void setGameZoom(bool enabled){zoomSession.set(enabled,zoomSeconds());frameWorldZoom=enabled&&!serviceMenuActive()?nativeCameraZoom():1.f;}
+bool gameZoomPaused(){return gameZoomOn()&&zoomSession.paused();}
+void setGameZoom(bool enabled){zoomSession.set(enabled,zoomSeconds());refreshGameZoom();}
 float gameZoomFactor(){return serviceMenuActive()?1.f:frameWorldZoom;}
 
 bool howToPlayOn()
@@ -3358,7 +3364,7 @@ bool frame()
         if(menuOpen&&focused)menu::drawContact(eyeProjection(views[i].fov)*view);
 		if(focused&&!darkRoom&&!serviceMenuActive()&&zoomSession.notice(zoomSeconds())){
 			int w=0,h=0;
-			const auto tex=textTexture(gameZoomOn()?"Zoom enabled":"Zoom disabled",40,theme::Accent,w,h);
+			const auto tex=textTexture(gameZoomPaused()?"Zoom paused for cutscene":gameZoomOn()?"Zoom enabled":"Zoom disabled",40,theme::Accent,w,h);
 			if(tex&&h>0){const float d=1.8f,hy=d*.0225f;
 				auto model=headPose()*glm::translate(glm::mat4(1),glm::vec3(0,-.27f*d,-d));
 				drawTexture(eyeProjection(views[i].fov)*view,model,tex,hy*w/h,hy);}

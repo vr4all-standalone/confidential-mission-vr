@@ -169,7 +169,7 @@ void SetGPState(const PolyParam* gp,u32 cflip=0)
 	
 	glcache.UseProgram(CurrentShader->program);
     if(CurrentShader->vrHudSize!=-1)
-        glUniform1f(CurrentShader->vrHudSize,vr::hudScaleForPolygon(*gp,ShaderUniforms.vrHudSize,clipmode != TileClipping::Off));
+        glUniform1f(CurrentShader->vrHudSize,vr::hudScaleForPolygon(*gp,ShaderUniforms.vrHudSize,clipmode != TileClipping::Off,ShaderUniforms.vrWorldZoom));
 	if (CurrentShader->trilinear_alpha != -1)
 		glUniform1f(CurrentShader->trilinear_alpha, trilinear_alpha);
 	if (gpuPalette != 0)

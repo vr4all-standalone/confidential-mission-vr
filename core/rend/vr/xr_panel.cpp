@@ -458,12 +458,12 @@ void paintSettings(const SettingsPanel& panel)
 		{
 			for (int c=0;c<(int)controls.size();++c)
 			{
-				const bool chosen = c==row.choice;
-				card(controls[c],chosen ? row.dim ? glm::mix(inset,theme::Selection,.45f) : theme::Selection : inset,
-					chosen&&!row.dim?edge:theme::Line,10.f);
+				const bool chosen = c==row.choice, dim = row.dim || !row.canChoose(c);
+				card(controls[c],chosen ? dim ? glm::mix(inset,theme::Selection,.45f) : theme::Selection : inset,
+					chosen&&!dim?edge:theme::Line,10.f);
 				fitText(row.choices[c],27.f,(controls[c].x+controls[c].w*.5f)*SettingsWidth,
 					baseline(middle,27.f),controls[c].w*SettingsWidth-18.f,
-					row.dim?theme::Dim:chosen?theme::Text:theme::Muted,.5f);
+					dim?theme::Dim:chosen?theme::Text:theme::Muted,.5f);
 			}
 		}
 		else if (row.stepper)
@@ -720,7 +720,7 @@ SettingsHit settingsAt(const SettingsPanel& panel, glm::vec2 uv)
 		SettingsHit hit{SettingsHit::Kind::Row,row};
 		const auto choices=choiceRects(panel,row);
 		for(int choice=0;choice<(int)choices.size();++choice)
-			if(contains(choices[choice],uv)) { hit.choice=choice;return hit; }
+			if(contains(choices[choice],uv)) { if (!panel.rows[row].canChoose(choice)) return {}; hit.choice=choice;return hit; }
 		if (choices.empty() && panel.rows[row].stepper)
 			for (int direction : {-1,1})
 				if (contains(stepRect(panel,row,direction),uv)) { hit.direction=direction;return hit; }
@@ -767,6 +767,8 @@ void drawSettingsPanel(const glm::mat4& viewProj, const glm::mat4& model, const 
 		says+=char('0'+row.selected+row.dim*2+row.stepper*4+row.action*8);
 		append(std::to_string(row.choices.size()));
 		for(const auto& choice:row.choices) append(choice);
+        append(std::to_string(row.choiceEnabled.size()));
+        for (bool enabled : row.choiceEnabled) says += enabled ? '1' : '0';
 	}
 	bindPicture(settingsPicture,says,[&] { paintSettings(panel); });
 	const auto layout=settingsLayout();

@@ -1150,6 +1150,7 @@ void OpenGLRenderer::drawOSD()
 // and drawn per eye at the headset's rate, so head movement shows between game frames.
 static rend_context vrFrame;
 static bool vrFrameValid;
+static u64 vrFrameNumber; // advances only when a new native scene becomes visible
 // Some screens (menus, notices) are drawn by the CPU straight into the framebuffer, not
 // by the 3D chip. Those are shown on a flat screen in front of the player.
 static bool vrShowFramebuffer;
@@ -1510,6 +1511,7 @@ void gles_vr_present()
 	{
 	case VrPending::Frame:
 		std::swap(vrFrame, vrPending);
+		++vrFrameNumber;
 		vrFrameValid = true;
 		vrShowFramebuffer = false;
 		break;
@@ -1617,6 +1619,8 @@ void main()
 	bindVertexArray(0);
 	logVrScreenGlErrors();
 }
+
+u64 gles_vr_frame_number() { return vrFrameNumber; }
 
 const rend_context *gles_vr_frame() {
 	return vrFrameValid ? &vrFrame : nullptr;

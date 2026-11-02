@@ -52,7 +52,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # src\vr\AndroidManifest.xml), its library entry, and the PC zip's start script (cm-vr\assets).
 $appId = 'com.vrlightgunhub.confmiss'
 $appLabel = 'Confidential Mission - VR4ALL'
-$appVersion = '1.3.0'
+$appVersion = '1.3.1'
 $appLauncher = 'com.flycast.emulator.CmStartActivity'
 $playCmd = 'Play Confidential Mission.cmd'
 

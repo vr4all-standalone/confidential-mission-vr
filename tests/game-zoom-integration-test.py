@@ -51,7 +51,7 @@ codeThere=false;CHECK(nativeCameraZoom()==1);codeThere=true;activeProfile=nullpt
 std::cout<<checks<<" actual native camera boundary checks PASS\\n";}
 '''
 start=h.index('void updateLightgun(')
-p=h.index('\tconst int zoomLayout=',start);e=h.index('\n\tframeWorldZoom=',p);policy=h[p:e]
+p=h.index('\tconst int zoomLayout=',start);e=h.index('\n\trefreshGameZoom();',p);policy=h[p:e]
 # Use the real current physical ownership adapter and primary-gun selector. The
 # world zoom layout must consume an interrupted grip when ownership changes.
 a=h.index('    // Native player slots remain canonical;',start)

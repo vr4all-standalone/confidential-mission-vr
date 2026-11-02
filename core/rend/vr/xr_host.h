@@ -87,6 +87,8 @@ void setHowToPlay(bool on, const char *why);
 bool howToPlayOn();
 // Render-thread, session-only. Off on a new game/launch; never written to emu.cfg.
 bool gameZoomOn();
+// Requested On is retained while effective zoom is neutral in native cinematics.
+bool gameZoomPaused();
 void setGameZoom(bool enabled);
 float gameZoomFactor();
 // A shot's knock in a hand, at vr.Haptics' strength as it is now: the menu's sample of it.
@@ -116,6 +118,7 @@ inline int twoPlayerP1Hand() { return 0; }
 inline void setHowToPlay(bool, const char *) {}
 inline bool howToPlayOn() { return false; }
 inline bool gameZoomOn() { return false; }
+inline bool gameZoomPaused() { return false; }
 inline void setGameZoom(bool) {}
 inline float gameZoomFactor() { return 1.f; }
 inline void sampleKnock(int) {}

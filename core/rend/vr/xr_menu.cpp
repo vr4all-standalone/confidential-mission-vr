@@ -99,14 +99,14 @@ struct WidenRegistration
 
 // vr.Gun's place in its choices (xr_hands.h gunChoices()): a folder gun by vr.GunFile (4 and over all
 // meaning that, its name in any case); any other setting, 1.1's 0, 2 and 3 too, the in-game pistol's, as
-// chosenGun() reads them; not there: the first's
+// chosenGun() reads them; not there: no selected pill
 int gunAt(const std::vector<GunChoice>& choices)
 {
 	const int setting = config::VrGun >= OwnGuns ? OwnGuns : 1;
 	for (size_t i = 0; i < choices.size(); i++)
 		if (choices[i].setting == setting && (choices[i].file == nullptr || own::sameStem(config::VrGunFile.get(), choices[i].file)))
 			return (int)i;
-	return 0;
+	return -1;
 }
 
 bool stepper(int row) {
@@ -141,7 +141,9 @@ std::string value(int row)
 	{
 		// a gun not made yet shows dimmed (only when vr.Gun names it: the row skips it)
 		const std::vector<GunChoice> choices = gunChoices();
-		const GunChoice& gun = choices[gunAt(choices)];
+		const int at = gunAt(choices);
+        if (at < 0) return config::VrGun >= OwnGuns ? config::VrGunFile.get() + " (not there)" : "No model available";
+		const GunChoice& gun = choices[at];
 		return std::string(gun.label) + (!gun.made ? (gun.setting >= 4 ? " (not there)" : config::VrGameHands ? " (not made yet)" : " (game's models off)")
 				: !gun.complete ? " (incomplete)" : "");
 	}
@@ -222,15 +224,20 @@ SettingsPanel panel()
   r.action = row == ApplyGame || row == AdvancedGun || row == AdvancedWorld || row == ServiceMenu || row == ResetDefaults || row == Quit || row == Cancel || row == Confirm;
   if (row == ServiceMenu) r.dim = !serviceMenuAvailable();
   if (row == Gun) {
-   const auto choices = gunChoices(); r.dim = !choices[gunAt(choices)].made;
-   r.note = r.value; r.value = "Change";
+   const auto choices = gunChoices();
+   r.choice = gunAt(choices); r.stepper = false;
+   r.dim = std::none_of(choices.begin(), choices.end(), [](const GunChoice& gun) { return gun.made; });
+   for (const auto& gun : choices) { r.choices.push_back(gun.label); r.choiceEnabled.push_back(gun.made); }
+   if (r.choice < 0 || !choices[r.choice].made || !choices[r.choice].complete) r.note = r.value;
+   r.value.clear();
   }
   if (row == Laser) { r.choices = { "Off", "Normal", "2x", "5x", "10x" }; r.choice = vr::laser::choice(config::VrLaser, config::VrLaserWidth); }
   if (row == WiderView) { r.choices = { "Off", "On", "Fade" }; r.choice = vr::view::mode(config::VrWidenMode); if (config::VrWiden != widenAtStart) r.note = "Applies next start"; }
   if (row == Reticle) { r.choices = { "Custom", "None" }; r.choice = vr::reticle::mode(config::VrReticleMode) - 1; r.stepper = false; }
   if (row == Haptics) { r.choices = { "Off", "Light", "Medium", "Strong" }; r.choice = hapticsLevel(); r.stepper = false; }
   if (row == GameZoom || row == HowToPlay) { r.choices = { "Off", "On" }; r.choice = row == GameZoom ? gameZoomOn() : howToPlayOn(); }
-  if (row == TwoPlayers) { r.note = r.value; r.value = "Switch"; r.stepper = true; }
+  if (row == GameZoom && gameZoomOn() && gameZoomPaused()) r.note = "Paused for cutscene";
+  if (row == TwoPlayers) { r.choices = { HandsNames[0], HandsNames[1] }; r.choice = twoPlayerP1Hand(); r.stepper = false; r.value.clear(); }
   if (row == Reload) { r.note = r.value; r.value = "Change"; }
   if (nativeRow(row)) {
    r.dim = !native.available;
@@ -247,6 +254,19 @@ SettingsPanel panel()
  return p;
 }
 
+// Both direct model pills and row/stick adjustment use the same file identity and availability.
+void selectGun(const std::vector<GunChoice>& choices, int at)
+{
+ if (at < 0 || at >= (int)choices.size() || !choices[at].made || at == gunAt(choices)) return;
+ const auto& gun = choices[at];
+ config::VrGun.set(gun.setting); config::saveInt("config", "vr.Gun", gun.setting);
+ if (gun.file != nullptr) {
+  config::VrGunFile.set(gun.file); config::saveStr("config", "vr.GunFile", gun.file);
+ }
+ chosenGun(); gunsTurned = true; // The new model can move the ray; consume that transition frame.
+ NOTICE_LOG(INPUT, "XR: menu %s -> %s", Labels[Gun], value(Gun).c_str());
+}
+
 // A value row one step down (dir -1) or up (+1); an On/Off row the other way either way. Each
 // change is saved at once; a change of the knock's strength is felt at once in the hand that made it.
 void change(int row, int dir, int hand)
@@ -260,29 +280,17 @@ void change(int row, int dir, int hand)
 	switch (row)
 	{
 	case Gun:
-	{
-		// the next one each way, round and round, skipping those not made yet
-		const std::vector<GunChoice> choices = gunChoices();
-		const int n = (int)choices.size();
-		if (n < 2)
-			break;	// (locked: another game's own model)
-		int at = gunAt(choices);
-		for (int i = 0; i < n; i++)
-		{
-			at = (at + dir + n) % n;
-			if (choices[at].made)
-				break;
-		}
-		config::VrGun.set(choices[at].setting);
-		config::saveInt("config", "vr.Gun", choices[at].setting);
-		// a gun of the player's own by its file (one added before it in file-name order changes nothing)
-		if (choices[at].file != nullptr)
-		{
-			config::VrGunFile.set(choices[at].file);
-			config::saveStr("config", "vr.GunFile", choices[at].file);
-		}
-		break;
-	}
+ {
+  const auto choices = gunChoices(); const int n = (int)choices.size();
+  if (n < 2) return;
+  int at = gunAt(choices);
+  if (at < 0) at = dir > 0 ? -1 : 0;
+  for (int i = 0; i < n; ++i) {
+   at = (at + dir + n) % n;
+   if (choices[at].made) { selectGun(choices, at); return; }
+  }
+  return;
+ }
 	case GunSize:
  {
   const float size = std::clamp(gunSize().get() + dir * .05f, .4f, 1.6f);
@@ -451,8 +459,12 @@ void resetMenuSettings()
 // Precise pills choose their literal value; the body of every value row advances.
 void exactChoice(int row, int choice, int hand)
 {
+ if (row == Gun) { selectGun(gunChoices(), choice); return; }
  int was = 0;
  switch (row) {
+ case TwoPlayers:
+  if (choice < 0 || choice > 1) return;
+  was = twoPlayerP1Hand(); break;
  case Laser: was = vr::laser::choice(config::VrLaser, config::VrLaserWidth); break;
  case WiderView: was = vr::view::mode(config::VrWidenMode); break;
  case Reticle: was = vr::reticle::mode(config::VrReticleMode) - 1; break;

@@ -80,6 +80,12 @@ struct SettingsRow
 {
 	std::string label, value, note;
 	std::vector<std::string> choices;
+ // Empty: every choice is available. Otherwise, one flag per choice; unavailable pills stay visible.
+ std::vector<bool> choiceEnabled;
+ bool canChoose(int index) const {
+  return index >= 0 && index < (int)choices.size() && (choiceEnabled.empty() ||
+   (index < (int)choiceEnabled.size() && choiceEnabled[index]));
+ }
 	int choice = -1;
 	bool selected = false, dim = false, stepper = false, action = false;
 };

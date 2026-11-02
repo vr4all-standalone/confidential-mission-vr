@@ -1298,7 +1298,7 @@ static void cropPlaneToScreen(rend_context& ctx, const std::vector<PolyParam>& l
 // back out (place2DLayers' unwiden, inverted), then is cut to the screen: an axis-aligned
 // quad cut, any other shape losing the triangles that reach outside. The first one placed
 // after a pass without any is logged (logFirst), with where the game drew it.
-static void placeSights(rend_context& ctx, const std::vector<PolyParam>& list, u32 from, u32 to, float hudW,
+static void placeSights(rend_context& ctx, std::vector<PolyParam>& list, u32 from, u32 to, float hudW,
 		int fbWidth, int fbHeight, glm::vec2 unwiden, u32& placed, bool logFirst)
 {
 	const GameProfile *prof = activeProfile;
@@ -1307,7 +1307,7 @@ static void placeSights(rend_context& ctx, const std::vector<PolyParam>& list, u
 	const glm::vec2 centre(fbWidth * 0.5f, fbHeight * 0.5f);
 	for (u32 n = from; n < to && n < list.size(); n++)
 	{
-		const PolyParam& pp = list[n];
+		PolyParam& pp = list[n];
 		if (pp.count < 3 || pp.first + pp.count > ctx.verts.size())
 			continue;
 		const u32 tex = pp.pcw.Texture ? pp.tcw.TexAddr << 3 : 0;
@@ -1325,6 +1325,7 @@ static void placeSights(rend_context& ctx, const std::vector<PolyParam>& list, u
 		}
 		if (i != pp.first + pp.count)
 			continue;
+		pp.vrSight = true;
 		drawn /= (float)pp.count;
 		const float w = 1.f / ctx.verts[pp.first].z;
 		for (u32 j = pp.first; j < pp.first + pp.count; j++)
@@ -1676,6 +1677,39 @@ static struct CutsceneRegistration
 		EventManager::listen(Event::VBlank, closeCutsceneFrame);
 	}
 } cutsceneRegistration;
+
+// Capture the authored bars before hideLetterbox changes theirXY. Texture400680
+// atW0.2 is ALSO used for full-screen fades during play: only the native top or
+// bottom strip is positive cinematic evidence (the private pass0005 counterexample).
+static bool nativeZoomCutsceneBars(const rend_context& ctx,const std::vector<PolyParam>& list,
+        u32 from,u32 to,int fbWidth,int fbHeight)
+{
+    const GameProfile* prof=activeProfile;
+    if(ctx.isRTT||prof==nullptr||strcmp(prof->gameId," CONFIDENTIAL MISSION ---------")!=0)return false;
+    for(u32 n=from;n<to&&n<list.size();n++){
+        const PolyParam& pp=list[n];
+        if(!pp.pcw.Texture||pp.count!=4||pp.first+pp.count>ctx.verts.size())continue;
+        const u32 tex=pp.tcw.TexAddr<<3;
+        if(tex==0||std::find(std::begin(prof->letterboxTextures),std::end(prof->letterboxTextures),tex)==std::end(prof->letterboxTextures))continue;
+        glm::vec2 lo(std::numeric_limits<float>::max()),hi(-std::numeric_limits<float>::max());
+        bool valid=true;
+        for(u32 i=pp.first;i<pp.first+pp.count;i++){
+            const Vertex& v=ctx.verts[i];
+            if(!std::isfinite(v.x)||!std::isfinite(v.y)||!onOverlay(v,prof->letterboxW)||v.col[3]==0){valid=false;break;}
+            lo=glm::min(lo,glm::vec2(v.x,v.y));hi=glm::max(hi,glm::vec2(v.x,v.y));
+        }
+        if(!valid||lo.x< -1.f||lo.x>1.f||hi.x<fbWidth-1.f||hi.x>fbWidth+1.f||hi.y<=lo.y)continue;
+        const bool top=lo.y>=-1.f&&hi.y<=fbHeight*.15f;
+        const bool bottom=lo.y>=fbHeight*.85f&&hi.y<=fbHeight+1.f;
+        if(top||bottom)return true;
+    }
+    return false;
+}
+
+bool zoomCutsceneFrame(const rend_context& ctx)
+{
+    return !ctx.isRTT&&ctx.vrZoomCutscene;
+}
 
 bool cutscene() {
 	return cutsceneOn;
@@ -2151,6 +2185,12 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 		logOverlayCensus(ctx, pass, previousPass, hudW);
 	int fbWidth, fbHeight;
 	getPvrFramebufferSize(ctx, fbWidth, fbHeight);
+    // Saved with this native context, not a global/live-RAM flag: the XR host
+    // reads exactly the scene kept for both eyes, even while emulation is paused.
+    ctx.vrZoomCutscene = ctx.vrZoomCutscene
+        || nativeZoomCutsceneBars(ctx,ctx.global_param_op,std::max(previousPass.op_count,1u),pass.op_count,fbWidth,fbHeight)
+        || nativeZoomCutsceneBars(ctx,ctx.global_param_pt,previousPass.pt_count,pass.pt_count,fbWidth,fbHeight)
+        || nativeZoomCutsceneBars(ctx,ctx.global_param_tr,previousPass.tr_count,pass.tr_count,fbWidth,fbHeight);
 	// The letterbox first: only what the game drew at the plane's W, as the shader used to
 	// (a black text shadow on a snapped layer must stay). The first opaque polygon is the
 	// background plane.
@@ -2340,14 +2380,17 @@ void dropShotMarker(rend_context& ctx, const RenderPass& pass, const RenderPass&
 	}
 }
 
-float hudScaleForPolygon(const PolyParam& polygon,float scale,bool tileClipped)
+float hudScaleForPolygon(const PolyParam& polygon,float scale,bool tileClipped,float worldZoom)
 {
     // Existing native tile clips are expressed in eye raster space. Preserve these
     // polygons at100 rather than enlarge into an unmoved clip rectangle.
     if(tileClipped)return 1.f;
     if(activeProfile==nullptr||!polygon.pcw.Texture)return scale;
     const u32 tex=polygon.tcw.TexAddr<<3;
-    for(u32 sight:activeProfile->sightTextures)if(sight!=0&&sight==tex)return 1.f;
+    // placeSights identifies and relocates these native enemy markers. Their
+    // overlay XY follows the same captured frame factor as the enemy world,
+    // independently of HUD size; reused3D polygons never use this uniform.
+    for(u32 sight:activeProfile->sightTextures)if(sight!=0&&sight==tex)return polygon.vrSight?worldZoom:1.f;
     for(u32 marker:markerTextures)if(marker!=0&&marker==tex)return 1.f;
     return scale;
 }

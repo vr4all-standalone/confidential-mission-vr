@@ -80,7 +80,7 @@ routing=update[a:b]
 arming=update[b:update.index('\n\tif(slide.held)',b)]
 # Final dispatch stays verbatim; camera/menu zoom between the two regions is
 # covered independently by game-zoom-integration-test.py.
-a=update.index('    for(Gun& g:guns){',update.index('frameWorldZoom=',b))
+a=update.index('    for(Gun& g:guns){',update.index('refreshGameZoom();',b))
 dispatch=update[a:-1]
 manifest['canonical routing']=hashlib.sha256(routing.encode()).hexdigest();manifest['final dispatch']=hashlib.sha256(dispatch.encode()).hexdigest()
 a=update.index('sampleStartButtons(time,');b=update.index(';',a)+1
@@ -98,8 +98,7 @@ drain=frame[a:b];manifest['frame drain branch']=hashlib.sha256(drain.encode()).h
 parts.append('void drainFrame(){'+drain+'}')
 # Retain real menu layout value/change and explicit Service row dispatch.
 parts.append(re.search(r'const char \*const HandsNames\[2\] \{[^;]+;',m).group())
-cases=re.findall(r'case TwoPlayers:(.*?)case Laser:',m,re.S)
-if len(cases)!=2:raise ValueError('TwoPlayers menu value/change missing')
+cases=[re.search(r'case TwoPlayers:(.*?)case Laser:',block(m,signature),re.S).group(1) for signature in ('std::string value(', 'void change(')]
 parts.append('std::string menuValue(){switch(0){case 0:'+cases[0]+'}return {};}')
 parts.append('void toggleMenu(){switch(0){case 0:'+cases[1]+'}}')
 choose=block(m,'void choose(');service=re.search(r'case ServiceMenu:(.*?)(?=case ApplyGame:)',choose,re.S).group(1)

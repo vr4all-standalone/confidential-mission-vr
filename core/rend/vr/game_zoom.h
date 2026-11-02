@@ -10,10 +10,21 @@ struct Hand { bool tracked{},grip{},click{}; float stickX{},stickY{}; };
 class Session {
     std::array<bool,2> waiting_{true,true},down_{},used_{};
     bool enabled_{}; int layout_{-1}; double noticeAt_{-100.};
+    bool cinematic_{}; uint32_t barFreeFrames_{}; uint64_t lastSceneFrame_{UINT64_MAX};
 public:
     bool enabled() const { return enabled_; }
+    bool paused() const { return cinematic_; }
+    // Observe the frame actually kept for the eyes, once per native presentation.
+    // Enter immediately, but tolerate the native bars' short gaps. XR repeats,
+    // the second eye and a paused menu cannot advance the six-frame return.
+    void observeFrame(uint64_t frame,bool bars) {
+        if(frame==lastSceneFrame_)return;
+        lastSceneFrame_=frame;
+        if(bars){cinematic_=true;barFreeFrames_=0;}
+        else if(cinematic_&&++barFreeFrames_>=6){cinematic_=false;barFreeFrames_=0;}
+    }
     void suspend(bool clearNotice=true) { waiting_={true,true};down_=used_={};if(clearNotice)noticeAt_=-100.; }
-    void reset() { enabled_=false;layout_=-1;suspend(); }
+    void reset() { enabled_=false;layout_=-1;cinematic_=false;barFreeFrames_=0;lastSceneFrame_=UINT64_MAX;suspend(); }
     void set(bool enabled,double now) { if(enabled_!=enabled){enabled_=enabled;noticeAt_=now;} }
     bool notice(double now) const { return now>=noticeAt_ && now-noticeAt_<1.; }
     void consume(int hand) { if(hand>=0&&hand<2&&down_[hand])used_[hand]=true; }

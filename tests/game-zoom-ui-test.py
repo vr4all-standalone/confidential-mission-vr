@@ -20,8 +20,10 @@ namespace theme=vr::xr::theme;
 vr::zoom::Session zoomSession;float frameWorldZoom=1;double now=2;
 bool service=false,focused=true,darkRoom=false;int draws=0;std::string text;glm::vec3 colour;
 double zoomSeconds(){return now;}bool serviceMenuActive(){return service;}float nativeCameraZoom(){return 2;}
+struct rend_context{};const rend_context* gles_vr_frame(){return nullptr;}uint64_t gles_vr_frame_number(){return 0;}bool zoomCutsceneFrame(const rend_context&){return false;}
+bool gameZoomOn();
 '''
-for sig in ('bool gameZoomOn()','void setGameZoom(','float gameZoomFactor()'):code+=block(h,sig)+'\n'
+for sig in ('void refreshGameZoom(','bool gameZoomOn()','bool gameZoomPaused()','void setGameZoom(','float gameZoomFactor()'):code+=block(h,sig)+'\n'
 code+=enum+'\nstd::string value(){switch(GameZoom){case GameZoom:'+menuValue+'}return "";}\n'
 code+='void choose(){switch(GameZoom){case GameZoom:'+choose+'}}\n'
 code+='''unsigned textTexture(const char* t,float,const glm::vec3& c,int& w,int& h){text=t;colour=c;w=300;h=50;return 1;}

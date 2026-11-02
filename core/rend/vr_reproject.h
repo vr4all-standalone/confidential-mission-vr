@@ -49,7 +49,7 @@ struct ReprojectParams
 // view: see aimAtScene in vr/xr_host.cpp.)
 bool widensGameFov();
 // Preserve identified native sights/shot effects while scaling UI polygons.
-float hudScaleForPolygon(const PolyParam& polygon,float scale,bool tileClipped);
+float hudScaleForPolygon(const PolyParam& polygon,float scale,bool tileClipped,float worldZoom=1.f);
 // Online (GGPO): hashes what the VR mod writes into the game's memory (the profile, the
 // widened field of view, code patches and pokes), for the two sides to check they match.
 void netplayDigest(MD5Sum& md5);
@@ -133,6 +133,9 @@ bool gameStartLoaded();
 // letterboxTextures) in 18 of its frames in a row while a player is in the game (gunRam.playing),
 // until the sixth frame without them. Always false for a profile without both (HOTD2, MOK).
 bool cutscene();
+// Immediate CM cinematic evidence from the exact kept TA frame, before gun-hide
+// hysteresis. Captured before cleanup; independent of the Hide letterbox choice.
+bool zoomCutsceneFrame(const rend_context& ctx);
 // Metres per game unit: vr.WorldScale, times the game profile's unit size next to HOTD2's.
 float worldScale();
 // ...the profile knows that picture (else player 2 can't be told out again).

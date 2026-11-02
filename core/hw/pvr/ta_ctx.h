@@ -55,12 +55,14 @@ struct PolyParam
 	int lightModel;
 	bool envMapping[2];
 	bool constantColor[2];
+	bool vrSight = false; // positively qualified by placeSights, before overlay snapping
 
 	void init()
 	{
 		first = 0;
 		count = 0;
 		texture = nullptr;
+		vrSight = false;
 		tsp.full = 0;
 		tcw.full = 0;
 		pcw.full = 0;
@@ -90,6 +92,7 @@ struct PolyParam
 			&& tcw.full == other.tcw.full
 			&& tsp.full == other.tsp.full
 			&& tileclip == other.tileclip
+			&& vrSight == other.vrSight
 			&& tcw1.full == other.tcw1.full
 			&& tsp1.full == other.tsp1.full
 			&& mvMatrix == other.mvMatrix
@@ -244,6 +247,8 @@ struct Rect
 
 struct rend_context
 {
+	// Exact-frame CM cinematic evidence captured before native overlay cleanup.
+	bool vrZoomCutscene = false;
 	f32 fZ_max;
 
 	bool isRTT;
@@ -299,6 +304,7 @@ struct rend_context
 		matrices.clear();
 		lightModels.clear();
 		clearFramebuffer = false;
+		vrZoomCutscene = false;
 	}
 
 	void newRenderPass();

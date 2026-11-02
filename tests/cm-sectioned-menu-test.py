@@ -28,6 +28,7 @@ prefix=r'''
 #include <cstdint>
 #include <type_traits>
 #include <iostream>
+#include <memory>
 #include "xr_menu.h"
 #include "xr_panel.h"
 #define NOTICE_LOG(...) ((void)0)
@@ -80,21 +81,38 @@ bool busy(){return testNative.busy;}
 prefix+=r'''
 enum class Event{Start}; struct EventManager{template<class F>static void listen(Event,F){}};
 namespace vr::xr {
-bool paused=false,help=false,zoom=false;int quits=0,knock=-1;
+bool paused=false,help=false,zoom=false,zoomPause=false;int quits=0,knock=-1;
 bool menuPaused(){return paused;}void requestPause(bool p){paused=p;}void recenter(){} void quitToStart(){++quits;}
-bool howToPlayOn(){return help;}void setHowToPlay(bool p,const char*){help=p;}bool gameZoomOn(){return zoom;}void setGameZoom(bool p){zoom=p;}
+bool howToPlayOn(){return help;}void setHowToPlay(bool p,const char*){help=p;}bool gameZoomOn(){return zoom;}bool gameZoomPaused(){return zoomPause;}void setGameZoom(bool p){zoom=p;}
 bool serviceMenuAvailable(){return true;}bool serviceMenuExitAvailable(){return false;}bool openServiceMenu(){return true;}
 int hapticsLevel(){return config::VrHaptics.get()=="off"?0:config::VrHaptics.get()=="light"?1:config::VrHaptics.get()=="strong"?3:2;}void sampleKnock(int h){knock=h;}
 int twoPlayerP1Hand(){return config::VrTwoPlayerP1Hand.get()=="right"?1:0;}
-constexpr int OwnGuns=4;struct GunChoice{int setting;const char*file;const char*label;bool made,complete;};
-bool nativeGun=true;std::vector<GunChoice> gunChoices(){return {{1,nullptr,"Arcade",true,true},{4,"test","Custom",true,true}};}int chosenGun(){return nativeGun?1:0;}
+constexpr int OwnGuns=4;
+__GUN_CHOICE_DECL__
+enum class GunKind{Pistol=1};bool nativeGun=true,nativeAvailable=true,nativeComplete=true;
+bool cmGuns(){return true;}void* handsModel(){return nullptr;}
+void* gunModel(GunKind){return nativeAvailable?(void*)1:nullptr;}bool gunComplete(GunKind){return nativeComplete;}
+struct FixtureGun{struct{std::string stem;}file;std::string name;bool valid;};
+std::vector<std::unique_ptr<FixtureGun>> ownGuns;
+void addGun(const char* stem,const char* label,bool valid=true){auto g=std::make_unique<FixtureGun>();g->file.stem=stem;g->name=label;g->valid=valid;ownGuns.push_back(std::move(g));}
+void refreshOwn(){}
+__GUN_CHOICES_BODY__
+int chosenGun(){return nativeGun?1:0;}
 int handGun(int){return chosenGun();}bool gameGun(int v){return v==1;}
-namespace own{void scan(){}bool sameStem(const std::string&a,const char*b){return a==b;}}
+namespace own{void scan(){}bool sameStem(const std::string&a,const std::string&b){return _stricmp(a.c_str(),b.c_str())==0;}}
 void drawRowsPanel(const glm::mat4&,const glm::mat4&,const RowsPanel&){}
 void drawTexture(const glm::mat4&,const glm::mat4&,unsigned,float,float,const glm::vec4&){}
 void drawPanelContact(const glm::mat4&,const glm::mat4&){}
 }
 '''
+# Keep gun enumeration and its complete public record real; only model/filesystem loading is a boundary.
+prefix=prefix.replace('__GUN_CHOICE_DECL__',block(source('core/rend/vr/xr_hands.h'),'struct GunChoice')+';')
+prefix=prefix.replace('__GUN_CHOICES_BODY__',block(source('core/rend/vr/xr_hands.cpp'),'std::vector<GunChoice> gunChoices()'))
+prefix+='namespace vr::xr { void bundledGuns(){ownGuns.clear();'
+for stem in ['namco','zapper']:
+ label=json.loads(source('cm-vr/models/guns/'+stem+'.json'))['name']
+ prefix+='addGun('+json.dumps(stem)+','+json.dumps(label)+');'
+prefix+='} }\n'
 # The sectioned implementation adds geometry/CPU raster helpers; compile those real functions.
 if 'SettingsPanel panel()' in menu:
  prefix+='#define STBTT_STATIC\n#define STB_TRUETYPE_IMPLEMENTATION\n#include "imgui/imstb_truetype.h"\n'
@@ -115,13 +133,13 @@ int main(){ using namespace vr::xr; menu::open(glm::mat4(1.f));
  std::cout<<"1 production menu check PASS\n"; }
 '''
 extra=Path(sys.argv[3]) if len(sys.argv)>3 else Path(__file__).with_suffix('.cpp')
-if extra.exists():test=extra.read_text()
+if extra.exists():test=extra.read_text(encoding='utf-8-sig')
 (out/'menu-runtime.cpp').write_text(prefix+test,encoding='utf8')
 env=dict(os.environ);env['PATH']='D:/msys64/mingw64/bin;'+env.get('PATH','')
 cmd=['D:/msys64/mingw64/bin/g++.exe','-std=c++17','-O0','-I'+str(repo/'core'),'-I'+str(repo/'core/deps/glm'),'-I'+str(repo/'core/rend/vr'),'-I'+str(repo/'core/deps'),str(out/'menu-runtime.cpp'),'-o',str(out/'menu-runtime.exe')]
 compiled=subprocess.run(cmd,capture_output=True,text=True,env=env)
 (out/'compile.log').write_text(compiled.stdout+compiled.stderr)
-receipt={'compile':{'command':cmd,'exit':compiled.returncode},'sourceSha256':{str(repo/p):hashlib.sha256((repo/p).read_bytes()).hexdigest() for p in ['core/rend/vr/xr_menu.cpp','core/rend/vr/xr_menu.h','core/rend/vr/xr_panel.cpp','core/rend/vr/xr_panel.h','core/rend/vr/cm_game_options.h']}}
+receipt={'compile':{'command':cmd,'exit':compiled.returncode},'sourceSha256':{str(repo/p):hashlib.sha256((repo/p).read_bytes()).hexdigest() for p in ['core/rend/vr/xr_menu.cpp','core/rend/vr/xr_menu.h','core/rend/vr/xr_panel.cpp','core/rend/vr/xr_panel.h','core/rend/vr/cm_game_options.h','core/rend/vr/xr_hands.cpp','core/rend/vr/xr_hands.h','tests/cm-sectioned-menu-test.py','tests/cm-sectioned-menu-test.cpp']}}
 if compiled.returncode:
  print(compiled.stdout,compiled.stderr);(out/'receipt.json').write_text(json.dumps(receipt,indent=2));sys.exit(compiled.returncode)
 run=subprocess.run([str(out/'menu-runtime.exe')],cwd=out,capture_output=True,text=True,env=env)
