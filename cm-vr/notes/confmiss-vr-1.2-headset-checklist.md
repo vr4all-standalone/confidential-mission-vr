@@ -1,3 +1,5 @@
+> Historical v1.2 checklist. Superseded by [v1.3.4 checks](confmiss-vr-1.3.4-headset-checklist.md). Old skip/hand-label expectations below do not apply to current releases.
+
 # Confidential Mission VR 1.2: headset checklist
 
 One session on the Quest 3, in this order (about 75 minutes), for what the PC harness (the

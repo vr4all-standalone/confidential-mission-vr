@@ -23,7 +23,7 @@
   Start to the agents' pistol in the stage 1 intro and leaves its file there) and accept-cm-rip-start-next
   (both files there and a 1.1 gun-cm-cabinet.bin: no run, the old file left as it was), cm-rip-hand
   accept-cm-rip-hand and -arcade (it needs the pistol's file), cm-rip-skip accept-cm-rip-skip and -skip2
-  (it deletes the files again; after the skip the hand holds the harness's bundled Arcade gun). The XR
+  (it deletes the files again; B must not skip required extraction). The XR
   scenarios from before the game's own guns pin the built-in gun ($cmWidenArcade).
   cm-rip-pistol plays accept-cm-rip-pistol (the same run, checked as Task 11 did), cm-rip-pistol-one
   accept-cm-rip-pistol-one (the same with one capture merged; each pass draws all of it, so it's whole too).
@@ -32,9 +32,9 @@
   accept-cm-rip-rifle-next (the rifle's file alone missing: no run, watched for in play); it leaves both
   files and a copy of the rifle's, build-win\vrtest\cm-rifle-seed.bin, which cm-rip-start,
   cm-rip-pistol and cm-rip-pistol-one put in place after deleting the files (so their runs start at
-  Start, as before); cm-rip-skip doesn't (B skips during the rifle's part). cm-rip-rifle comes
+  Start, as before); cm-rip-skip instead verifies B cannot skip the rifle's part. cm-rip-rifle comes
   before them in the list; run without the seed, they fail and say so. cm-rip-skip-rifle plays
-  accept-cm-rip-skip-rifle: the skip with the rifle's seed in place, which goes Off (nothing watched for).
+  accept-cm-rip-skip-rifle: B also cannot skip when the rifle's seed is already present.
   cm-merge-unit plays nothing: it compiles re\hands_build_test.cpp with core\rend\vr\hands_build.cpp
   (the VS 2022 Build Tools, as build-win.cmd; into build-win\vrtest\cm-merge-unit, not the app),
   runs it (the pistol's merge on synthetic captures) and then vrcheck.py's selftest.
@@ -1137,60 +1137,34 @@ function Test-CmRipHand {
 	return $null
 }
 
-# B skips the run and the menu button does nothing during it, both keyed on the run's first line
-# (the gun comes up ~6 s in, at 30 s of game). Skipped holds for the session (S23): Start from
-# 22 s after the skip (30 s of game or more) and on through the reload tutorial, where watching
-# would make the pistol (1.1: the cabinet gun): no file, and the hand holds the Arcade gun (the harness's bundled
-# namco.glb, -Bundled --namco-zapper: never the user's models). The next start runs it again. With no rifle file the
-# skip comes in the rifle's part of the run (the attract demo), and the rifle, which comes in play too, is still
-# watched for (Task 12, S23).
+# Legacy scenario names retained; B must NOT skip the now-required CM extraction.
 function Test-CmRipSkip {
-	if (-not $Reuse) { Remove-CmGuns }
-	return Invoke-OwnFolders -Bundled '--namco-zapper' {
-		$first = 'VR hands: no model yet, taking the guns from the game'
-		$keys = @("$first|1|xr left/menu 1 150", "$first|2|xr right/b 1 200")
-		$starts = @(22, 25, 28 | ForEach-Object { "VR hands: skipped after|$_|xr right/a 1 200" })
-		$params = @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 48; XrSim = $true; Config = "$cmWiden,config:vr.HandsPrep=yes,config:vr.Gun=1"
-			On = @($keys + $starts)
-			Expect = $first, 'VR hands: skipped after', 'XR: menu: not while the guns are being made',
-				'VR hands: watching for the assault rifle in play', $cmSkippedGun,
-				'XR: first start: Making your guns from your game files \(once\)( / .*)? \| B: skip \(the Arcade gun this time\)$'
-			Reject = @('XR: initialisation failed', 'XR: menu open', 'XR: the game''s own model from',
-				'the cabinet gun from this game', 'VR hands: the agents'' pistol from this game') }
-		$why = Invoke-VrTest $params
-		if ($why) { return $why }
-		foreach ($file in $cmPistolFile, $cmCabinetFile) { if (Test-Path -LiteralPath $file) { return "$file made though the run was skipped" } }
-		$params.Name = 'accept-cm-rip-skip2'
-		$params.Seconds = 10
-		$params.On = $keys
-		$params.Expect = @($first, $cmSkippedGun)
-		$params.Reject += 'VR hands: the assault rifle from this game'
-		$why = Invoke-VrTest $params
-		if ($why) { return "the next start: $why" }
-		return $null
-	}
+    if (-not $Reuse) { Remove-CmGuns }
+    return Invoke-OwnFolders -Bundled '--namco-zapper' {
+        $first = 'VR hands: no model yet, taking the guns from the game'
+        return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip'; Seconds = 48; XrSim = $true
+            Config = "$cmWiden,config:vr.HandsPrep=no,config:vr.GameHands=no,config:vr.Gun=1"
+            On = @("$first|1|xr left/menu 1 150", "$first|2|xr right/b 1 200")
+            Expect = @($first, 'XR: menu: not while the guns are being made',
+                'Gun extraction is required\. Please wait\.')
+            Reject = @('VR hands: skipped after', 'XR: menu open', 'B: skip',
+                'XR: initialisation failed', 'required gun extraction failed') }
+    }
 }
-$cmSkippedGun = 'XR: gun: Arcade gun \(chosen: the in-game pistol is not made yet\)$'
-
-# The skip with the rifle's file there (cm-rip-rifle's seed): no gun from the attract demo is left to
-# watch for in play, so the run goes Off, with no watching line (Task 12, S23).
 function Test-CmRipSkipRifle {
-	if (-not $Reuse) {
-		Remove-CmGuns
-		$why = Copy-CmRifleSeed
-		if ($why) { return $why }
-	}
-	return Invoke-OwnFolders -Bundled '--namco-zapper' {
-		$first = 'VR hands: no model yet, taking the guns from the game'
-		$why = Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip-rifle'; Seconds = 12; XrSim = $true
-			Config = "$cmWiden,config:vr.HandsPrep=yes,config:vr.Gun=1"; On = @("$first|2|xr right/b 1 200")
-			Expect = $first, 'VR hands: skipped after', $cmSkippedGun
-			Reject = @('XR: initialisation failed', 'VR hands: watching for', 'the cabinet gun from this game',
-				'VR hands: the agents'' pistol from this game') }
-		if ($why) { return $why }
-		foreach ($file in $cmPistolFile, $cmCabinetFile) { if (Test-Path -LiteralPath $file) { return "$file made though the run was skipped" } }
-		return $null
-	}
+    if (-not $Reuse) {
+        Remove-CmGuns
+        $why = Copy-CmRifleSeed
+        if ($why) { return $why }
+    }
+    return Invoke-OwnFolders -Bundled '--namco-zapper' {
+        $first = 'VR hands: no model yet, taking the guns from the game'
+        return Invoke-VrTest @{ Game = 'confmiss'; Name = 'accept-cm-rip-skip-rifle'; Seconds = 12; XrSim = $true
+            Config = "$cmWiden,config:vr.HandsPrep=no,config:vr.Gun=1"
+            On = @("$first|2|xr right/b 1 200")
+            Expect = @($first, 'Gun extraction is required\. Please wait\.')
+            Reject = @('VR hands: skipped after', 'B: skip', 'XR: initialisation failed', 'required gun extraction failed') }
+    }
 }
 
 # Task 11: the same run goes on to the agents' pistol (body tex 7e2800, its suppressor 6cc400, 82f800,
@@ -1217,7 +1191,7 @@ function Invoke-CmRipPistol([string]$name, [string]$config, [string]$want, [swit
 		Reject = @('VR hands: .*, but ', 'the cabinet gun from this game') }
 	if ($Xr) {
 		$params.XrSim = $true
-		$params.Expect += 'XR: first start: Making your guns from your game files \(once\)( / .*)? \| B: skip \(the Arcade gun this time\)$',
+		$params.Expect += 'XR: first start: Making your guns from your game files \(once\)( / .*)? \| Gun extraction is required\. Please wait\.$',
 			'XR: first start: Got it\..* / Reload: B, or point it away from the screen and pull\.$'
 	}
 	$why = Invoke-VrTest $params

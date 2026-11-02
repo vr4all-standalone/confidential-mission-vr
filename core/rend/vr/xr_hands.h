@@ -17,6 +17,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <vector>
+#include <string>
 
 namespace vr::xr
 {
@@ -34,6 +35,8 @@ struct HandsModel
 // without one. (Confidential Mission's guns are each their own: gunModel(); here the one
 // chosenGun() gives.)
 const HandsModel *handsModel();
+// CPU-only validation of a complete extracted gun; no renderer cache or GL state.
+bool completeModelFile(const std::string& path);
 
 // The guns a hand can hold in Confidential Mission: the in-game pistol and the assault rifle, each its
 // own file made from the player's game (hands_rip.h; a kind's file is vr_reproject.cpp's guns[kind - 1],

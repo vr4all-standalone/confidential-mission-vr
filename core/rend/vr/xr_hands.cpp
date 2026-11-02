@@ -615,6 +615,14 @@ bool cmGuns()
 
 }	// namespace
 
+bool completeModelFile(const std::string& path)
+{
+    Model model;
+    bool missing = false;
+    return load(model, path, std::string(), missing) && model.info.gunOnly
+        && (model.flags & hands::ModelComplete) != 0 && model.vertices.size() >= VertexSize * 3;
+}
+
 const HandsModel *handsModel()
 {
 	refresh();

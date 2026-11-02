@@ -30,7 +30,7 @@ namespace
 constexpr float Distance = 1.2f, BelowEyes = 0.1f;
 constexpr int Left = 0, Right = 1;
 
-const char *const Labels[Rows] { "Gun model", "Gun angle", "Reload", "Two players", "Laser", "Reticle", "Reticle min size", "Reticle max size", "Reticle shrink distance", "Haptics",
+const char *const Labels[Rows] { "Gun model", "Gun angle", "Reload", "Two players", "Laser", "Crosshair", "Crosshair min size", "Crosshair max size", "Crosshair shrink distance", "Haptics",
  "World size", "Panel distance", "HUD size", "Wider view", "Game zoom", "How to play", "Open Service Menu", "Reset to defaults", "Quit", "Advanced", "Advanced", "Cancel", "Confirm", "Apply settings and restart", "Gun size", "Game difficulty", "Boss difficulty", "Shifting difficulty", "Collision size", "Life" };
 const char *const HapticsNames[4] { "Off", "Light", "Medium", "Strong" };
 // vr.Haptics' words, saved by the Haptics row (hapticsLevel() reads them, and 1.2's numbers)
@@ -202,7 +202,7 @@ SettingsPanel panel()
  p.dialog = confirmation != Confirmation::None;
  const char* titles[] = { "Gun", "World", "System", "In-game", "Advanced gun settings", "Advanced world settings" };
  p.title = titles[(int)page];
- p.subtitle = page == Page::GunAdvanced ? "Fine tune reticle sizing and CM reload behavior." :
+ p.subtitle = page == Page::GunAdvanced ? "Fine tune crosshair sizing and CM reload behavior." :
   page == Page::WorldAdvanced ? "Exact saved sizes; HUD resizing applies to Wider gameplay." :
   page == Page::Game ? native.message ? native.message : "Native operator settings" :
   "Confidential Mission / VR settings";

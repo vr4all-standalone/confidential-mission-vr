@@ -422,7 +422,7 @@ bool initActions()
 			|| !createAction(skipAction, "skip", "Reload (the gun's B)", XR_ACTION_TYPE_BOOLEAN_INPUT, true)
 			|| !createAction(menuAction, "menu", "Settings menu", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(recenterAction, "recenter", "Recenter", XR_ACTION_TYPE_BOOLEAN_INPUT)
-			|| !createAction(laserAction, "laser", "Laser and reticle on/off", XR_ACTION_TYPE_BOOLEAN_INPUT)
+			|| !createAction(laserAction, "laser", "Laser and crosshair on/off", XR_ACTION_TYPE_BOOLEAN_INPUT)
 			|| !createAction(hapticAction, "recoil", "Recoil", XR_ACTION_TYPE_VIBRATION_OUTPUT, true)
 			|| !createAction(stickAction, "stick", "Menus (D-pad), world size", XR_ACTION_TYPE_VECTOR2F_INPUT)
 			|| !createAction(gripAction, "grip", "Tap: game zoom; hold: size or slide", XR_ACTION_TYPE_FLOAT_INPUT, true))
@@ -2239,8 +2239,9 @@ void updateLightgun(XrTime time)
 	if (preparing)
 	{
 		zoomSession.suspend();
-		// B (or Y): not now, the arcade gun this time (the menu button does nothing now)
-		if (skip)
+		// CM preparation is required; legacy model workflows may still skip.
+        const auto* prepSource = gameModelSource();
+		if (skip && (prepSource == nullptr || prepSource->kind != hands::Source::CmGuns))
 			hands::skipPrep();
 		if (menuEdge)
 		{
@@ -2312,7 +2313,7 @@ void updateLightgun(XrTime time)
 		config::saveInt("config", "vr.ReticleMode", config::VrReticleMode);
 		config::setAutoSave(true);
 		haptic(Right, 0.03f, 0.4f);
-		NOTICE_LOG(INPUT, "XR: laser and reticle %s", config::VrLaser ? "on" : "off");
+		NOTICE_LOG(INPUT, "XR: laser and crosshair %s", config::VrLaser ? "on" : "off");
 	}
 	laserWas = laser;
 	const glm::vec2 stick = stickAction2();
@@ -3128,7 +3129,16 @@ bool frame()
 	const bool cmGuns = source != nullptr && source->kind == hands::Source::CmGuns;
 	const char *title = cmGuns ? "CONFIDENTIAL MISSION VR" : staff ? "THE MAZE OF THE KINGS VR" : "THE HOUSE OF THE DEAD 2 VR";
 	const glm::vec3 &violet = theme::Accent, &cream = theme::Text, &muted = theme::Muted;
-	if (preparing && cmGuns)
+    if (preparing && cmGuns && hands::prepFailed())
+    {
+        panel.lines = {
+            { title, 0.085f, violet }, { "", 0.03f, cream },
+            { "Gun extraction could not finish", 0.064f, cream },
+            { hands::prepFailure(), 0.047f, muted },
+        };
+        panel.footer = "Gun extraction is required before playing.";
+    }
+	else if (preparing && cmGuns)
 	{
 		panel.lines = {
 			{ title, 0.085f, violet },
@@ -3137,7 +3147,7 @@ bool frame()
 			{ "About a minute or two, only this once", 0.047f, muted },
 		};
 		panel.progress = hands::prepProgress();
-		panel.footer = "B: skip (the Arcade gun this time)";
+		panel.footer = "Gun extraction is required. Please wait.";
 	}
 	else if (std::chrono::steady_clock::now() < doneUntil && cmGuns)
 		panel.lines = {

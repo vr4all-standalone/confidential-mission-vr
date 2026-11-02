@@ -58,10 +58,10 @@ prefix+=ini+'\n#include "cfg/cfg.h"\n'
 prefix+='namespace config {static IniFile cfgdb;static bool autoSaving=true;std::string persisted;int writeCount=0;void saveFile(){cfgdb.save(persisted);++writeCount;}void autoSave(){if(autoSaving)saveFile();}\n'
 for sig in ['void saveStr(','std::string loadStr(','void saveInt(','int loadInt(','void saveBool(','bool loadBool(','void setTransient(','bool isTransient(','bool hasSection(','void deleteSection(','void deleteEntry(','void setAutoSave(','void saveFloat(','float loadFloat(','std::vector<std::string> getEntries(']:prefix+=block(source('core/cfg/cfg.cpp'),sig)+'\n'
 prefix+='}\n'
-for helper in ['core/rend/vr/gun_angle_settings.h','core/rend/vr/reticle_settings.h','core/rend/vr/hud_size_settings.h','core/rend/vr/view_settings.h']:
+for helper in ['core/rend/vr/gun_angle_settings.h','core/rend/vr/reticle_settings.h','core/rend/vr/hud_size_settings.h','core/rend/vr/view_settings.h','core/rend/vr/world_scale_settings.h']:
  t=source(helper); prefix+=re.sub(r'^#(?:include|pragma)[^\n]*\n','',t,flags=re.M)+'\n'
 prefix+='namespace config {\n'+';\n'.join(block(option,sig) for sig in ['class BaseOption','class Settings','template<typename T, bool PerGameOption = true>'])+';\n'
-for name in ['GunAngleOption','ReticleModeOption','ReticleMinSizeOption','ReticleMaxSizeOption','ReticleDistanceOption','HudSizeOption','LaserWidthOption','WidenModeOption']:prefix+=re.search(r'^using '+name+r'[^\n]+',option,re.M)[0]+'\n'
+for name in ['GunAngleOption','ReticleModeOption','ReticleMinSizeOption','ReticleMaxSizeOption','ReticleDistanceOption','HudSizeOption','LaserWidthOption','WidenModeOption','WorldScaleOption']:prefix+=re.search(r'^using '+name+r'[^\n]+',option,re.M)[0]+'\n'
 for name in ['VrGun','VrGunAngle','VrReload','VrReticleMode','VrLaserWidth','VrWiden','VrWidenMode','VrLaser','VrGameHands','VrReticleMinSize','VrReticleMaxSize','VrReticleShrinkDistance','VrWorldScale','VrHudDepth','VrHudSize','VrGunFile','VrHaptics','VrTwoPlayerP1Hand','VrHandScale','VrGunScale']:
  prefix+=re.search(r'^\w+(?:<[^>]+>)? '+name+r'\b[^\n]+',definitions,re.M)[0]+'\n'
 prefix+='}\n'

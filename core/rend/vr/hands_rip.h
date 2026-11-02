@@ -20,8 +20,8 @@
 	captured, and 10 s of game after the last (or at 150 s) they're merged into the agents'
 	pistol, flagged complete when all of it came together. (Up to 1.1 the tutorial's cabinet
 	gun was made first and the presses waited for it; since 1.2 there is no cabinet gun.) It
-	runs while the pistol's file is missing; B skips it here too, and nothing more is made that
-	session (the assault rifle's part: hands_rip.cpp).
+	runs while no complete readable pistol is cached; it cannot be skipped. Failure blocks
+	play until game files/storage are corrected and the app restarted (the assault rifle's part: hands_rip.cpp).
 
 	Copyright 2026 mikermak. This file is part of Flycast and is distributed under the GNU GPL v2 or later.
 */
@@ -69,6 +69,8 @@ bool takeNewModel();
 
 // The game is being run to the scene: no player input, a panel instead of the game.
 bool preparing();
+bool prepFailed();
+std::string prepFailure();
 // How far along that is, 0..1 (a guess from the time the run usually takes).
 float prepProgress();
 // The player doesn't want to wait: the arcade gun this time.

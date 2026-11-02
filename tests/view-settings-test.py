@@ -19,12 +19,13 @@ cfg+='}'
 option=src('core/cfg/option.h');definitions=src('core/cfg/option.cpp');has='VrLaserWidth' in definitions and 'VrWidenMode' in definitions
 code='#define HAS_VIEW_SETTINGS '+str(int(has))+'\n'
 code+='namespace config {'+';\n'.join(block(option,s) for s in ('class BaseOption','class Settings','template<typename T, bool PerGameOption = true>'))+';\n'
-for n in ('VrWiden','VrLaser','VrWorldScale','VrHudDepth'):code+=line(definitions,r'^Option<[^>]+> '+n+r'[^\n]+')+'\n'
+code+=line(option,r'^using WorldScaleOption[^\n]+')+'\n'
+for n in ('VrWiden','VrLaser','VrWorldScale','VrHudDepth'):code+=line(definitions,r'^\w+(?:<[^>]+>)? '+n+r'[^\n]+')+'\n'
 if has:
  for n in ('LaserWidthOption','WidenModeOption'):code+=line(option,r'^using '+n+r'[^\n]+')+'\n'
  for n in ('VrLaserWidth','VrWidenMode'):code+=line(definitions,r'^\w+ '+n+r'[^\n]+')+'\n'
 code+='}'
-policy='#include "rend/vr/view_settings.h"\n' if has else ''
+policy='#include "rend/vr/world_scale_settings.h"\n'+('#include "rend/vr/view_settings.h"\n' if has else '')
 (o/'view-settings.inc').write_text('\n'.join((trim,ih,ic,'#include "cfg/cfg.h"',cfg,policy,code)))
 env=dict(os.environ);env['PATH']='D:/msys64/mingw64/bin;'+env.get('PATH','')
 b=o/'view-settings-test.exe'

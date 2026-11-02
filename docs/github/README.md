@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release v1.2.12](https://img.shields.io/badge/Release-v1.2.12_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release v1.3.4](https://img.shields.io/badge/Release-v1.3.4_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
@@ -19,11 +19,17 @@
 
 ---
 
-## Update v1.2.12
+## Update v1.3.4
 
-Tap either grip to toggle the game's camera zoom, with a brief purple confirmation and matching controller help. Zoom starts Off each launch. This update also adds reticle sizing, Wider-view HUD size and Reset to defaults.
+**Your saved World size resets to0.10 once after updating.** Later adjustments
+remain saved; other preferences and native game data stay. Gun extraction is
+required before first play, with existing complete cached guns reused.
 
-The captured starting reticle is **Custom:20% minimum /45% maximum /6.5m shrink**. Existing saved choices stay intact; choose **Reset to defaults** to apply the preset. [Release notes](docs/releases/v1.2.12.md) · [Complete source ZIP](../../releases/latest/download/confidential-mission-vr-source.zip).
+New Gun/World/System/In-game tabs, direct gun choices, Crosshair controls,
+Laser Off/Normal/2x/5x/10x, Wider view Fade, flexible player hands and native
+In-game options are included. Right-stick click toggles laser and crosshair
+together. Zoom starts Off, follows enemy markers and pauses for cutscenes.
+[Release notes](docs/releases/v1.3.4.md) · [Complete source ZIP](../../releases/latest/download/confidential-mission-vr-source.zip).
 
 ## 🕵️ Overview
 
@@ -65,10 +71,9 @@ and PC VR runtime testing remain pending (see [The game](#the-game)).
   * **Kick, muzzle flash and knock** only when the game really fires a round: one for every
     round of a rifle burst, a light click on an empty gun, nothing on a reload.
   * **Haptics Off, Light, Medium or Strong**, from the menu.
-* **Two Players, One Headset:** Player 2 presses Start on the other controller (**Left `X`**)
-  and joins, both lives and scores on screen. With two players, **player 1 is on the left hand
-  and player 2 on the right** by default, matching the game's screen (the menu's **Two players**
-  row turns it round). Playing alone, either hand's trigger takes the gun.
+* **Two Players, One Headset:** First Start on either hand chooses solo P1;
+  the unused hand's Start joins the missing player. After native dual acceptance,
+  the saved left/right P1/P2 layout applies. A fresh other trigger transfers solo control.
 * **Arcade Reloads, or Not:** Shoot away from the game's view as at the arcade, or just point
   away (the menu's **Reload** row). **`B`** and **`Y`** reload too.
 * **Empty Hands in the Cutscenes:** In the stage intros and story scenes your hands are empty
@@ -86,24 +91,20 @@ and PC VR runtime testing remain pending (see [The game](#the-game)).
 
 ## 🎮 Quest Touch Controller Layout
 
-| Action | Quest Touch controller |
-| :--- | :--- |
-| **Shoot** | **Trigger**: alone, either hand (the gun goes to the hand that fires) · two players: left hand player 1, right hand player 2 |
-| **Start / join** | **Right `A`** player 1 · **Left `X`** player 2 joins · two players: **`X`** player 1, **`A`** player 2 |
-| **Reload** | alone, **`B`** or **`Y`** · two players: **Left `Y`** player 1, **Right `B`** player 2 · or shoot away from the view |
-| **Settings menu (pauses)** | **Left `≡` Menu** button |
-| **Recenter** | **Left thumbstick click** *or* hold the **Meta** button |
-| **Laser off / on** | **Right thumbstick click** |
-| **The game's D-pad (its menus)** | **Thumbstick** |
-| **World size** | Hold **Grip** + push the **Thumbstick up / down** |
-| **Gun size** | Hold **Grip** + push the **Thumbstick left / right** |
+| Action | Control |
+| --- | --- |
+| Start / join | A or X; the first Start chooses solo P1's hand |
+| Fire / transfer solo hand | Trigger; a fresh other-hand pull transfers solo control |
+| Reload | B or Y; configured off-screen reload also works |
+| Settings | Left Menu button |
+| Recenter | Left stick click or the runtime's recenter |
+| Laser + crosshair | Right stick click |
+| Game zoom | Tap/release either Grip |
+| World size | Hold Grip + stick up/down |
 
-Everything else, the PC VR controllers (Index, Vive, Windows Mixed Reality) and the menu's
-rows: [Controls](#controls) and [The menu](#the-menu).
+The unused hand's Start joins the missing player. After native two-player
+acceptance, the saved P1 left/P2 right or reverse layout applies.
 
----
-
-<a id="install-on-the-quest"></a>
 ## 📦 Installation (Meta Quest)
 
 For Quest 3, 3S, 2 and Pro. Zoom and controller help were checked on Quest 3S; Quest 2 and Pro remain untested.
@@ -169,15 +170,15 @@ in the headset, and open *Quest > Internal shared storage > Download*.
 
 ### 4. Play
 
-Start *Confidential Mission VR* from your Library (*Unknown sources*). Its start screen checks
+Start *Confidential Mission - VR4ALL* from your Library (*Unknown sources*). Its start screen checks
 the three files: its badge says READY (in green) when all three are there, MISSING FILES with a
 line for each one that isn't, or ALLOW ACCESS until the app may read the Download folder.
 *Play Confidential Mission* starts the game in VR, and is greyed out until then. *Where to put
 your files* opens the instructions and the access step (*Allow*: *All files access*, the first
 time) and *Look again* checks once more. The first start makes your guns from your own game
-files, once (about a minute or two; B skips it, with the Arcade gun that time).
+files once. Extraction is required and cannot be skipped; complete cached guns are reused.
 
-Updates install over the old version; settings and saves stay.
+Updates install over the old version. This release resets World size to0.10 once; other settings and native saves stay.
 
 **Had VR Light Gun Hub 0.1.0 on the headset?** Confidential Mission VR is a separate app
 (`com.vrlightgunhub.confmiss`, with fresh settings) and installs next to it: uninstall the hub
@@ -203,7 +204,7 @@ tell me how it goes.
 Controllers: see [Controls](#controls). Settings: `emu.cfg` next to `flycast.exe` (`vr.Xr = yes`
 turns VR on; without a headset the game plays in the window).
 
-If the world looks the wrong size, set `vr.WorldScale = 0.11` in `emu.cfg` (the default) and
+If the world looks the wrong size, set `vr.WorldScale = 0.10` in `emu.cfg` (the default) and
 adjust from there.
 
 ---
@@ -211,124 +212,52 @@ adjust from there.
 <a id="controls"></a>
 ## 🕹️ Controls
 
-Quest Touch:
+The first Start on either controller starts native P1 and selects that solo hand.
+A fresh trigger on the other hand transfers solo control, with a native release
+between owners. The unused hand's Start joins the missing player. Once the game
+accepts both players, the saved **P1 left / P2 right** or reverse layout applies.
+A surviving native P2 retains its identity; the empty hand can rejoin native P1.
 
-| Button | Does |
-|---|---|
-| A | Start, player 1 (with two players in: player 2's Start) |
-| B | reload, player 1 (with two players in: player 2's reload) |
-| X | Start, player 2: player 2 joins, a gun in each hand (with two players in: player 1's Start) |
-| Y | reload, player 1, as B (with two players in: player 1's reload) |
-| ≡ (left menu button) | opens or closes the settings menu |
-| left thumbstick click | recenter |
-| right thumbstick click | laser off/on (kept) |
-| trigger | shoot |
-| grip + thumbstick up/down | world size (kept) |
-| thumbstick | the game's D-pad (menus) |
+Controller help names **Start**, **Fire**, **Reload** and physical buttons.
+Right stick click toggles **laser and crosshair together**, keeping width/size
+tuning. Tap Grip for Game zoom; hold Grip and move the stick for sizing. Zoom
+starts Off, pauses for cutscenes and resumes requested On when they end.
 
-The two-player meanings are the menu's Two players at its default, "P1 left / P2 right"; at "P1 right / P2 left" the right controller's buttons stay player 1's and the left's player 2's.
+Quest uses A/X for Start and B/Y for Reload. Index uses its A/B buttons; Vive
+and Windows Mixed Reality use Menu for Start and pad click for Reload. Those
+profiles open settings with the existing left-pad squeeze or held left Menu.
+Vive wands have no dedicated laser/crosshair stick-click shortcut. Native
+off-screen reload, rifle firing, haptics and supported gun models are retained.
 
-The how-to-play labels by the controllers' buttons (before play starts, and the menu's How to play while you play alone):
-- right controller: A - P1 Start · B - P1 Reload · Trigger - P1 Shoot · Stick - Laser
-- left controller: X - P2 Start · Y - P2 Reload · Trigger - P2 Shoot · Stick - Recenter · Menu
-
-With two players in, the menu's How to play shows them as they are then (P1 on the left, the default):
-- left controller: X - P1 Start · Y - P1 Reload · Trigger - P1 Shoot · Stick - Recenter · Menu
-- right controller: A - P2 Start · B - P2 Reload · Trigger - P2 Shoot · Stick - Laser
-
-"Stick" is the stick click. Before player 2 joins, the left trigger shoots for player 1 too: the
-one gun goes to the hand that fires.
-
-In the game's cutscenes (the stage intros and the story scenes) both hands are empty: no gun,
-no controller, no laser. The guns come back the moment play resumes. Start still skips
-a scene. A round the game fires during one (a scene that takes shots) brings the guns back at
-once, until the scene ends.
-
-Reload by shooting away from the game's view (past the grey ring), as before; with two guns,
-pointing a gun at the floor reloads it too. With the menu's Reload at Point off-screen, pointing
-the gun away from the game's view is enough: it reloads once, with a short buzz, each time it
-leaves (not into the grey ring, not with a full gun, not from the menu). B and Y are the cabinet's second button, the game's
-own reload: with one gun either reloads it, with two guns B reloads the right one and Y the
-left one. Grip + thumbstick left/right sizes the gun (kept). The gun goes to the hand you last
-fired with.
-
-The knock in the hand comes when the game fires, one for each shot it counts; a pull on an
-empty gun gives a light click instead, and a reload none. `vr.Haptics` sets how strong it is.
-The gun kicks and flashes only when the game fires a round too: never on a pull on an empty
-gun or a reload, and still with `vr.Haptics` off.
-With the assault rifle (shoot one a fallen enemy drops) the trigger held keeps firing: a sharp
-knock for the first bullet, then a short lighter one for each bullet after, 12 a second, each
-with a small kick and its flash.
-
-**Two guns.** Press X and player 2 joins, as at the cabinet, both lives and scores on screen.
-With two players, player 1 is on the left hand and player 2 on the right, matching the game's
-screen: player 1's gun (red aim) moves to the left hand and player 2's (blue aim) appears in the
-right. Each controller's buttons are then its own player's: X is player 1's Start and Y its
-reload, A player 2's Start and B its reload (the X you joined with counts as player 2's Start
-until you let it go). The menu's Two players at "P1 right / P2 left" turns this round:
-player 1 keeps the right hand, as in 1.2.0. When player 2 is out of the game (the game asks for
-player 2's Start again), it's one gun again, in player 1's hand, and either trigger takes it as
-before. X only joins while the game takes player 2; at other times it does nothing.
-`vr.DualWield = no` turns joining off.
-
-Holding the Meta button recenters too.
-Quit with the Meta button, then *Quit*.
-
-**PC VR controllers.** Quest Touch (Link, Virtual Desktop) as above. The others:
-
-| | Valve Index | Vive wands | Windows Mixed Reality |
-|---|---|---|---|
-| Start (right: player 1, left: player 2) | A | menu button | menu button |
-| Reload (right: player 1, left: player 2) | B | trackpad click | trackpad click |
-| Settings menu | squeeze the left trackpad hard | hold the left menu button (0.8 s) | hold the left menu button (0.8 s) |
-| Recenter | left thumbstick click | the runtime's own | left thumbstick click |
-| Laser off/on | right thumbstick click | none | right thumbstick click |
-| The game's D-pad (menus) | thumbstick | trackpad | thumbstick |
-| World size | grip + thumbstick up/down | grip + trackpad up/down | grip + thumbstick up/down |
-
-With two players in, each controller's Start and reload are its own player's, as on the Quest:
-by default the left's are player 1's and the right's player 2's. Where the settings menu is a
-hold, a shorter press of the left menu button is the left Start when you let go: player 2's
-(it lets player 2 join), or with two players in, player 1's by default. Their how-to-play labels name each controller's own buttons the same way
-("Pad click - P1 Reload", "Menu - P2 Start (hold: Menu)").
-
----
+Gun extraction is required before first play. B/Y cannot skip it, and ordinary
+gameplay/menu inputs wait until it completes. Valid complete cached guns avoid
+repeating setup. If setup fails, check game files/storage and restart.
 
 <a id="the-menu"></a>
 ## ⚙️ The menu
 
-The left controller's ≡ opens the settings menu. The game pauses, sound and all; its last
-picture stays around you (look around and lean as you like), and a panel stands about 1.2 m in
-front of you, a little below your eyes. ≡ or B closes it, and the game goes on exactly where it
-stopped. In the first seconds after the game starts, while the guns are being made, ≡ does
-nothing.
+Open settings with the left Menu button. One controller owns the pointer; a fresh
+trigger on the other hand transfers it before selecting. A visible contact point
+marks the actual hit. Use direct buttons or the active stick to adjust values.
+The pointer remains available when gameplay laser/crosshair are Off.
 
-Point at a row with either hand and pull the trigger, or move with a thumbstick (up and down,
-round from the bottom to the top) and press A. On a row with - and +, the left half of the row
-is - and the right half +; the thumbstick left and right are - and +, and A is +. On an On/Off
-row (Two players, Laser, Wider view, How to play) the thumbstick left or right, A, or a click anywhere flips it.
-Held left or right on Gun angle, World size or Panel distance, the thumbstick keeps stepping. The pointer's line and dot show while the menu is open,
-even with the laser off.
+| Tab | Settings |
+| --- | --- |
+| Gun | Direct gun models, Gun angle, Laser Off/Normal/2x/5x/10x, Crosshair Custom/None, Haptics; Advanced Crosshair sizing and CM reload |
+| World | Wider view Off/On/Fade, Game zoom; Advanced numeric World size, panel distance and HUD size |
+| System | Explicit P1/P2 layout, Open Service Menu, How to play, confirmed Reset to defaults and Quit |
+| In-game | Game/Boss/Shifting difficulty, Collision size and Life; Apply settings and restart |
 
-| Row | Does |
-|---|---|
-| Resume | closes the menu |
-| Recenter | the view goes where you face; the menu stays open, in front of you |
-| Gun | the gun in your hand: In-game pistol, Arcade gun, Zapper, then any of your own (`vr.Gun`, `vr.GunFile`; see The guns below, and Your own models). There is no Auto: the in-game pistol is the default. A gun not made yet is skipped; an in-game pistol made without all of it says "(incomplete)" and can still be chosen. If the chosen gun isn't there, the hand takes the in-game pistol; without that (the first start skipped, or not done yet), the Arcade gun; and if no gun file loads at all, a plain built-in gun. The new gun shows at once, while the game is paused |
-| Gun angle | the gun tilted in your hand, -30° to +30° in 1° steps, + the muzzle up (`vr.GunAngle`): for a controller that holds a gun at a different angle than your hand points. The laser and the shots follow the barrel, in both hands, the assault rifle too |
-| Reload | Shoot off-screen (a pull away from the game's view reloads, as in the arcade) or Point off-screen (pointing away is enough; `vr.Reload`). B and Y reload either way |
-| Two players | P1 left / P2 right (the default) or P1 right / P2 left (`vr.TwoPlayerP1Hand`): which controller is player 1's once player 2 is in, with its gun, trigger, Start and reload; the other is player 2's. At the default, as the game shows the players, X is player 1's Start and Y its reload, A player 2's Start and B its reload, and the how-to-play labels follow. Changed with two players in, the guns change hands when the menu closes; changed playing alone, it applies at the next join. Playing alone it changes nothing: A is player 1's Start and either hand's trigger takes the gun |
-| Laser | the laser line and dot, On or Off (`vr.Laser`) |
-| Haptics | Off, Light, Medium (the default) or Strong (`vr.Haptics`): Light is 1.2's Normal, Medium 1.2's Strong, Strong half as long again; each change gives a sample knock at the new level in the hand that made it |
-| World size | metres per game unit, 10 % a step (`vr.WorldScale`) |
-| Panel distance | the 2D plane's distance, 15 to 120 game units, 5 a step (`vr.HudDepth`) |
-| Wider view | the game's wider view, On or Off (`vr.Widen`); it changes at the next start, and says "(next start)" until then |
-| How to play | On or Off: the controllers in both hands, with what their buttons do (the guns leave the hands); the menu stays open. Closing the menu turns it off |
-| Quit | back to the start screen (PC: Flycast quits). It asks first: the row says "Quit? Choose again", and a second choose within 3 s quits |
+World size defaults to **0.10**. This update overrides older saved World size once;
+later choices stay. Reset applies the default through the usual save path.
+Crosshair defaults remain20% minimum,45% maximum and6.5m shrink distance.
+Game zoom is session-only and starts Off. Fade darkens scenery outside the original
+native screen; supported HUD sizing affects Wider gameplay UI.
 
-Each change is saved in `emu.cfg` at once, so it is kept the next time you play.
-
----
+In-game changes are staged and survive closing the menu. **Apply settings and
+restart** uses the original Service save/restart and verifies readback. That save
+can close the obsolete internet-ranking option; unrelated cabinet/calibration
+settings remain protected. Unsupported native states offer manual Service.
 
 <a id="the-game"></a>
 ## 🎯 The game
@@ -338,10 +267,9 @@ Sega's NAOMI light-gun game from 2000, with its own profile:
 - **The guns.** The agents' own pistol in your hand (the menu's "In-game pistol", the default),
   or the Arcade gun, or the Zapper: the menu's Gun row. The first start makes the in-game pistol
   (and the assault rifle) from your own copy of the game: it plays the game's first six minutes
-  by itself, fast-forwarded behind a panel, about a minute on a PC (only once: B skips it, and
-  the guns not made by then stay out of the hand that session); nothing of the game comes with
-  this app.
-  Without the pistol (the first start skipped) the hand holds the Arcade gun. A choice saved by
+  by itself, fast-forwarded behind a required preparation panel. A complete readable
+  pistol must be extracted before gameplay; setup errors explain recovery. Nothing
+  of the game comes with this app. A choice saved by
   1.1 (Auto, the cabinet gun or the arcade gun) now means the in-game pistol. When the game gives
   you the assault rifle, the in-game pistol becomes the in-game rifle (the pistol stays if the
   rifle isn't made yet); any other gun (the Arcade gun, the Zapper, one of yours) stays in your
@@ -356,9 +284,8 @@ Sega's NAOMI light-gun game from 2000, with its own profile:
   gun adjustment screen before each game needs nothing from you.
 - **On the panel.** The HUD, the subtitles, the briefing and the menus sit on the 2D plane; the
   game's own shot marker is hidden, and so is player 2's start prompt in a one-player game.
-- **Two guns.** X (the left controller's Start) lets player 2 join: player 1's gun goes to your
-  left hand and player 2's to the right (the menu's Two players); when player 2 is out, it's one
-  gun again.
+- **Two guns.** The unused hand's Start joins the missing native player; the
+  saved P1/P2 layout applies after native acknowledgement.
 - **Free play.** No coins: Start (A) begins a game.
 
 Checked on the PC: the profile, the widened view in the attract scenes, the story and stage 1,
@@ -505,7 +432,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 
 | Option | Default | |
 |---|---|---|
-| `vr.WorldScale` | 0.11 | metres per game unit, so the game's camera is at eye height (also set with grip + thumbstick) |
+| `vr.WorldScale` | 0.10 | metres per game unit, so the game's camera is at eye height (also set with grip + thumbstick) |
 | `vr.FovScale` | 2 (profile) | how much wider than the original (tan of the half angle) |
 | `vr.WidenFov` | yes | widen through the game's own field of view (the profile knows where) |
 | `vr.Laser` | yes | laser line and dot (also with a click on the right thumbstick) |
@@ -520,7 +447,7 @@ next to `flycast.exe`), under `[config]`. The useful ones:
 | `vr.Reload` | 0 | 0 reload by shooting away from the game's view; 1 by pointing away from it too, once each time (the menu's Reload) |
 | `vr.TwoPlayerP1Hand` | left | with two players in, player 1's controller: `left` (player 1's gun, Start (X) and reload (Y) in the left hand, player 2's (A, B) in the right, as the game shows them) or `right` the other way round; anything else reads as left. Playing alone it changes nothing (the menu's Two players). 1.2.0's `vr.P1Hand` is no longer read |
 | `vr.Widen` | yes | the profile's wider view (`vr.FovScale`), from the next start |
-| `vr.DualWield` | yes | X (the left controller's Start) lets player 2 join, a gun in each hand (`vr.TwoPlayerP1Hand` says which is whose) |
+| `vr.DualWield` | yes | the unused hand's Start joins the missing player, a gun in each hand (`vr.TwoPlayerP1Hand` says which is whose) |
 | `vr.HideP2Prompt` | yes | no "PRESS START BUTTON / CREDIT(S)" for player 2 in a one-player game |
 | `vr.DropShotFlash` | yes | hide a bright full-screen flash right after a shot, should the game draw one |
 | `vr.ComfortStart` / `vr.ComfortMin` | 0.8 / 0.4 | comfort zone, metres (0: off) |
@@ -739,27 +666,12 @@ Run `powershell -NoProfile -File cm-vr/player-assignment-test.ps1` with Windows 
 
 ## Quest Start and Service buttons
 
-Play launches immersive VR from passthrough or a virtual Quest Home. After loading,
-**A** starts P1; **X** requests P2 where supported, after P1 has started. The second
-gun appears only after native P2 acceptance. Two-player Starts follow the saved hand
-assignment. Survivor retains its native single-player controls.
+Either controller can start solo P1. The unused hand joins the missing player;
+two-player layout applies after native acceptance. Held inputs require release
+after setup, settings and focus recovery.
 
-To enter Service, open the in-game VR menu and choose **Open Service Menu**, directly
-above **Quit**. Holding A does not open Service. Normal controller buttons do not
-enter the arcade menu; the row is available after initial loading, offline with VR guns enabled.
-
-Inside standard NAOMI Service, **X = Next** and **tap A = Select**. The purple guide appears below
-the native menu. Choose the native **EXIT** option to restart the game and restore
-normal controls automatically; there is no B step. Leaving a submenu keeps Service
-navigation available. Aiming, triggers and directions remain usable for native tests.
-
-Held A/X inputs require release after opening, settings or focus recovery. Native
-main-game boot and new game/session resets clear Service controls. Existing external
-keyboard/gamepad cabinet controls remain available.
-
-Ninja Assault and Survivor use Namco's native operator menu: **X = Down**,
-**A = Enter**, with the stick also available for Up/Down. While it is open,
-the same VR menu row reads **Exit Service Menu** and sends the native return
-command after resuming. The guide and ordinary gameplay controls restore
-automatically after the game leaves its operator menu. A alone never opens or
-closes Service during ordinary gameplay.
+System > **Open Service Menu** enters original NAOMI Service. Holding A does not.
+Inside Service, **X = Next**, **tap A = Select**; the purple guide shows these
+controls. Choose native **EXIT** to restart and restore normal gameplay controls.
+Native tests retain aiming/triggers/directions. Apply settings and restart on
+the In-game page uses this original protocol with guarded save/readback.

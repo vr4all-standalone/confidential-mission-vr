@@ -27,6 +27,7 @@
 #include "rend/vr/gun_angle_settings.h"
 #include "rend/vr/reticle_settings.h"
 #include "rend/vr/hud_size_settings.h"
+#include "rend/vr/world_scale_settings.h"
 #include "rend/vr/view_settings.h"
 #include "hw/maple/maple_cfg.h"
 #ifdef LIBRETRO
@@ -485,7 +486,8 @@ extern Option<bool> VrXrGun;
 extern Option<bool> VrWiden;
 using WidenModeOption = vr::view::ModeSetting<Option<int, false>, Option<bool>>;
 extern WidenModeOption VrWidenMode;
-extern Option<float> VrWorldScale;
+using WorldScaleOption = vr::world_scale::Setting<Option<float, false>>;
+extern WorldScaleOption VrWorldScale;
 extern Option<float> VrXrResolution;
 extern Option<int> VrMsaa;
 extern Option<int> VrXrRefreshRate;

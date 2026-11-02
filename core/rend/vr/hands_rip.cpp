@@ -7,6 +7,7 @@
 #include "hands_rip.h"
 #include "hands_build.h"
 #include "xr_host.h"
+#include "xr_hands.h"
 #include "xr_sim.h"
 #include "rend/vr_reproject.h"
 #include "rend/transform_matrix.h"
@@ -83,7 +84,7 @@ constexpr double CmQuietFor = 10.0;
 constexpr double CmLastAt = 150.0;
 constexpr size_t CmMaxCaptures = 1200;	// 20 s of passes (about 15 kB each)
 
-enum State { Off, Watching, Preparing };
+enum State { Off, Watching, Preparing, Failed };
 std::atomic<int> state { Off };
 std::atomic<bool> newModel, skipRequested;
 std::atomic<float> progress;
@@ -139,7 +140,7 @@ bool haveModel()
 		// rifle: its file missing alone starts no run, PF20; it's watched for in play). An old
 		// gun-cm-cabinet.bin (1.1) is no gun's: left alone, never read.
 		for (const GunTarget& gun : source->guns)
-			if (gun.used() && gun.attractBy <= 0.f && !file_exists(gunPath(gun)))
+			if (gun.used() && gun.attractBy <= 0.f && !xr::completeModelFile(gunPath(gun)))
 				return false;
 		return true;
 	}
@@ -196,9 +197,9 @@ void onStart()
 	// a new game: whatever model the renderer has is another game's
 	newModel = true;
 	const Source *source = gameModelSource();
-	if (source == nullptr || !config::VrGameHands)
+	cmRun = source != nullptr && source->kind == Source::CmGuns;
+	if (source == nullptr || (!config::VrGameHands && !cmRun))
 		return;
-	cmRun = source->kind == Source::CmGuns;
 	const bool watchOnly = haveModel();
 	if (watchOnly)
 	{
@@ -219,7 +220,7 @@ void onStart()
 		for (int i = 0; i < 3; i++)
 		{
 			const GunTarget& gun = source->guns[i];
-			gunDone[i] = !cmRun || !gun.used() || file_exists(gunPath(gun));
+			gunDone[i] = !cmRun || !gun.used() || (gun.attractBy > 0.f ? file_exists(gunPath(gun)) : xr::completeModelFile(gunPath(gun)));
 			gunFailedAt[i] = 0;
 			std::vector<Rip>().swap(gunCaptures[i]);
 			gunSeen[i] = false;
@@ -245,11 +246,16 @@ void onStart()
 	// The run: in the headset, or on the PC when asked (vr.HandsPrep, for testing; the OpenXR
 	// simulator counts as the PC). Never online: it presses Start for this side's player in the
 	// shared game (watching for the scene in play still makes the model when it comes by).
-	if ((!xr::enabled() || xr::sim::active()) && !config::VrHandsPrep)
+	if (!cmRun && (!xr::enabled() || xr::sim::active()) && !config::VrHandsPrep)
 		return;
 	if (config::GGPOEnable)
 	{
-		NOTICE_LOG(RENDERER, "VR hands: online, no run for the model (watching for it in play)");
+        if (cmRun) {
+            state = Failed;
+            std::lock_guard<std::mutex> lock(failureMutex);
+            lastFailure = "Turn off online play, then restart to extract your guns.";
+        }
+		NOTICE_LOG(RENDERER, "VR hands: online, no run for the model");
 		return;
 	}
 	std::fill(std::begin(recent3D), std::end(recent3D), 0u);
@@ -399,7 +405,7 @@ void onVBlank()
 		for (Merge& m : merges)
 			finishMerged(source->guns[m.i], m.i, std::move(m.captures), std::move(m.textures));
 		// over when each gun is made or given up
-		bool over = true, all = true, saved;
+		bool over = true, all = true;
 		{
 			std::lock_guard<std::mutex> lock(gunMutex);
 			for (int i = 0; i < 3; i++)
@@ -407,13 +413,16 @@ void onVBlank()
 				over = over && (gunDone[i] || gunOver[i]);
 				all = all && gunDone[i];
 			}
-			saved = cmSaved;
 		}
 		if (over)
 		{
-			if (saved)
-				progress = 1.f;
-			stopPrep(saved ? "done" : "no gun came up whole (gave up)", all ? Off : Watching);
+            const bool ready = haveModel();
+            if (ready) progress = 1.f;
+            else {
+                std::lock_guard<std::mutex> lock(failureMutex);
+                lastFailure = "Check your game files and free space, then restart.";
+            }
+            stopPrep(ready ? "done" : "required gun extraction failed", ready ? (all ? Off : Watching) : Failed);
 			return;
 		}
 		lightgunSet(0, OffScreen, OffScreen, start ? 4 : 0);
@@ -525,6 +534,10 @@ bool save(const std::vector<u8>& data, const std::string& path)
 bool saveGun(const GunTarget& gun, int i, const std::vector<u8>& model, u32 polys, bool complete,
 		const std::string *verdict)
 {
+    if (cmRun && gun.attractBy <= 0.f && !complete) {
+        WARN_LOG(RENDERER, "VR hands: required pistol is incomplete; extraction remains required");
+        return false;
+    }
 	const std::string path = gunPath(gun);
 	if (!save(model, path))
 	{
@@ -782,7 +795,7 @@ std::string legacyModelPath()
 void observePass(const rend_context& ctx, const RenderPass& pass, const RenderPass& prev)
 {
 	const Source *source = gameModelSource();
-	if (state == Off || source == nullptr)
+	if (state == Off || state == Failed || source == nullptr)
 		return;
 	if (source->kind == Source::CmGuns)
 	{
@@ -885,7 +898,13 @@ bool takeNewModel() {
 }
 
 bool preparing() {
-	return state == Preparing;
+	return state == Preparing || state == Failed;
+}
+
+bool prepFailed() { return state == Failed; }
+std::string prepFailure() {
+    std::lock_guard<std::mutex> lock(failureMutex);
+    return lastFailure;
 }
 
 float prepProgress() {
@@ -893,6 +912,7 @@ float prepProgress() {
 }
 
 void skipPrep() {
+    if (cmRun) return; // CM gun extraction is required before gameplay.
 	skipRequested = true;
 }
 

@@ -24,7 +24,7 @@ void load(const std::string& text){config::Settings::instance().reset();config::
 int main(){using namespace config;
 load("[config]\nSentinel=73\n");CHECK(near(VrReticleMinSize,.20f)&&near(VrReticleMaxSize,.45f)&&near(VrReticleShrinkDistance,6.5f)&&near(VrWorldScale,.10f));
 for(const char* bad:{"bogus","nan","inf","-1","999999"}){load(std::string("[config]\nvr.ReticleMinSize=")+bad+"\nvr.ReticleMaxSize="+bad+"\nvr.ReticleShrinkDistance="+bad+"\nSentinel=73\n");CHECK(near(VrReticleMinSize,.20f)&&near(VrReticleMaxSize,.45f)&&near(VrReticleShrinkDistance,6.5f)&&near(VrWorldScale,.10f));}
-load("[config]\nSentinel=73\nvr.ReticleMinSize=.37\nvr.ReticleMaxSize=1.6\nvr.ReticleShrinkDistance=12.3\nvr.WorldScale=.13\n");CHECK(near(VrReticleMinSize,.37f)&&near(VrReticleMaxSize,1.6f)&&near(VrReticleShrinkDistance,12.3f)&&near(VrWorldScale,.13f));
+load("[config]\nSentinel=73\nvr.ReticleMinSize=.37\nvr.ReticleMaxSize=1.6\nvr.ReticleShrinkDistance=12.3\nvr.WorldScale=.13\nvr.CmWorldSizeMigration=1\n");CHECK(near(VrReticleMinSize,.37f)&&near(VrReticleMaxSize,1.6f)&&near(VrReticleShrinkDistance,12.3f)&&near(VrWorldScale,.13f));
 Settings::instance().save();const auto saved=persisted;load(saved);CHECK(near(VrReticleMinSize,.37f)&&near(VrReticleMaxSize,1.6f)&&near(VrReticleShrinkDistance,12.3f)&&near(VrWorldScale,.13f));
 resetCaptured();CHECK(near(VrReticleMinSize,.20f)&&near(VrReticleMaxSize,.45f)&&near(VrReticleShrinkDistance,6.5f)&&near(VrWorldScale,.10f));CHECK(loadInt("config","Sentinel")==73);const auto reset=persisted;load(reset);CHECK(near(VrReticleMinSize,.20f)&&near(VrReticleMaxSize,.45f)&&near(VrReticleShrinkDistance,6.5f)&&near(VrWorldScale,.10f));
 CHECK(vr::reticle::minimum(0)==.05f&&vr::reticle::maximum(99)==3.f&&vr::reticle::distance(99)==20.f);

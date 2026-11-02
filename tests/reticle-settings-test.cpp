@@ -37,7 +37,7 @@ int main(){
  Settings::instance().save();restart(persisted);check(near(VrReticleShrinkDistance,6.5f),"per-game settings save and restart keep global6.5m default");
  restart("[config]\n");Settings::instance().setGameId("no-overrides");Settings::instance().load(true);check(near(VrReticleShrinkDistance,6.5f),"a game with no override section also keeps6.5m");
  restart(saved);
- check(std::string(Labels[Laser+1])=="Reticle"&&std::string(Labels[Laser+2])=="Reticle min size"&&std::string(Labels[Laser+3])=="Reticle max size"&&std::string(Labels[Laser+4])=="Reticle shrink distance","actual menu places the three common rows directly after Laser");
+ check(std::string(Labels[Laser+1])=="Crosshair"&&std::string(Labels[Laser+2])=="Crosshair min size"&&std::string(Labels[Laser+3])=="Crosshair max size"&&std::string(Labels[Laser+4])=="Crosshair shrink distance","actual menu places the three common rows directly after Laser");
  check(reticleValue(ReticleShrinkDistance)=="6.5 m","menu shows the requested6.5m starting value");
  chooseReticle(Reticle,1);check(int(VrReticleMode)==2&&reticleValue(Reticle)=="None","no-native menu advances Custom to None");
  chooseReticle(Reticle,1);check(int(VrReticleMode)==1&&reticleValue(Reticle)=="Custom","no-native menu wraps directly to Custom");

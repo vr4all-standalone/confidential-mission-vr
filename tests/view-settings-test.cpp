@@ -18,7 +18,7 @@ namespace hostfs {class File;}
 #include "view-settings.inc"
 static int checks;
 static void check(bool ok,const char* label){++checks;if(!ok){std::cerr<<"FAIL: "<<label<<'\n';std::exit(1);}}
-static void restart(const std::string& text){config::Settings::instance().reset();config::cfgdb=config::IniFile();config::cfgdb.load(text);config::persisted=text;config::writeCount=0;config::Settings::instance().load(false);}
+static void restart(const std::string& text){config::Settings::instance().reset();config::cfgdb=config::IniFile();config::cfgdb.load(text); config::cfgdb.load("[config]\nvr.CmWorldSizeMigration=1\n");config::cfgdb.save(config::persisted);config::writeCount=0;config::Settings::instance().load(false);}
 int main(){
  check(HAS_VIEW_SETTINGS,"production options expose laser widths and Wider view Fade");
 #if HAS_VIEW_SETTINGS

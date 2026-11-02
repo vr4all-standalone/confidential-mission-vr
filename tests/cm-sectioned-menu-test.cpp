@@ -4,8 +4,8 @@ int checks = 0;
 void check(bool yes, const char* name) { ++checks; if (!yes) { std::cerr << "FAIL: " << name << '\n'; std::exit(1); } }
 bool near(float a, float b) { return std::abs(a-b)<.00001f; }
 void restart(const std::string& ini) {
- config::Settings::instance().reset(); config::cfgdb=config::IniFile(); config::cfgdb.load(ini);
- config::persisted=ini; config::writeCount=0; config::Settings::instance().load(false);
+ config::Settings::instance().reset(); config::cfgdb=config::IniFile(); config::cfgdb.load(ini); config::cfgdb.load("[config]\nvr.CmWorldSizeMigration=1\n");
+ config::cfgdb.save(config::persisted); config::writeCount=0; config::Settings::instance().load(false);
 }
 Input input;
 glm::vec2 middle(SettingsRect r) { return {r.x+r.w*.5f,r.y+r.h*.5f}; }

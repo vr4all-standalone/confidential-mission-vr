@@ -26,8 +26,8 @@ static void haptic(int hand,float seconds,float amplitude){if(hand!=Right||secon
 static int checks;
 static void check(bool yes,const char* message){++checks;if(!yes){std::cerr<<"FAIL "<<message<<'\n';std::exit(1);}}
 static void load(const std::string& text){
- config::Settings::instance().reset();config::cfgdb=config::IniFile();config::cfgdb.load(text);
- config::persisted=text;config::writeCount=0;config::Settings::instance().load(false);
+ config::Settings::instance().reset();config::cfgdb=config::IniFile();config::cfgdb.load(text); config::cfgdb.load("[config]\nvr.CmWorldSizeMigration=1\n");
+ config::cfgdb.save(config::persisted);config::writeCount=0;config::Settings::instance().load(false);
 }
 int main(){
  using namespace config;
