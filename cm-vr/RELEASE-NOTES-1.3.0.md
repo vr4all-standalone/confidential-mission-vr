@@ -1,4 +1,4 @@
-# Confidential Mission1.3.0 â€” local candidate
+# Confidential Mission1.3.0 — local candidate
 
 The accepted VR4ALL settings design now has Gun, World, System and In-game tabs,
 with advanced tuning grouped separately. One trigger-selected controller owns
@@ -16,8 +16,8 @@ native dual acknowledgement applies the configured two-player hand layout.
 Focus, tracking, menu and surviving nativeP2 identity are guarded.
 
 In-game controls use the measured original CM USA Game Assignments protocol:
-Game difficulty, Boss difficulty, Shifting difficulty and Collision size1â€“8,
-Life3â€“8. Edits are staged, then Apply settings and restart navigates the actual
+Game difficulty, Boss difficulty, Shifting difficulty and Collision size1–8,
+Life3–8. Edits are staged, then Apply settings and restart navigates the actual
 native Service/Test inputs, saves original mirrored EEPROM and verifies the
 restarted game. It never writes guessed option RAM directly. Unsupported native
 revision/region or unsafe operator state offers original manual Service instead.
