@@ -194,14 +194,6 @@ struct Gun
 Gun guns[2] { { 0 }, { 1, Left } };
 PlayerOwnership playerOwnership;
 Gun& primaryGun(){return guns[playerOwnership.soloPlayer()];}
-void releaseGunInput(Gun& g){
-    lightgunSet(g.player,OffScreen,OffScreen,0);
-    g.triggerWas=g.triggerWait=true;g.pullOutside=false;
-    g.pullAt=g.heldAt=g.reloadAt=g.knockEnds=0;
-    g.shotsDue=g.autosDue=g.clicksDue=0;
-    g.freshPull=g.gunKnown=g.pointedDown=g.offArmed=false;
-    g.nativeReleaseTicket=0;
-}
 
 bool dualWield;
 XrTime dualSince;
@@ -1006,7 +998,7 @@ void updateOrigin(bool tracked)
 		menu::place(headPose());
 }
 
-// MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¶ller-Trumbore; returns the distance along the ray, or a negative value for a miss.
+// MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¶ller-Trumbore; returns the distance along the ray, or a negative value for a miss.
 float rayTriangle(const glm::vec3& o, const glm::vec3& d, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c)
 {
 	const glm::vec3 e1 = b - a, e2 = c - a;
@@ -1405,6 +1397,15 @@ bool adjustWorldSize(XrTime time, const glm::vec2& stick)
 
 // Off the game screen, as a light gun sees it (any negative position).
 constexpr int OffScreen = -10000;
+
+void releaseGunInput(Gun& g){
+    lightgunSet(g.player,OffScreen,OffScreen,0);
+    g.triggerWas=g.triggerWait=true;g.pullOutside=false;
+    g.pullAt=g.heldAt=g.reloadAt=g.knockEnds=0;
+    g.shotsDue=g.autosDue=g.clicksDue=0;
+    g.freshPull=g.gunKnown=g.pointedDown=g.offArmed=false;
+    g.nativeReleaseTicket=0;
+}
 
 // The other hand, with the game's pistol (xr_hands.h): the open hand follows the other
 // controller. Its grip squeezed near the back of the slide takes the slide, and pulling it
