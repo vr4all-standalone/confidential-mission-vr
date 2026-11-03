@@ -86,11 +86,12 @@ int main(){
  gun.menuPointer=false;gun.aimDot=false;gun.kind=GunKind::Staff;gun.shot=1;gun.sinceShot=.04f;gun.restMuzzle={0,0,-1};gun.now=1;check(lit(render(2))>8,"None preserves native MOK staff pulse and golden motes");
 #endif
  GunView beam;beam.aimLine=true;beam.aimDot=false;beam.restMuzzle={0,-.1f,-1};beam.aimPoint={.2f,.1f,-10};
- for(bool menu:{false,true})for(int w=1;w<=4;++w){
-  config::VrLaserWidth=w;beam.menuPointer=menu;upload.clear();drawGunGlow(vp,{},beam,false);
+ for(int pointer=0;pointer<3;++pointer)for(int w=1;w<=4;++w){
+  const bool menu=pointer==1;
+  config::VrLaserWidth=w;beam.menuPointer=menu;beam.servicePointer=pointer==2;upload.clear();drawGunGlow(vp,{},beam,false);
   check(upload.size()==6*sizeof(GlowVertex),"beam uploads exact original quad topology");
   GlowVertex v[6];std::memcpy(v,upload.data(),sizeof(v));
-  check(std::abs(glm::length(v[1].pos-v[0].pos)*.5f-vr::laser::halfWidth(w))<2e-8f,"actual gameplay and menu laser vertices use selected width");
+  check(std::abs(glm::length(v[1].pos-v[0].pos)*.5f-(pointer ? vr::laser::PointerHalfWidth : vr::laser::halfWidth(w)))<2e-8f,"gameplay laser width and fixed menu and service pointer widths");
   check(v[0].color.a==.55f&&v[1].color.a==.55f&&v[2].color.a==0.f&&v[5].color.a==0.f,"all widths preserve original .55-to-zero alpha");
   check(std::abs(glm::length((v[2].pos+v[5].pos)*.5f-beam.restMuzzle)-3.f)<1e-6f,"all widths preserve original3m cap and aim endpoint direction");
   check(v[0].color.r==(menu?theme::Accent.r:1.f),"menu beam previews width in purple and gameplay retains player red");

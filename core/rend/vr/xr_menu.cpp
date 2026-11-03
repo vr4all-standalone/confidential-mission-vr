@@ -231,7 +231,7 @@ SettingsPanel panel()
    if (r.choice < 0 || !choices[r.choice].made || !choices[r.choice].complete) r.note = r.value;
    r.value.clear();
   }
-  if (row == Laser) { r.choices = { "Off", "Normal", "2x", "5x", "10x" }; r.choice = vr::laser::choice(config::VrLaser, config::VrLaserWidth); }
+  if (row == Laser) { r.choices = { "Off", "Normal", "5x", "10x" }; r.choice = vr::laser::choice(config::VrLaser, config::VrLaserWidth); }
   if (row == WiderView) { r.choices = { "Off", "On", "Fade" }; r.choice = vr::view::mode(config::VrWidenMode); if (config::VrWiden != widenAtStart) r.note = "Applies next start"; }
   if (row == Reticle) { r.choices = { "Custom", "None" }; r.choice = vr::reticle::mode(config::VrReticleMode) - 1; r.stepper = false; }
   if (row == Haptics) { r.choices = { "Off", "Light", "Medium", "Strong" }; r.choice = hapticsLevel(); r.stepper = false; }
@@ -331,7 +331,7 @@ void change(int row, int dir, int hand)
  {
   const int choice = vr::laser::nextChoice(config::VrLaser, config::VrLaserWidth, dir);
   config::VrLaser.set(choice != 0);
-  if (choice != 0) config::VrLaserWidth.set(choice);
+  if (choice != 0) config::VrLaserWidth.set(vr::laser::savedWidth(choice));
   config::saveBool("config", "vr.Laser", config::VrLaser);
   config::saveInt("config", "vr.LaserWidth", config::VrLaserWidth);
   break;
@@ -475,7 +475,7 @@ void exactChoice(int row, int choice, int hand)
  }
  if (choice == was) return;
  if (row == Laser) {
-  config::VrLaser.set(choice != 0); if (choice != 0) config::VrLaserWidth.set(choice);
+  config::VrLaser.set(choice != 0); if (choice != 0) config::VrLaserWidth.set(vr::laser::savedWidth(choice));
   config::saveBool("config", "vr.Laser", config::VrLaser); config::saveInt("config", "vr.LaserWidth", config::VrLaserWidth); return;
  }
  if (row == WiderView) { config::VrWidenMode.set(choice); config::VrWidenMode.save(); return; }

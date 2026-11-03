@@ -49,13 +49,17 @@ public:
 }
 namespace vr::laser {
 inline int width(int value) { return value>=1&&value<=4?value:1; }
-inline int nextWidth(int value,int dir) { return std::clamp(width(value)+dir,1,4); }
-inline float multiplier(int value) { const float scales[]={1.f,2.f,5.f,10.f};return scales[width(value)-1]; }
-inline float halfWidth(int value) { return .0008f*multiplier(value); }
-inline const char* label(int value) { const char* names[]={"Normal","2x","5x","10x"};return names[width(value)-1]; }
-inline int choice(bool enabled,int value) { return enabled?width(value):0; }
-inline int nextChoice(bool enabled,int value,int dir) { return std::clamp(choice(enabled,value)+dir,0,4); }
-inline const char* choiceLabel(bool enabled,int value) { return enabled?label(value):"Off"; }
+inline float multiplier(int value) { const float scales[]={2.f,2.f,5.f,10.f};return scales[width(value)-1]; }
+inline constexpr float PointerHalfWidth = .0008f;
+inline float halfWidth(int value) { return PointerHalfWidth*multiplier(value); }
+inline int choice(bool enabled,int value) {
+ if (!enabled) return 0;
+ return value == 3 ? 2 : value == 4 ? 3 : 1;
+}
+// Preserve saved 5x and 10x IDs, and accept the old 2x ID as Normal.
+inline int savedWidth(int choice) { return choice == 2 ? 3 : choice == 3 ? 4 : 1; }
+inline int nextChoice(bool enabled,int value,int dir) { return std::clamp(choice(enabled,value)+dir,0,3); }
+inline const char* choiceLabel(bool enabled,int value) { const char* names[]={"Off","Normal","5x","10x"};return names[choice(enabled,value)]; }
 template<class OptionType> class WidthSetting : public OptionType {
 public:
  WidthSetting():OptionType("vr.LaserWidth",1){}

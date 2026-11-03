@@ -72,8 +72,10 @@ int main() {
  rowClick(1,1);check(int(config::VrGunAngle)==5,"row body increments Gun angle regardless of left half");
  rowClick(1,1,.755f);check(int(config::VrGunAngle)==4,"explicit minus button decrements");
  rowClick(1,1,.925f);check(int(config::VrGunAngle)==5,"explicit plus button increments");
- rowClick(1,2);check(int(config::VrLaserWidth)==2&&bool(config::VrLaser),"Laser body advances Normal to 2x");
- auto laser=choiceRects(panel(),2);click(1,middle(laser[4]));check(int(config::VrLaserWidth)==4,"10x pill selects 10x exactly");
+ config::VrLaserWidth.set(2);
+ check(panel().rows[2].choice==1&&panel().rows[2].choices==std::vector<std::string>{"Off","Normal","5x","10x"},"old 2x highlights Normal and four pills are shown");
+ rowClick(1,2);check(int(config::VrLaserWidth)==3&&bool(config::VrLaser),"Laser body advances Normal to 5x");
+ auto laser=choiceRects(panel(),2);click(1,middle(laser[3]));check(int(config::VrLaserWidth)==4,"10x pill selects 10x exactly");
  click(1,middle(laser[0]));check(!bool(config::VrLaser)&&int(config::VrLaserWidth)==4,"Off preserves chosen beam thickness");
  check(!bool(config::loadBool("config","vr.Laser",true))&&config::loadInt("config","vr.LaserWidth")==4,"menu writes both Laser persistence keys");
  glm::vec3 contact;check(pointer(1,contact)&&!pointer(0,contact),"only active controller exposes real panel contact with Laser Off");

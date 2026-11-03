@@ -5,7 +5,7 @@
 # Confidential Mission VR
 ### Sega's NAOMI Light-Gun Game in VR · Standalone Meta Quest & PC VR
 
-[![Release v1.3.4](https://img.shields.io/badge/Release-v1.3.4_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
+[![Release v1.3.5](https://img.shields.io/badge/Release-v1.3.5_(Quest_APK_%2B_PC_VR)-brightgreen?style=for-the-badge)](../../releases)
 [![Headset: Meta Quest standalone and PC VR](https://img.shields.io/badge/Headset-Meta_Quest_Standalone_%C2%B7_PC_VR_(OpenXR)-blue?style=for-the-badge)](#install-on-the-quest)
 [![Your game: MAME set confmiss](https://img.shields.io/badge/Your_Game-MAME_Set_confmiss_(NAOMI)-orange?style=for-the-badge)](#what-you-need)
 
@@ -19,17 +19,19 @@
 
 ---
 
-## Update v1.3.4
+## Update v1.3.5
+
+Normal uses the previous 2x beam thickness. The menu and Service pointers keep their own width.
 
 **Your saved World size resets to0.10 once after updating.** Later adjustments
 remain saved; other preferences and native game data stay. Gun extraction is
 required before first play, with existing complete cached guns reused.
 
 New Gun/World/System/In-game tabs, direct gun choices, Crosshair controls,
-Laser Off/Normal/2x/5x/10x, Wider view Fade, flexible player hands and native
+Laser Off/Normal/5x/10x, Wider view Fade, flexible player hands and native
 In-game options are included. Right-stick click toggles laser and crosshair
 together. Zoom starts Off, follows enemy markers and pauses for cutscenes.
-[Release notes](docs/releases/v1.3.4.md) · [Complete source ZIP](../../releases/latest/download/confidential-mission-vr-source.zip).
+[Release notes](docs/releases/v1.3.5.md) · [Complete source ZIP](../../releases/latest/download/confidential-mission-vr-source.zip).
 
 ## 🕵️ Overview
 
@@ -243,7 +245,7 @@ The pointer remains available when gameplay laser/crosshair are Off.
 
 | Tab | Settings |
 | --- | --- |
-| Gun | Direct gun models, Gun angle, Laser Off/Normal/2x/5x/10x, Crosshair Custom/None, Haptics; Advanced Crosshair sizing and CM reload |
+| Gun | Direct gun models, Gun angle, Laser Off/Normal/5x/10x, Crosshair Custom/None, Haptics; Advanced Crosshair sizing and CM reload |
 | World | Wider view Off/On/Fade, Game zoom; Advanced numeric World size, panel distance and HUD size |
 | System | Explicit P1/P2 layout, Open Service Menu, How to play, confirmed Reset to defaults and Quit |
 | In-game | Game/Boss/Shifting difficulty, Collision size and Life; Apply settings and restart |
